@@ -11,6 +11,7 @@ from typing import (
     Iterator,
     Optional,
     Set,
+    Type,
     TypeVar,
     Union,
 )
@@ -40,10 +41,11 @@ class BoostExecutor:
 
     """
 
-    def __init__(self, concurrency: int):
-        # this could be an int, if we didn't need to block mapping
-        self.semaphore = asyncio.BoundedSemaphore(concurrency)
+    def __init__(self, concurrency: int) -> None:
+        assert concurrency > 0
+        self.semaphore = asyncio.Semaphore(concurrency)
         self.boostables: Deque[Boostable[Any, Any]] = Deque()
+
         self.waiter: Optional[asyncio.Future[None]] = None
         self.runner: Optional[asyncio.Task[None]] = None
         self.shutdown: bool = False
@@ -52,29 +54,32 @@ class BoostExecutor:
         self.runner = asyncio.create_task(self.run())
         return self
 
-    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    async def __aexit__(
+        self, exc_type: Optional[Type[BaseException]], exc_value: Any, traceback: Any
+    ) -> None:
         self.shutdown = True
         if exc_type:
             # If there was an exception, let it propagate and don't block on the runner exiting.
-            # TODO: consider doing some cancellation.
+            # Also cancel the runner.
+            assert self.runner is not None
+            self.runner.cancel()
             return
+        self.notify_runner()
         assert self.runner is not None
         await self.runner
 
-    async def map_ordered(
+    def map_ordered(
         self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]
     ) -> OrderedBoostable[T, R]:
-        ret = OrderedBoostable(func, iterable)
-        await self.semaphore.acquire()
+        ret = OrderedBoostable(func, iterable, self.semaphore)
         self.boostables.appendleft(ret)
         self.notify_runner()
         return ret
 
-    async def map_unordered(
+    def map_unordered(
         self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]
     ) -> UnorderedBoostable[T, R]:
-        ret = UnorderedBoostable(func, iterable)
-        await self.semaphore.acquire()
+        ret = UnorderedBoostable(func, iterable, self.semaphore)
         self.boostables.appendleft(ret)
         self.notify_runner()
         return ret
@@ -87,41 +92,31 @@ class BoostExecutor:
         loop = asyncio.get_event_loop()
         pending: Set[Awaitable[Any]] = set()
         while True:
-            while not self.semaphore.locked() and self.boostables:
-                # TODO: don't use up all concurrency on first boostable maybe?
+            await self.semaphore.acquire()
+            self.semaphore.release()
+            while self.boostables:
                 boost_task = self.boostables[0].provide_boost()
                 if boost_task is None:
                     self.boostables.popleft()
-                    self.semaphore.release()
                     continue
                 pending.add(boost_task)
-                self.boostables.rotate(-1)
-                await self.semaphore.acquire()
                 await asyncio.sleep(0)
+                self.boostables.rotate(-1)
+                if self.semaphore.locked():
+                    break
 
-            if self.shutdown and not pending:
+            if self.semaphore.locked():
+                continue
+
+            if self.shutdown:
                 break
 
-            async def wait_for_concurrency() -> None:
-                nonlocal pending
-                # TODO: we used to use a timeout, confirm no longer needed
-                if pending:
-                    # covariance complains, but it's okay. consider changing everything to Future
-                    done, pending = await asyncio.wait(  # type: ignore
-                        pending, return_when=asyncio.FIRST_COMPLETED
-                    )
-                    for _ in range(len(done)):
-                        self.semaphore.release()
-                else:
-                    await asyncio.sleep(1)
-
-                self.notify_runner()
-
-            concurrency_waiter = asyncio.create_task(wait_for_concurrency())
             self.waiter = loop.create_future()
             await self.waiter
             self.waiter = None
-            concurrency_waiter.cancel()
+
+        if pending:
+            await asyncio.wait(pending)
 
 
 class Boostable(Generic[T, R]):
@@ -141,20 +136,32 @@ class Boostable(Generic[T, R]):
 
     You can treat Boostables as async iterators. An OrderedBoostable will yield results
     corresponding to the order of the underlying iterable, whereas an UnorderedBoostable will
-    yield results based on what finishes first. Both flavours of Boostable will start tasks in the
-    order provided by the underlying iterable.
+    yield results based on what finishes first.
+
+    Note that both kinds of Boostables will, of course, dequeue from the underlying iterable in
+    whatever order the underlying provides. This means we'll start tasks in order (but not
+    necessarily finish them in order, which is kind of the point). In some places, we use this
+    fact to increment a shared index; it's important we do ordered shared memory things like that
+    before any awaits.
 
     """
 
-    def __init__(self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]) -> None:
+    def __init__(
+        self,
+        func: Callable[[T], Awaitable[R]],
+        iterable: BoostUnderlying[T],
+        semaphore: asyncio.Semaphore,
+    ) -> None:
         assert isinstance(iterable, (Iterator, Boostable))
-        self.func = func
+
+        async def wrapper(arg: T) -> R:
+            async with semaphore:
+                return await func(arg)
+
+        self.func = wrapper
         self.iterable = iterable
 
-    def is_ready(self) -> bool:
-        raise NotImplementedError
-
-    def provide_boost(self) -> Optional[Awaitable[Any]]:
+    def provide_boost(self) -> Optional[asyncio.Task[Any]]:
         """Start an asyncio task to help speed up this boostable.
 
         Returns None if we can't make use of a boost. Note this causes the BoostExecutor to stop
@@ -178,7 +185,7 @@ class Boostable(Generic[T, R]):
 
         return self.enqueue(arg)
 
-    def enqueue(self, arg: T) -> Awaitable[R]:
+    def enqueue(self, arg: T) -> asyncio.Task[R]:
         """Start and return an asyncio task based on an element from the underlying."""
         raise NotImplementedError
 
@@ -198,14 +205,16 @@ class Boostable(Generic[T, R]):
 
 
 class OrderedBoostable(Boostable[T, R]):
-    def __init__(self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]) -> None:
-        super().__init__(func, iterable)
+    def __init__(
+        self,
+        func: Callable[[T], Awaitable[R]],
+        iterable: BoostUnderlying[T],
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        super().__init__(func, iterable, semaphore)
         self.buffer: Deque[asyncio.Task[R]] = Deque()
 
-    def is_ready(self) -> bool:
-        return bool(self.buffer) and self.buffer[0].done()
-
-    def enqueue(self, arg: T) -> Awaitable[R]:
+    def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
         self.buffer.append(task)
         return task
@@ -226,48 +235,56 @@ class OrderedBoostable(Boostable[T, R]):
 
 
 class UnorderedBoostable(Boostable[T, R]):
-    def __init__(self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]) -> None:
-        super().__init__(func, iterable)
-        self.done_tasks: Set[asyncio.Task[R]] = set()
-        self.pending_tasks: Set[asyncio.Task[R]] = set()
+    def __init__(
+        self,
+        func: Callable[[T], Awaitable[R]],
+        iterable: BoostUnderlying[T],
+        semaphore: asyncio.Semaphore,
+    ) -> None:
+        super().__init__(func, iterable, semaphore)
+        self.buffer: Set[asyncio.Task[R]] = set()
+        self.waiter: Optional[asyncio.Future[asyncio.Task[R]]] = None
 
-    def is_ready(self) -> bool:
-        return bool(self.done_tasks) or any(t.done() for t in self.pending_tasks)
+    def done_callback(self, task: asyncio.Task[R]) -> None:
+        # this can happen if we've already dequeued. cancelling the callback doesn't seem to work.
+        # TODO: can this cause __anext__ to block?
+        if task not in self.buffer:
+            return
+        if self.waiter and not self.waiter.done():
+            self.waiter.set_result(task)
 
-    def enqueue(self, arg: T) -> Awaitable[R]:
+    def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
-        self.pending_tasks.add(task)
+        self.buffer.add(task)
+        task.add_done_callback(self.done_callback)
         return task
 
     def dequeue(self) -> R:
-        if self.done_tasks:
-            return self.done_tasks.pop().result()
-
         try:
-            task = next(t for t in self.pending_tasks if t.done())
+            task = next(t for t in self.buffer if t.done())
+            self.buffer.remove(task)
             return task.result()
         except StopIteration:
             raise IndexError
 
     async def __anext__(self) -> R:
-        if self.done_tasks:
-            return self.done_tasks.pop().result()
-
-        if not self.pending_tasks:
+        if not self.buffer:
             arg = await next_underlying(self.iterable)
-            return await self.func(arg)
+            self.enqueue(arg)
 
-        # make sure we don't lose any tasks that get enqueued while we're waiting
-        # and that concurrent __anext__ calls don't wait on the same set of tasks
-        pending_copy = self.pending_tasks.copy()
-        self.pending_tasks.clear()
+        try:
+            return self.dequeue()
+        except IndexError:
+            pass
 
-        done, pending = await asyncio.wait(pending_copy, return_when=asyncio.FIRST_COMPLETED)
+        loop = asyncio.get_event_loop()
+        self.waiter = loop.create_future()
+        task = await self.waiter
+        self.waiter = None
 
-        # covariance complains, but it's okay
-        self.done_tasks |= done  # type: ignore
-        self.pending_tasks |= pending  # type: ignore
-        return self.done_tasks.pop().result()
+        assert task.done()
+        self.buffer.remove(task)
+        return task.result()
 
 
 # see docstring of Boostable
