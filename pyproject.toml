@@ -1,6 +1,14 @@
 [tool.black]
 line-length = 100
 
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "raise ValueError",
+]
+
 [tool.isort]
 profile = "black"
 line_length = 100
