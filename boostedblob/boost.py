@@ -11,6 +11,7 @@ from typing import (
     Iterator,
     Optional,
     Set,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -91,12 +92,23 @@ class BoostExecutor:
     async def run(self) -> None:
         loop = asyncio.get_event_loop()
         pending: Set[Awaitable[Any]] = set()
+
+        MIN_TIMEOUT = 0.01
+        MAX_TIMEOUT = 0.1
+        timeout = MIN_TIMEOUT
         while True:
             await self.semaphore.acquire()
             self.semaphore.release()
+
+            not_ready_boostables: Deque[Boostable[Any, Any]] = Deque()
             while self.boostables:
-                boost_task = self.boostables[0].provide_boost()
-                if boost_task is None:
+                # We round robin the boostables until they're either all exhausted or not ready
+                try:
+                    boost_task = self.boostables[0].provide_boost()
+                except NotReady:
+                    not_ready_boostables.append(self.boostables.popleft())
+                    continue
+                except Exhausted:
                     self.boostables.popleft()
                     continue
                 pending.add(boost_task)
@@ -104,19 +116,42 @@ class BoostExecutor:
                 self.boostables.rotate(-1)
                 if self.semaphore.locked():
                     break
+            else:
+                self.boostables = not_ready_boostables
 
             if self.semaphore.locked():
+                # If we broke out of the inner loop due to a lack of available concurrency, go to
+                # the top of the outer loop and wait for concurrency
                 continue
 
-            if self.shutdown:
+            if self.shutdown and not self.boostables:
+                # If we've been told to shutdown and we have nothing more to boost, exit
                 break
 
             self.waiter = loop.create_future()
-            await self.waiter
+            try:
+                # If we still have boostables (because they're currently not ready), timeout in
+                # case they become ready
+                # Otherwise, (since we have available concurrency), wait for us to be notified in
+                # case of more work
+                await asyncio.wait_for(self.waiter, timeout if self.boostables else None)
+                # If we were waiting for boostables to become ready, increase how long we'd wait
+                # the next time. Otherwise, reset the timeout duration.
+                timeout = min(MAX_TIMEOUT, timeout * 2) if self.boostables else MIN_TIMEOUT
+            except asyncio.TimeoutError:
+                pass
             self.waiter = None
 
         if pending:
             await asyncio.wait(pending)
+
+
+class Exhausted(Exception):
+    pass
+
+
+class NotReady(Exception):
+    pass
 
 
 class Boostable(Generic[T, R]):
@@ -152,7 +187,10 @@ class Boostable(Generic[T, R]):
         iterable: BoostUnderlying[T],
         semaphore: asyncio.Semaphore,
     ) -> None:
-        assert isinstance(iterable, (Iterator, Boostable))
+        if not isinstance(iterable, (Iterator, Boostable, EagerAsyncIterator)):
+            raise ValueError(
+                "Underlying iterable must be an Iterator, Boostable or EagerAsyncIterator"
+            )
 
         async def wrapper(arg: T) -> R:
             async with semaphore:
@@ -161,25 +199,28 @@ class Boostable(Generic[T, R]):
         self.func = wrapper
         self.iterable = iterable
 
-    def provide_boost(self) -> Optional[asyncio.Task[Any]]:
+    def provide_boost(self) -> asyncio.Task[Any]:
         """Start an asyncio task to help speed up this boostable.
 
-        Returns None if we can't make use of a boost. Note this causes the BoostExecutor to stop
-        attempting to provide boosts to this Boostable.
+        Raises NotReady if we can't make use of a boost currently.
+        Raises Exhausted if we're done. This causes the BoostExecutor to stop attempting to
+        provide boosts to this Boostable.
 
         """
         if isinstance(self.iterable, Boostable):
             try:
                 arg = self.iterable.dequeue()
-            except IndexError:
+            except NotReady:
                 # the underlying boostable doesn't have anything ready for us
                 # so forward the boost to the underlying boostable
                 return self.iterable.provide_boost()
+        elif isinstance(self.iterable, EagerAsyncIterator):
+            arg = self.iterable.dequeue()
         elif isinstance(self.iterable, Iterator):
             try:
                 arg = next(self.iterable)
             except StopIteration:
-                return None
+                raise Exhausted
         else:
             raise AssertionError
 
@@ -192,7 +233,7 @@ class Boostable(Generic[T, R]):
     def dequeue(self) -> R:
         """Non-blockingly dequeue a result we have ready.
 
-        Raises IndexError if it's not ready to dequeue.
+        Raises NotReady if it's not ready to dequeue.
 
         """
         raise NotImplementedError
@@ -221,9 +262,9 @@ class OrderedBoostable(Boostable[T, R]):
 
     def dequeue(self) -> R:
         if not self.buffer:
-            raise IndexError
+            raise NotReady
         if not self.buffer[0].done():
-            raise IndexError
+            raise NotReady
         task = self.buffer.popleft()
         return task.result()
 
@@ -262,10 +303,10 @@ class UnorderedBoostable(Boostable[T, R]):
     def dequeue(self) -> R:
         try:
             task = next(t for t in self.buffer if t.done())
-            self.buffer.remove(task)
-            return task.result()
         except StopIteration:
-            raise IndexError
+            raise NotReady
+        self.buffer.remove(task)
+        return task.result()
 
     async def __anext__(self) -> R:
         if not self.buffer:
@@ -274,7 +315,7 @@ class UnorderedBoostable(Boostable[T, R]):
 
         try:
             return self.dequeue()
-        except IndexError:
+        except NotReady:
             pass
 
         loop = asyncio.get_event_loop()
@@ -287,13 +328,48 @@ class UnorderedBoostable(Boostable[T, R]):
         return task.result()
 
 
+class EagerAsyncIterator(Generic[T]):
+    """Like an AsyncIterator, but eager.
+
+    AsyncIterators will only start computing their next element when awaited on.
+    This allows an AsyncIterator to serve as the underlying iterable for a Boostable.
+    Note a) this takes away the natural backpressure, b) instantiating one of these will use
+    one unit of concurrency until it's exhausted which is not accounted for by a BoostExecutor.
+
+    """
+
+    def __init__(self, iterable: AsyncIterator[T]):
+        async def eagerify(it: AsyncIterator[T]) -> Tuple[T, asyncio.Task[Any]]:
+            val = await it.__anext__()
+            next_task = asyncio.create_task(eagerify(it))
+            return val, next_task
+
+        self.next_task = asyncio.create_task(eagerify(iterable))
+
+    def dequeue(self) -> T:
+        if not self.next_task.done():
+            raise NotReady
+        try:
+            ret, self.next_task = self.next_task.result()
+            return ret
+        except StopAsyncIteration:
+            raise Exhausted
+
+    def __aiter__(self) -> AsyncIterator[T]:
+        return self
+
+    async def __anext__(self) -> T:
+        ret, self.next_task = await self.next_task
+        return ret
+
+
 # see docstring of Boostable
-BoostUnderlying = Union[Iterator[T], "Boostable[Any, T]"]
+BoostUnderlying = Union[Iterator[T], Boostable[Any, T], EagerAsyncIterator[T]]
 
 
 async def next_underlying(iterable: BoostUnderlying[T]) -> T:
     """Like ``next``, but abstracts over a BoostUnderlying."""
-    if isinstance(iterable, Boostable):
+    if isinstance(iterable, (Boostable, EagerAsyncIterator)):
         return await iterable.__anext__()
     if isinstance(iterable, Iterator):
         try:
@@ -305,7 +381,7 @@ async def next_underlying(iterable: BoostUnderlying[T]) -> T:
 
 async def iter_underlying(iterable: BoostUnderlying[T]) -> AsyncIterator[T]:
     """Like ``iter``, but abstracts over a BoostUnderlying."""
-    if isinstance(iterable, Boostable):
+    if isinstance(iterable, (Boostable, EagerAsyncIterator)):
         async for x in iterable:
             yield x
     elif isinstance(iterable, Iterator):
