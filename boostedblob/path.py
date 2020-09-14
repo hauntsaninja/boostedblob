@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+import base64
+import datetime
 import functools
 import os
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, Callable, Mapping, NamedTuple, Optional, TypeVar, Union
+
+import xmltodict
+
+from .request import Request, azurify_request, googlify_request
 
 T = TypeVar("T")
 
@@ -216,6 +223,254 @@ def pathdispatch(fn: F) -> F:
 
 
 # ==============================
+# stat
+# ==============================
+
+
+class Stat(NamedTuple):
+    size: int
+    mtime: float
+    ctime: float
+    md5: Optional[str]
+    version: Optional[str]
+
+    @staticmethod
+    def from_azure(item: Mapping[str, Any]) -> Stat:
+        if "Creation-Time" in item:
+            raw_ctime = item["Creation-Time"]
+        else:
+            raw_ctime = item["x-ms-creation-time"]
+        if "x-ms-meta-blobfilemtime" in item:
+            mtime = float(item["x-ms-meta-blobfilemtime"])
+        else:
+            mtime = _azure_parse_timestamp(item["Last-Modified"])
+        return Stat(
+            size=int(item["Content-Length"]),
+            mtime=mtime,
+            ctime=_azure_parse_timestamp(raw_ctime),
+            md5=_azure_get_md5(item),
+            version=item["Etag"],
+        )
+
+    @staticmethod
+    def from_google(item: Mapping[str, Any]) -> Stat:
+        if "metadata" in item and "blobfile-mtime" in item["metadata"]:
+            mtime = float(item["metadata"]["blobfile-mtime"])
+        else:
+            mtime = _google_parse_timestamp(item["updated"])
+        return Stat(
+            size=int(item["size"]),
+            mtime=mtime,
+            ctime=_google_parse_timestamp(item["timeCreated"]),
+            md5=_google_get_md5(item),
+            version=item["generation"],
+        )
+
+    @staticmethod
+    def from_local(item: os.stat_result) -> Stat:
+        return Stat(
+            size=item.st_size, mtime=item.st_mtime, ctime=item.st_ctime, md5=None, version=None
+        )
+
+
+@pathdispatch
+async def stat(path: Union[BasePath, str]) -> Stat:
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@stat.register  # type: ignore
+async def _azure_stat(path: AzurePath) -> Stat:
+    if not path.blob:
+        raise FileNotFoundError
+    request = await azurify_request(
+        Request(
+            method="HEAD",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            failure_exceptions={404: FileNotFoundError()},
+        )
+    )
+    async with request.execute() as resp:
+        return Stat.from_azure(resp.headers)
+
+
+@stat.register  # type: ignore
+async def _google_stat(path: GooglePath) -> Stat:
+    if not path.blob:
+        raise FileNotFoundError
+    request = await googlify_request(
+        Request(
+            method="GET",
+            url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
+            failure_exceptions={404: FileNotFoundError()},
+        )
+    )
+    async with request.execute() as resp:
+        result = await resp.json()
+        return Stat.from_google(result)
+
+
+@stat.register  # type: ignore
+async def _local_stat(path: LocalPath) -> Stat:
+    return Stat.from_local(os.stat(path))
+
+
+# ==============================
+# getsize
+# ==============================
+
+
+@pathdispatch
+async def getsize(path: Union[BasePath, str]) -> int:
+    s = await stat(path)
+    return s.size
+
+
+# ==============================
+# isdir
+# ==============================
+
+
+@pathdispatch
+async def isdir(path: Union[BasePath, str], raise_on_missing: bool = False) -> bool:
+    """Check whether ``path`` is a directory.
+
+    :param path: The path that could be a directory.
+    :param raise_on_missing: If True, raise FileNotFoundError if ``path`` does not exist. Otherwise,
+        return False.
+
+    """
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@isdir.register  # type: ignore
+async def _azure_isdir(path: AzurePath) -> bool:
+    try:
+        if path.blob:
+            prefix: str = path.blob
+            if not prefix.endswith("/"):
+                prefix += "/"
+            request = await azurify_request(
+                Request(
+                    method="GET",
+                    url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
+                    params=dict(
+                        comp="list",
+                        restype="container",
+                        prefix=prefix,
+                        delimiter="/",
+                        maxresults="1",
+                    ),
+                    failure_exceptions={404: FileNotFoundError()},
+                )
+            )
+            async with request.execute() as resp:
+                body = await resp.read()
+                result = xmltodict.parse(body)["EnumerationResults"]
+                return result["Blobs"] is not None and (
+                    "BlobPrefix" in result["Blobs"] or "Blob" in result["Blobs"]
+                )
+        else:
+            request = await azurify_request(
+                Request(
+                    method="GET",
+                    url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
+                    params=dict(restype="container"),
+                    failure_exceptions={404: FileNotFoundError()},
+                )
+            )
+            async with request.execute() as resp:
+                return True
+    except FileNotFoundError:
+        # execute might raise FileNotFoundError if storage account doesn't exist
+        return False
+
+
+@isdir.register  # type: ignore
+async def _google_isdir(path: GooglePath) -> bool:
+    try:
+        if path.blob:
+            prefix: str = path.blob
+            if not prefix.endswith("/"):
+                prefix += "/"
+            request = await googlify_request(
+                Request(
+                    method="GET",
+                    url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o"),
+                    params=dict(prefix=prefix, delimiter="/", maxResults="1"),
+                    failure_exceptions={404: FileNotFoundError()},
+                )
+            )
+            async with request.execute() as resp:
+                result = await resp.json()
+                return "items" in result or "prefixes" in result
+        else:
+            request = await googlify_request(
+                Request(
+                    method="GET",
+                    url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}"),
+                    failure_exceptions={404: FileNotFoundError()},
+                )
+            )
+            async with request.execute() as resp:
+                return True
+    except FileNotFoundError:
+        return False
+
+
+@isdir.register  # type: ignore
+async def _local_isdir(path: LocalPath) -> bool:
+    return os.path.isdir(path)
+
+
+# ==============================
+# isfile
+# ==============================
+
+
+@pathdispatch
+async def isfile(path: Union[BasePath, str]) -> bool:
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@isfile.register  # type: ignore
+async def _cloud_isfile(path: CloudPath) -> bool:
+    try:
+        await stat(path)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+@isfile.register  # type: ignore
+async def _local_isfile(path: LocalPath) -> bool:
+    return os.path.isfile(path)
+
+
+# ==============================
+# exists
+# ==============================
+
+
+@pathdispatch
+async def exists(path: Union[BasePath, str]) -> int:
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@exists.register  # type: ignore
+async def _cloud_exists(path: CloudPath) -> int:
+    # TODO: this is two network requests, make it one
+    for fut in asyncio.as_completed([isfile(path), isdir(path)]):
+        if await fut:
+            return True
+    return False
+
+
+@exists.register  # type: ignore
+async def _local_exists(path: LocalPath) -> int:
+    return os.path.exists(path)
+
+
+# ==============================
 # helpers
 # ==============================
 
@@ -227,3 +482,34 @@ def url_format(template: str, **data: Any) -> str:
 
 def _strip_slash(path: str) -> str:
     return path[:-1] if path.endswith("/") else path
+
+
+def _azure_parse_timestamp(text: str) -> float:
+    return datetime.datetime.strptime(
+        text.replace("GMT", "Z"), "%a, %d %b %Y %H:%M:%S %z"
+    ).timestamp()
+
+
+def _azure_get_md5(metadata: Mapping[str, Any]) -> Optional[str]:
+    if "Content-MD5" in metadata:
+        b64_encoded = metadata["Content-MD5"]
+        if b64_encoded is None:
+            return None
+        return base64.b64decode(b64_encoded).hex()
+    return None
+
+
+def _google_parse_timestamp(text: str) -> float:
+    return datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+
+
+def _google_get_md5(metadata: Mapping[str, Any]) -> Optional[str]:
+    if "md5Hash" in metadata:
+        return base64.b64decode(metadata["md5Hash"]).hex()
+
+    if "metadata" in metadata and "md5" in metadata["metadata"]:
+        # fallback to our custom hash if this is a composite object that is lacking the
+        # md5Hash field
+        return metadata["metadata"]["md5"]
+
+    return None
