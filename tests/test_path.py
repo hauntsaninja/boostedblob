@@ -1,10 +1,10 @@
-from typing import Dict, Type
+from typing import Any, Dict, Type
 
 import pytest
 
 from boostedblob.path import AzurePath, BasePath, GooglePath, LocalPath
 
-PATHS: Dict[Type[BasePath], BasePath] = {
+PATHS: Dict[Type[BasePath], Any] = {
     AzurePath: AzurePath("shantanutest", "container", "blob"),
     GooglePath: GooglePath("shantanutest", "blob"),
     LocalPath: LocalPath("blob"),
@@ -37,13 +37,22 @@ def test_path_methods():
     for path in PATHS.values():
         assert path.name == "blob"
 
-        assert not path.has_trailing_slash()
-        assert str(path.with_trailing_slash()).endswith("/")
-        assert path.with_trailing_slash().has_trailing_slash()
-        assert not str(path.with_trailing_slash().with_trailing_slash()).endswith("//")
+        assert not path.is_directory_like()
+        assert str(path.ensure_directory_like()).endswith("/")
+        assert path.ensure_directory_like().is_directory_like()
+        assert not str(path.ensure_directory_like().ensure_directory_like()).endswith("//")
         # name always strips slash
-        assert not path.with_trailing_slash().name.endswith("/")
+        assert not path.ensure_directory_like().name.endswith("/")
 
         subpath = path / "subblob"
         assert subpath.name == "subblob"
         assert subpath.parent.name == "blob"
+
+    # containers and buckets are already directory like
+    assert PATHS[AzurePath].parent.blob == ""
+    assert PATHS[AzurePath].parent.is_directory_like()
+    assert PATHS[AzurePath].parent.ensure_directory_like().blob == ""
+
+    assert PATHS[GooglePath].parent.blob == ""
+    assert PATHS[GooglePath].parent.is_directory_like()
+    assert PATHS[GooglePath].parent.ensure_directory_like().blob == ""

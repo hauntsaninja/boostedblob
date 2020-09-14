@@ -34,10 +34,10 @@ class BasePath:
     def parent(self: T) -> T:
         raise NotImplementedError
 
-    def has_trailing_slash(self) -> bool:
+    def is_directory_like(self) -> bool:
         raise NotImplementedError
 
-    def with_trailing_slash(self: T) -> T:
+    def ensure_directory_like(self: T) -> T:
         raise NotImplementedError
 
     def __truediv__(self: T, relative_path: str) -> T:
@@ -63,11 +63,11 @@ class LocalPath(BasePath):
     def parent(self) -> LocalPath:
         return LocalPath(os.path.dirname(self.path))
 
-    def has_trailing_slash(self) -> bool:
-        return self.path.endswith("/")
+    def is_directory_like(self) -> bool:
+        return not self.path or self.path.endswith("/")
 
-    def with_trailing_slash(self) -> LocalPath:
-        return self if self.has_trailing_slash() else LocalPath(self.path + "/")
+    def ensure_directory_like(self) -> LocalPath:
+        return self if self.is_directory_like() else LocalPath(self.path + "/")
 
     def __truediv__(self, relative_path: str) -> LocalPath:
         return LocalPath(os.path.join(self.path, relative_path))
@@ -107,13 +107,13 @@ class AzurePath(CloudPath):
     def parent(self) -> AzurePath:
         return AzurePath(self.account, self.container, os.path.dirname(self.blob))
 
-    def has_trailing_slash(self) -> bool:
-        return self.blob.endswith("/")
+    def is_directory_like(self) -> bool:
+        return not self.blob or self.blob.endswith("/")
 
-    def with_trailing_slash(self) -> AzurePath:
+    def ensure_directory_like(self) -> AzurePath:
         return (
             self
-            if self.has_trailing_slash()
+            if self.is_directory_like()
             else AzurePath(self.account, self.container, self.blob + "/")
         )
 
@@ -148,11 +148,11 @@ class GooglePath(CloudPath):
     def parent(self) -> GooglePath:
         return GooglePath(self.bucket, os.path.dirname(self.blob))
 
-    def has_trailing_slash(self) -> bool:
-        return self.blob.endswith("/")
+    def is_directory_like(self) -> bool:
+        return not self.blob or self.blob.endswith("/")
 
-    def with_trailing_slash(self) -> GooglePath:
-        return self if self.has_trailing_slash() else GooglePath(self.bucket, self.blob + "/")
+    def ensure_directory_like(self) -> GooglePath:
+        return self if self.is_directory_like() else GooglePath(self.bucket, self.blob + "/")
 
     def __truediv__(self, relative_path: str) -> GooglePath:
         return GooglePath(self.bucket, os.path.join(self.blob, relative_path))
