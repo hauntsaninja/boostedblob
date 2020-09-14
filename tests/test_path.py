@@ -37,16 +37,29 @@ def test_path_methods():
     for path in PATHS.values():
         assert path.name == "blob"
 
+        subpath = path / "subblob"
+        assert subpath.name == "subblob"
+        assert subpath.parent.name == "blob"
+
+        subsubpath = path / "subblob/subsubsub"
+        assert subsubpath.name == "subsubsub"
+        assert subsubpath.parent.name == "subblob"
+        assert subsubpath.parent.parent.name == "blob"
+
+        assert subsubpath.relative_to(path) == "subblob/subsubsub"
+        assert subsubpath.relative_to(path.parent) == "blob/subblob/subsubsub"
+        assert subpath.relative_to(path) == "subblob"
+        assert subpath.relative_to(path.parent) == "blob/subblob"
+
+
+def test_path_directory_like():
+    for path in PATHS.values():
         assert not path.is_directory_like()
         assert str(path.ensure_directory_like()).endswith("/")
         assert path.ensure_directory_like().is_directory_like()
         assert not str(path.ensure_directory_like().ensure_directory_like()).endswith("//")
         # name always strips slash
         assert not path.ensure_directory_like().name.endswith("/")
-
-        subpath = path / "subblob"
-        assert subpath.name == "subblob"
-        assert subpath.parent.name == "blob"
 
     # containers and buckets are already directory like
     assert PATHS[AzurePath].parent.blob == ""

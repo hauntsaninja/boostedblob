@@ -34,6 +34,9 @@ class BasePath:
     def parent(self: T) -> T:
         raise NotImplementedError
 
+    def relative_to(self: T, other: T) -> str:
+        raise NotImplementedError
+
     def is_directory_like(self) -> bool:
         raise NotImplementedError
 
@@ -62,6 +65,12 @@ class LocalPath(BasePath):
     @property
     def parent(self) -> LocalPath:
         return LocalPath(os.path.dirname(self.path))
+
+    def relative_to(self, other: LocalPath) -> str:
+        other = other.ensure_directory_like()
+        if not self.path.startswith(other.path):
+            raise ValueError
+        return self.path[len(other.path) :]
 
     def is_directory_like(self) -> bool:
         return not self.path or self.path.endswith("/")
@@ -107,6 +116,14 @@ class AzurePath(CloudPath):
     def parent(self) -> AzurePath:
         return AzurePath(self.account, self.container, os.path.dirname(self.blob))
 
+    def relative_to(self, other: AzurePath) -> str:
+        other = other.ensure_directory_like()
+        if self.account != other.account or self.container != other.container:
+            raise ValueError
+        if not self.blob.startswith(other.blob):
+            raise ValueError
+        return self.blob[len(other.blob) :]
+
     def is_directory_like(self) -> bool:
         return not self.blob or self.blob.endswith("/")
 
@@ -147,6 +164,14 @@ class GooglePath(CloudPath):
     @property
     def parent(self) -> GooglePath:
         return GooglePath(self.bucket, os.path.dirname(self.blob))
+
+    def relative_to(self, other: GooglePath) -> str:
+        other = other.ensure_directory_like()
+        if self.bucket != other.bucket:
+            raise ValueError
+        if not self.blob.startswith(other.blob):
+            raise ValueError
+        return self.blob[len(other.blob) :]
 
     def is_directory_like(self) -> bool:
         return not self.blob or self.blob.endswith("/")
