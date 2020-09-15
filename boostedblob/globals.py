@@ -75,7 +75,8 @@ def configure(**kwargs: Any) -> Iterator[None]:
 async def session_context() -> AsyncIterator[None]:
     if config.session is None:
         ignore_aiohttp_ssl_eror()  # TODO: put this in a better place
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(limit=0)
+        async with aiohttp.ClientSession(connector=connector) as session:
             with configure(session=session):
                 yield
     else:
