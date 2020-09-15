@@ -3,6 +3,7 @@ import shutil
 from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
 
 from .boost import BoostExecutor, EagerAsyncIterator, consume
+from .globals import config
 from .listing import DirEntry, scantree
 from .path import (
     AzurePath,
@@ -15,9 +16,9 @@ from .path import (
     pathdispatch,
     url_format,
 )
-from .read import read_stream, read_stream_unordered
+from .read import read_single, read_stream, read_stream_unordered
 from .request import Request, azurify_request, googlify_request
-from .write import write_stream, write_stream_unordered
+from .write import write_single, write_stream, write_stream_unordered
 
 # ==============================
 # copyfile
@@ -59,12 +60,22 @@ async def _cloudpath_copyfile(
         dst = BasePath.from_str(dst)
 
     if isinstance(dst, LocalPath):
+        if size is not None and size <= config.chunk_size:
+            # skip a network request for small files
+            await write_single(dst, await read_single(src), overwrite=overwrite)
+            return
+
         stream = await read_stream(src, executor, size=size)
         await write_stream(dst, stream, executor, overwrite=overwrite)
         return
     if isinstance(dst, CloudPath):
         if type(src) is type(dst):
             await cloudcopyfile(src, dst, overwrite=overwrite)
+            return
+
+        if size is not None and size <= config.chunk_size:
+            # skip a network request for small files
+            await write_single(dst, await read_single(src), overwrite=overwrite)
             return
 
         unordered_stream = await read_stream_unordered(src, executor, size=size)
@@ -92,6 +103,11 @@ async def _localpath_copyfile(
         shutil.copyfile(src, dst)
         return
     if isinstance(dst, CloudPath):
+        if size is not None and size <= config.chunk_size:
+            # skip a network request for small files
+            await write_single(dst, await read_single(src), overwrite=overwrite)
+            return
+
         stream = await read_stream(src, executor, size=size)
         await write_stream(dst, stream, executor, overwrite=overwrite)
         return
