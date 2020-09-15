@@ -78,6 +78,12 @@ async def _cloudpath_copyfile(
             await write_single(dst, await read_single(src), overwrite=overwrite)
             return
 
+        if isinstance(dst, GooglePath):
+            # google doesn't support unordered writes
+            stream = await read_stream(src, executor, size=size)
+            await write_stream(dst, stream, executor, overwrite=overwrite)
+            return
+
         unordered_stream = await read_stream_unordered(src, executor, size=size)
         await write_stream_unordered(dst, unordered_stream, executor, overwrite=overwrite)
         return

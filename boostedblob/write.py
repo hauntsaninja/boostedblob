@@ -165,22 +165,47 @@ async def _google_write_stream(
             raise FileExistsError(path)
 
     upload_url = await _google_start_resumable_upload(path)
-    is_finalised = False
-    offset = 0
 
-    async def upload_chunk(chunk: bytes) -> None:
-        # mutating state in the outer scope is a little sketchy, but it works out if we do it
-        # before we await
-        nonlocal offset, is_finalised
+    offset = 0
+    is_finalised = False
+    total_size = "*"
+    # Unfortunately, GCS doesn't allow us to upload these chunks in parallel.
+    async for chunk in iter_underlying(stream):
         start = offset
         offset += len(chunk)
-        request, is_finalised = _google_chunk_helper(
-            upload_url, chunk, start, start + len(chunk), is_finalised
+        end = offset
+
+        # GCS requires resumable uploads to be chunked in multiples of 256 KB, except for the last
+        # chunk. If you upload a chunk with another size you get an HTTP 400 error, unless you tell
+        # GCS that it's the last chunk. Since our interface doesn't allow us to know whether or not
+        # a given chunk is actually the last chunk, we go ahead and assume that it is if it's an
+        # invalid chunk size. If we receive multiple chunks of invalid chunk size, we throw an
+        # error.
+        should_finalise = len(chunk) % (256 * 1024) != 0
+        if should_finalise:
+            if is_finalised:
+                raise ValueError(
+                    "The upload was already finalised. A likely cause is the given stream was "
+                    "chunked incorrectly. Uploads to Google Cloud need to be chunked in multiples of "
+                    "256 KB (except for the last chunk)."
+                )
+            total_size = str(end)
+            is_finalised = True
+
+        request = await googlify_request(
+            Request(
+                method="PUT",
+                url=upload_url,
+                data=chunk,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Range": f"bytes {start}-{end-1}/{total_size}",
+                },
+                success_codes=(200, 201) if is_finalised else (308,),
+            )
         )
-        request = await googlify_request(request)
         await request.execute_reponseless()
 
-    await consume(executor.map_ordered(upload_chunk, stream))
     if not is_finalised:
         await _google_finalise_upload(upload_url, total_size=offset)
 
@@ -277,28 +302,7 @@ async def _google_write_stream_unordered(
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
-    if not overwrite:
-        if await exists(path):
-            raise FileExistsError
-
-    upload_url = await _google_start_resumable_upload(path)
-    is_finalised = False
-    total_size = 0
-
-    async def upload_chunk(chunk_byte_range: Tuple[bytes, ByteRange]) -> None:
-        nonlocal is_finalised, total_size
-        chunk, byte_range = chunk_byte_range
-        start, end = byte_range
-        total_size = max(total_size, end)
-        request, is_finalised = _google_chunk_helper(
-            upload_url, chunk, start, start + len(chunk), is_finalised
-        )
-        request = await googlify_request(request)
-        await request.execute_reponseless()
-
-    await consume(executor.map_unordered(upload_chunk, stream))
-    if not is_finalised:
-        await _google_finalise_upload(upload_url, total_size=total_size)
+    raise NotImplementedError
 
 
 # ==============================
@@ -359,42 +363,6 @@ async def _google_start_resumable_upload(path: GooglePath) -> str:
     async with request.execute() as resp:
         upload_url = resp.headers["Location"]
         return upload_url
-
-
-def _google_chunk_helper(
-    upload_url: str, chunk: bytes, start: int, end: int, is_finalised: bool
-) -> Tuple[Request, bool]:
-    """Welcome to something kind of awful.
-
-    GCS requires resumable uploads to be chunked in multiples of 256 KB, except for the last chunk.
-    If you upload a chunk with another size you get an HTTP 400 error, unless you tell GCS that it's
-    the last chunk. Since our interface doesn't allow us to know whether or not a given chunk is
-    actually the last chunk, we go ahead and assume that it is if it's an invalid chunk size. If we
-    receive multiple chunks of invalid chunk size, we throw an error. That's why this function is
-    synchronous: if it was asynchronous, it could be called concurrently by multiple invalid chunks,
-    and we wouldn't raise an error (and neither would GCS if the first chunk was incorrectly sized;
-    it would just write the first chunk and call it a day).
-
-    """
-    total_size = "*"
-    should_finalise = len(chunk) % (256 * 1024) != 0
-    if should_finalise:
-        if is_finalised:
-            raise ValueError(
-                "The upload was already finalised. A likely cause is the given stream was "
-                "chunked incorrectly. Uploads to Google Cloud need to be chunked in multiples of "
-                "256 KB (except for the last chunk)."
-            )
-        total_size = str(end)
-    headers = {
-        "Content-Type": "application/octet-stream",
-        "Content-Range": f"bytes {start}-{end-1}/{total_size}",
-    }
-    success_codes = (200, 201) if should_finalise else (308,)
-    request = Request(
-        method="PUT", url=upload_url, data=chunk, headers=headers, success_codes=success_codes
-    )
-    return (request, should_finalise)
 
 
 async def _google_finalise_upload(upload_url: str, total_size: int) -> None:
