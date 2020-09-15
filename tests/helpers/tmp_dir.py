@@ -46,15 +46,23 @@ def tmp_google_dir():
             pass
 
 
+def tmp_dir(kind):
+    if kind == "azure":
+        return tmp_azure_dir()
+    if kind == "google":
+        return tmp_google_dir()
+    if kind == "local":
+        return tmp_local_dir()
+    raise AssertionError
+
+
 @pytest.fixture(params=["azure", "google", "local"])
 def any_dir(request):
-    if request.param == "azure":
-        ctx = tmp_azure_dir()
-    elif request.param == "google":
-        ctx = tmp_google_dir()
-    elif request.param == "local":
-        ctx = tmp_local_dir()
-    else:
-        raise AssertionError
-    with ctx as any_dir:
+    with tmp_dir(request.param) as any_dir:
+        yield any_dir
+
+
+@pytest.fixture(params=["azure", "google", "local"])
+def other_any_dir(request):
+    with tmp_dir(request.param) as any_dir:
         yield any_dir
