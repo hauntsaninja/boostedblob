@@ -15,6 +15,70 @@ from .request import Request, azurify_request, googlify_request
 AZURE_BLOCK_COUNT_LIMIT = 50000
 
 # ==============================
+# write_single
+# ==============================
+
+
+@pathdispatch
+async def write_single(path: Union[BasePath, str], data: bytes, overwrite: bool = False) -> None:
+    """Write the given stream to ``path``.
+
+    :param path: The path to write to.
+    :param data: The data to write.
+    :param overwrite: If False, raises if the path already exists.
+
+    """
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@write_single.register  # type: ignore
+async def _azure_write_single(path: AzurePath, data: bytes, overwrite: bool = False) -> None:
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError
+
+    request = await azurify_request(
+        Request(
+            method="PUT",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            data=data,
+            headers={"x-ms-blob-type": "BlockBlob"},
+            success_codes=(201,),
+        )
+    )
+    await request.execute_reponseless()
+
+
+@write_single.register  # type: ignore
+async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = False) -> None:
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError
+
+    request = await googlify_request(
+        Request(
+            method="POST",
+            url=path.format_url(
+                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={blob}",
+            ),
+            data=data,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+    )
+    await request.execute_reponseless()
+
+
+@write_single.register  # type: ignore
+async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = False) -> None:
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError
+
+    with open(path, mode="wb") as f:
+        f.write(data)
+
+
+# ==============================
 # write_stream
 # ==============================
 

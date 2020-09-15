@@ -9,6 +9,7 @@ from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, getsize
 from .request import Request, azurify_request, googlify_request
 
 ByteRange = Tuple[int, int]
+OptByteRange = Tuple[Optional[int], Optional[int]]
 
 # ==============================
 # read_byte_range
@@ -16,7 +17,7 @@ ByteRange = Tuple[int, int]
 
 
 @pathdispatch
-async def read_byte_range(path: Union[CloudPath, str], byte_range: ByteRange) -> bytes:
+async def read_byte_range(path: Union[CloudPath, str], byte_range: OptByteRange) -> bytes:
     """Read the content of ``path`` in the given byte range.
 
     :param path: The path to read from.
@@ -28,7 +29,7 @@ async def read_byte_range(path: Union[CloudPath, str], byte_range: ByteRange) ->
 
 
 @read_byte_range.register  # type: ignore
-async def _azure_read_byte_range(path: AzurePath, byte_range: ByteRange) -> bytes:
+async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
     request = await azurify_request(
         Request(
             method="GET",
@@ -42,7 +43,7 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: ByteRange) -> byte
 
 
 @read_byte_range.register  # type: ignore
-async def _google_read_byte_range(path: GooglePath, byte_range: ByteRange) -> bytes:
+async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) -> bytes:
     request = await googlify_request(
         Request(
             method="GET",
@@ -54,6 +55,32 @@ async def _google_read_byte_range(path: GooglePath, byte_range: ByteRange) -> by
     )
     async with request.execute() as resp:
         return await resp.read()
+
+
+# ==============================
+# read_single
+# ==============================
+
+
+@pathdispatch
+async def read_single(path: Union[BasePath, str]) -> bytes:
+    """Read the content of ``path``.
+
+    :param path: The path to read from.
+
+    """
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@read_single.register  # type: ignore
+async def _cloud_read_single(path: CloudPath) -> bytes:
+    return await read_byte_range(path, (0, None))
+
+
+@read_single.register  # type: ignore
+async def _local_read_single(path: LocalPath) -> bytes:
+    with open(path, "rb") as f:
+        return f.read()
 
 
 # ==============================
@@ -144,7 +171,7 @@ async def read_stream_unordered(
 # ==============================
 
 
-def _byte_range_to_str(byte_range: Tuple[Optional[int], Optional[int]]) -> str:
+def _byte_range_to_str(byte_range: OptByteRange) -> str:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-the-range-header-for-blob-service-operations
     # https://cloud.google.com/storage/docs/xml-api/get-object-download
     # oddly range requests are not mentioned in JSON API, only in the XML API
