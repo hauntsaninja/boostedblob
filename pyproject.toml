@@ -47,6 +47,7 @@ ipdb = "*"
 black = "^20.8b1"
 isort = "^5.4.2"
 mypy = "^0.782"  # TODO: actually need an unreleased mypy
+flake8 = "^3.8.3"
 
 [tool.poetry.scripts]
 bbb = 'boostedblob.cli:run_bbb'
