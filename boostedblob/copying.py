@@ -87,7 +87,7 @@ async def _localpath_copyfile(
     if isinstance(dst, LocalPath):
         if not overwrite:
             if await exists(dst):
-                raise FileExistsError
+                raise FileExistsError(dst)
         os.makedirs(dst.parent, exist_ok=True)
         shutil.copyfile(src, dst)
         return
@@ -125,7 +125,7 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
     assert isinstance(dst, AzurePath)
     if not overwrite:
         if await exists(dst):
-            raise FileExistsError
+            raise FileExistsError(dst)
     request = await azurify_request(
         Request(
             method="PUT",
@@ -136,7 +136,7 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
                 )
             },
             success_codes=(202,),
-            failure_exceptions={404: FileNotFoundError()},
+            failure_exceptions={404: FileNotFoundError(src)},
         )
     )
 
@@ -167,7 +167,7 @@ async def _google_cloudcopyfile(src: GooglePath, dst: GooglePath, overwrite: boo
     assert isinstance(dst, GooglePath)
     if not overwrite:
         if await exists(dst):
-            raise FileExistsError
+            raise FileExistsError(dst)
     params: Dict[str, Any] = {}
     while True:
         request = await googlify_request(
@@ -184,7 +184,7 @@ async def _google_cloudcopyfile(src: GooglePath, dst: GooglePath, overwrite: boo
                     dst_blob=dst.blob,
                 ),
                 params=params,
-                failure_exceptions={404: FileNotFoundError()},
+                failure_exceptions={404: FileNotFoundError(src)},
             )
         )
         async with request.execute() as resp:

@@ -29,7 +29,7 @@ class BasePath:
         if url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net"):
             return AzurePath.from_str(path)
         if url.scheme:
-            raise ValueError
+            raise ValueError(f"Invalid path '{path}'")
         return LocalPath(path)
 
     @property
@@ -62,7 +62,7 @@ class LocalPath(BasePath):
     def from_str(path: str) -> BasePath:
         url = urllib.parse.urlparse(path)
         if url.scheme:
-            raise ValueError
+            raise ValueError(f"Invalid path '{path}'")
         return LocalPath(path)
 
     @property
@@ -76,7 +76,7 @@ class LocalPath(BasePath):
     def relative_to(self, other: LocalPath) -> str:
         other = other.ensure_directory_like()
         if not self.path.startswith(other.path):
-            raise ValueError
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         return self.path[len(other.path) :]
 
     def is_directory_like(self) -> bool:
@@ -111,7 +111,7 @@ class AzurePath(CloudPath):
         account, host = parsed_url.netloc.split(".", maxsplit=1)
         parts = parsed_url.path.split("/", maxsplit=2)
         if parsed_url.scheme != "https" or host != "blob.core.windows.net" or parts[0]:
-            raise ValueError("Invalid URL")
+            raise ValueError(f"Invalid URL '{url}'")
 
         return AzurePath(account=account, container=parts[1], blob="/".join(parts[2:]))
 
@@ -125,10 +125,12 @@ class AzurePath(CloudPath):
 
     def relative_to(self, other: AzurePath) -> str:
         other = other.ensure_directory_like()
-        if self.account != other.account or self.container != other.container:
-            raise ValueError
-        if not self.blob.startswith(other.blob):
-            raise ValueError
+        if (
+            self.account != other.account
+            or self.container != other.container
+            or not self.blob.startswith(other.blob)
+        ):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         return self.blob[len(other.blob) :]
 
     def is_directory_like(self) -> bool:
@@ -160,7 +162,7 @@ class GooglePath(CloudPath):
     def from_str(url: str) -> GooglePath:
         parsed_url = urllib.parse.urlparse(url)
         if parsed_url.scheme != "gs":
-            raise ValueError("Invalid URL")
+            raise ValueError(f"Invalid URL '{url}'")
 
         return GooglePath(bucket=parsed_url.netloc, blob=parsed_url.path[1:])
 
@@ -174,10 +176,8 @@ class GooglePath(CloudPath):
 
     def relative_to(self, other: GooglePath) -> str:
         other = other.ensure_directory_like()
-        if self.bucket != other.bucket:
-            raise ValueError
-        if not self.blob.startswith(other.blob):
-            raise ValueError
+        if self.bucket != other.bucket or not self.blob.startswith(other.blob):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         return self.blob[len(other.blob) :]
 
     def is_directory_like(self) -> bool:
@@ -281,12 +281,12 @@ async def stat(path: Union[BasePath, str]) -> Stat:
 @stat.register  # type: ignore
 async def _azure_stat(path: AzurePath) -> Stat:
     if not path.blob:
-        raise FileNotFoundError
+        raise FileNotFoundError(path)
     request = await azurify_request(
         Request(
             method="HEAD",
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            failure_exceptions={404: FileNotFoundError()},
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     async with request.execute() as resp:
@@ -296,12 +296,12 @@ async def _azure_stat(path: AzurePath) -> Stat:
 @stat.register  # type: ignore
 async def _google_stat(path: GooglePath) -> Stat:
     if not path.blob:
-        raise FileNotFoundError
+        raise FileNotFoundError(path)
     request = await googlify_request(
         Request(
             method="GET",
             url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
-            failure_exceptions={404: FileNotFoundError()},
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     async with request.execute() as resp:

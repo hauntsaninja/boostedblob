@@ -35,7 +35,7 @@ async def write_single(path: Union[BasePath, str], data: bytes, overwrite: bool 
 async def _azure_write_single(path: AzurePath, data: bytes, overwrite: bool = False) -> None:
     if not overwrite:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     request = await azurify_request(
         Request(
@@ -53,7 +53,7 @@ async def _azure_write_single(path: AzurePath, data: bytes, overwrite: bool = Fa
 async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = False) -> None:
     if not overwrite:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     request = await googlify_request(
         Request(
@@ -72,7 +72,7 @@ async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = 
 async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = False) -> None:
     if not overwrite:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     with open(path, mode="wb") as f:
         f.write(data)
@@ -127,7 +127,7 @@ async def _azure_write_stream(
             pass
     else:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     upload_id = random.randint(0, 2 ** 47 - 1)
     block_index = 0
@@ -162,7 +162,7 @@ async def _google_write_stream(
 ) -> None:
     if not overwrite:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     upload_url = await _google_start_resumable_upload(path)
     is_finalised = False
@@ -194,7 +194,7 @@ async def _local_write_stream(
 ) -> None:
     if not overwrite:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
     # TODO: evaluate whether running in executor actually helps
     loop = asyncio.get_event_loop()
 
@@ -243,7 +243,7 @@ async def _azure_write_stream_unordered(
             pass
     else:
         if await exists(path):
-            raise FileExistsError
+            raise FileExistsError(path)
 
     upload_id = random.randint(0, 2 ** 47 - 1)
     iter_index = 0

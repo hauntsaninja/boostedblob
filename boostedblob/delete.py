@@ -25,13 +25,13 @@ async def remove(path: Union[BasePath, str]) -> None:
 @remove.register  # type: ignore
 async def _azure_remove(path: AzurePath) -> None:
     if path.is_directory_like():
-        raise IsADirectoryError
+        raise IsADirectoryError(path)
     request = await azurify_request(
         Request(
             method="DELETE",
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
             success_codes=(202,),
-            failure_exceptions={404: FileNotFoundError()},
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     await request.execute_reponseless()
@@ -40,13 +40,13 @@ async def _azure_remove(path: AzurePath) -> None:
 @remove.register  # type: ignore
 async def _google_remove(path: GooglePath) -> None:
     if path.is_directory_like():
-        raise IsADirectoryError
+        raise IsADirectoryError(path)
     request = await googlify_request(
         Request(
             method="DELETE",
             url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
             success_codes=(204,),
-            failure_exceptions={404: FileNotFoundError()},
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     await request.execute_reponseless()
