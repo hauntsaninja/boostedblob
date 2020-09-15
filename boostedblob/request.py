@@ -104,6 +104,9 @@ class Request:
             timeout=aiohttp.ClientTimeout(
                 connect=config.connect_timeout, sock_read=config.read_timeout
             ),
+            # Figuring out that some requests break because aiohttp adds some headers
+            # automatically was not fun
+            skip_auto_headers={"Content-Type"},
         )
         async with ctx as resp:
             yield resp
