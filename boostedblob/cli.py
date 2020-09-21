@@ -62,13 +62,20 @@ async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
 
 
 @cli_decorate
-async def cp(src: str, dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+    dst_obj = bbb.BasePath.from_str(dst)
+    dst_is_dirlike = dst_obj.is_directory_like() or await bbb.isdir(dst_obj)
+
     async with bbb.BoostExecutor(concurrency) as executor:
-        src_obj = bbb.BasePath.from_str(src)
-        dst_obj = bbb.BasePath.from_str(dst)
-        if dst_obj.is_directory_like() or await bbb.isdir(dst_obj):
-            dst_obj /= src_obj.name
-        await bbb.copyfile(src_obj, dst_obj, executor, overwrite=True)
+        if len(srcs) > 1 and not dst_is_dirlike:
+            raise ValueError(f"{dst_obj} is not a directory")
+
+        async def copy_wrapper(src: str) -> None:
+            src_obj = bbb.BasePath.from_str(src)
+            dst_file_obj = dst_obj / src_obj.name if dst_is_dirlike else dst_obj
+            await bbb.copyfile(src_obj, dst_file_obj, executor, overwrite=True)
+
+        await bbb.boost.consume(executor.map_unordered(copy_wrapper, iter(srcs)))
 
 
 @cli_decorate
@@ -80,8 +87,9 @@ async def cptree(src: str, dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> 
 
 
 @cli_decorate
-async def rm(path: str) -> None:
-    await bbb.remove(path)
+async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
+    async with bbb.BoostExecutor(concurrency) as executor:
+        await bbb.boost.consume(executor.map_unordered(bbb.remove, iter(paths)))
 
 
 @cli_decorate
