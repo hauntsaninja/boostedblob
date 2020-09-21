@@ -70,11 +70,14 @@ async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) 
 
 
 @cli_decorate
-async def cptree(src: str, dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def cptree(
+    src: str, dst: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY
+) -> None:
     src_obj = bbb.BasePath.from_str(src)
     async with bbb.BoostExecutor(concurrency) as executor:
         async for p in bbb.copying.copytree_iterator(src_obj, dst, executor):
-            print(p)
+            if not quiet:
+                print(p)
 
 
 @cli_decorate
@@ -84,12 +87,13 @@ async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
 
 
 @cli_decorate
-async def rmtree(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     path_obj = bbb.BasePath.from_str(path)
     async with bbb.BoostExecutor(concurrency) as executor:
         if isinstance(path_obj, bbb.CloudPath):
             async for p in bbb.delete.rmtree_iterator(path_obj, executor):
-                print(p)
+                if not quiet:
+                    print(p)
         else:
             await bbb.rmtree(path_obj, executor)
 
@@ -116,6 +120,7 @@ def parse_options(args: List[str]) -> argparse.Namespace:
     subparser = subparsers.add_parser("cptree", help="Copy a directory tree")
     subparser.add_argument("src", help="Directory to copy from")
     subparser.add_argument("dst", help="Directory to copy to")
+    subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("rm", help="Remove files")
@@ -124,6 +129,7 @@ def parse_options(args: List[str]) -> argparse.Namespace:
 
     subparser = subparsers.add_parser("rmtree", help="Remove a directory tree")
     subparser.add_argument("path", help="Directory to delete")
+    subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
 
     return parser.parse_args(args)
