@@ -119,3 +119,4 @@ def run_bbb() -> None:
         cli_fns[command](**args.__dict__)
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}")
+        sys.exit(1)
