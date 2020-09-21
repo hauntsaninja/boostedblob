@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import functools
-import inspect
 import sys
 from typing import Any, Awaitable, Callable, List, TypeVar
 
@@ -25,16 +24,8 @@ def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     return wrapper
 
 
-cli_fns = {}
-
-
-def register_cli(fn: F) -> F:
-    cli_fns[fn.__name__] = fn
-    return fn
-
-
 def cli_decorate(fn: F) -> F:
-    return functools.wraps(fn)(register_cli(syncify(bbb.ensure_session(fn))))  # type: ignore
+    return syncify(bbb.ensure_session(fn))  # type: ignore
 
 
 DEFAULT_CONCURRENCY = 100
@@ -107,15 +98,33 @@ def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for fn in cli_fns.values():
-        subparser = subparsers.add_parser(fn.__name__)
-        sig = inspect.signature(fn)
-        for param in sig.parameters.values():
-            typ = eval(param.annotation) if isinstance(param.annotation, str) else param.annotation
-            if param.default == param.empty:
-                subparser.add_argument(param.name, type=typ)
-            else:
-                subparser.add_argument(f"--{param.name}", default=param.default, type=typ)
+    subparser = subparsers.add_parser("ls", help="List files in a directory")
+    subparser.add_argument("path", help="Path of directory to list")
+
+    subparser = subparsers.add_parser("lstree", help="List all files in a directory tree")
+    subparser.add_argument("path", help="Root of directory tree to list")
+
+    subparser = subparsers.add_parser("cat", help="Print the contents of a file")
+    subparser.add_argument("path", help="File whose contents to print")
+    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+
+    subparser = subparsers.add_parser("cp", help="Copy files")
+    subparser.add_argument("srcs", nargs="+", help="File(s) to copy from")
+    subparser.add_argument("dst", help="File or directory to copy to")
+    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+
+    subparser = subparsers.add_parser("cptree", help="Copy a directory tree")
+    subparser.add_argument("src", help="Directory to copy from")
+    subparser.add_argument("dst", help="Directory to copy to")
+    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+
+    subparser = subparsers.add_parser("rm", help="Remove files")
+    subparser.add_argument("paths", help="File(s) to delete")
+    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+
+    subparser = subparsers.add_parser("rmtree", help="Remove a directory tree")
+    subparser.add_argument("path", help="Directory to delete")
+    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
 
     return parser.parse_args(args)
 
@@ -124,7 +133,7 @@ def run_bbb() -> None:
     args = parse_options(sys.argv[1:])
     command = args.__dict__.pop("command")
     try:
-        cli_fns[command](**args.__dict__)
+        eval(command)(**args.__dict__)
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}")
         sys.exit(1)
