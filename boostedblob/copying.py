@@ -248,7 +248,6 @@ async def copytree_iterator(
 
         assert isinstance(dst, BasePath)
         if entry.is_dir:
-            # TODO: makedir or something
             return entry.path
         size = entry.stat.size if entry.stat else None
         await copyfile(

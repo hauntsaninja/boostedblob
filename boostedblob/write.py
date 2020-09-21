@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import os
 import random
 from typing import List, Mapping, Optional, Tuple, Union
 
@@ -74,6 +75,7 @@ async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = Fa
         if await exists(path):
             raise FileExistsError(path)
 
+    os.makedirs(path.parent, exist_ok=True)
     with open(path, mode="wb") as f:
         f.write(data)
 
@@ -220,9 +222,10 @@ async def _local_write_stream(
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
+
+    os.makedirs(path.parent, exist_ok=True)
     # TODO: evaluate whether running in executor actually helps
     loop = asyncio.get_event_loop()
-
     with open(path, mode="wb") as f:
         async for data in iter_underlying(stream):
             # f.write(data)
