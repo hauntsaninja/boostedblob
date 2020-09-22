@@ -32,6 +32,8 @@ MANIFEST
 
 # Tools
 .mypy_cache
+.coverage
+htmlcov
 
 # General
 .DS_Store
