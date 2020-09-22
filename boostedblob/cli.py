@@ -124,7 +124,7 @@ def parse_options(args: List[str]) -> argparse.Namespace:
     subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("rm", help="Remove files")
-    subparser.add_argument("paths", help="File(s) to delete")
+    subparser.add_argument("paths", nargs="+", help="File(s) to delete")
     subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("rmtree", help="Remove a directory tree")
@@ -135,11 +135,11 @@ def parse_options(args: List[str]) -> argparse.Namespace:
     return parser.parse_args(args)
 
 
-def run_bbb() -> None:
-    args = parse_options(sys.argv[1:])
+def run_bbb(argv: List[str]) -> None:
+    args = parse_options(argv)
     command = args.__dict__.pop("command")
     try:
         eval(command)(**args.__dict__)
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}")
-        sys.exit(1)
+        raise
