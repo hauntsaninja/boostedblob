@@ -55,6 +55,7 @@ class Config:
 
     token_early_expiration_seconds: int = 300
     azure_access_token_manager: TokenManager = TokenManager(azure_auth.get_access_token)
+    azure_sas_token_manager: TokenManager = TokenManager(azure_auth.get_sas_token)
     google_access_token_manager: TokenManager = TokenManager(google_auth.get_access_token)
 
 

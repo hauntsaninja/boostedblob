@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
 
+from . import azure_auth
 from .boost import BoostExecutor, EagerAsyncIterator, consume
 from .globals import config
 from .listing import DirEntry, scantree
@@ -148,15 +149,16 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
     if not overwrite:
         if await exists(dst):
             raise FileExistsError(dst)
+
+    if src.account == dst.account:
+        copy_source = src.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
+    else:
+        copy_source, _ = await azure_auth.generate_signed_url(src)
     request = await azurify_request(
         Request(
             method="PUT",
             url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers={
-                "x-ms-copy-source": src.format_url(
-                    "https://{account}.blob.core.windows.net/{container}/{blob}"
-                )
-            },
+            headers={"x-ms-copy-source": copy_source},
             success_codes=(202,),
             failure_exceptions={404: FileNotFoundError(src)},
         )
@@ -180,8 +182,8 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
             if resp.headers["x-ms-copy-id"] != copy_id:
                 raise RuntimeError("Copy id mismatch")
             copy_status = resp.headers["x-ms-copy-status"]
-        if copy_status != "success":
-            raise RuntimeError(f"Invalid copy status: '{copy_status}'")
+    if copy_status != "success":
+        raise RuntimeError(f"Invalid copy status: '{copy_status}'")
 
 
 @cloudcopyfile.register  # type: ignore

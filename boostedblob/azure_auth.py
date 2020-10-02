@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import datetime
 import hmac
 import json
 import os
@@ -12,9 +13,11 @@ from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple
 import xmltodict
 
 if TYPE_CHECKING:
+    from .path import AzurePath
     from .request import Request
 
 
+AZURE_SAS_TOKEN_EXPIRATION_SECONDS = 60 * 60
 # these seem to be expired manually, but we don't currently detect that
 AZURE_SHARED_KEY_EXPIRATION_SECONDS = 24 * 60 * 60
 OAUTH_TOKEN = "oauth_token"
@@ -365,3 +368,104 @@ def sign_request_with_shared_key(request: Request, key: str) -> str:
     ).decode("utf8")
 
     return f"SharedKey {storage_account}:{signature}"
+
+
+async def get_sas_token(account: str) -> Tuple[Any, float]:
+    from .globals import config
+    from .request import azurify_request
+
+    auth = await config.azure_access_token_manager.get_token(key=account)
+
+    if auth[0] != OAUTH_TOKEN:
+        raise RuntimeError("Only oauth tokens can be used to get SAS tokens")
+
+    req = create_user_delegation_sas_request(account=account)
+    req = await azurify_request(req, auth=auth)
+
+    async with req.execute() as resp:
+        data = await resp.read()
+
+    out = xmltodict.parse(data)
+    return out["UserDelegationKey"], time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
+
+
+def create_user_delegation_sas_request(account: str) -> Request:
+    # https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
+    from .request import Request
+
+    now = datetime.datetime.utcnow()
+    start = (now + datetime.timedelta(hours=-1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    expiration = now + datetime.timedelta(days=6)
+    expiry = expiration.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return Request(
+        url=f"https://{account}.blob.core.windows.net/",
+        method="POST",
+        params=dict(restype="service", comp="userdelegationkey"),
+        data={"KeyInfo": {"Start": start, "Expiry": expiry}},
+    )
+
+
+async def generate_signed_url(path: AzurePath) -> Tuple[str, datetime.datetime]:
+    # https://docs.microsoft.com/en-us/rest/api/storageservices/delegate-access-with-shared-access-signature
+    # https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
+    # https://docs.microsoft.com/en-us/rest/api/storageservices/service-sas-examples
+    from .globals import config
+
+    key = await config.azure_sas_token_manager.get_token(key=path.account)
+    params = {
+        "st": key["SignedStart"],
+        "se": key["SignedExpiry"],
+        "sks": key["SignedService"],
+        "skt": key["SignedStart"],
+        "ske": key["SignedExpiry"],
+        "sktid": key["SignedTid"],
+        "skoid": key["SignedOid"],
+        # signed key version (param name not mentioned in docs)
+        "skv": key["SignedVersion"],
+        "sv": "2018-11-09",  # signed version
+        "sr": "b",  # signed resource
+        "sp": "r",  # signed permissions
+        "sip": "",  # signed ip
+        "si": "",  # signed identifier
+        "spr": "https,http",  # signed http protocol
+        "rscc": "",  # Cache-Control header
+        "rscd": "",  # Content-Disposition header
+        "rsce": "",  # Content-Encoding header
+        "rscl": "",  # Content-Language header
+        "rsct": "",  # Content-Type header
+    }
+
+    canonicalized_resource = f"/blob/{path.account}/{path.container}/{path.blob}"
+    parts_to_sign = (
+        params["sp"],
+        params["st"],
+        params["se"],
+        canonicalized_resource,
+        params["skoid"],
+        params["sktid"],
+        params["skt"],
+        params["ske"],
+        params["sks"],
+        params["skv"],
+        params["sip"],
+        params["spr"],
+        params["sv"],
+        params["sr"],
+        params["rscc"],
+        params["rscd"],
+        params["rsce"],
+        params["rscl"],
+        params["rsct"],
+        # this is documented on a different page
+        # https://docs.microsoft.com/en-us/rest/api/storageservices/create-service-sas#specifying-the-signed-identifier
+        params["si"],
+    )
+    string_to_sign = "\n".join(parts_to_sign)
+    params["sig"] = base64.b64encode(
+        hmac.digest(base64.b64decode(key["Value"]), string_to_sign.encode("utf8"), "sha256")
+    ).decode("utf8")
+    query = urllib.parse.urlencode({k: v for k, v in params.items() if v != ""})
+
+    expiry = datetime.datetime.strptime(key["SignedExpiry"], "%Y-%m-%dT%H:%M:%SZ")
+    url = path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
+    return url + "?" + query, expiry
