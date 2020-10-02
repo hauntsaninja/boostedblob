@@ -8,6 +8,7 @@ from .delete import rmtree as rmtree
 from .globals import ensure_session as ensure_session
 from .listing import listdir as listdir
 from .listing import listtree as listtree
+from .listing import scandir as scandir
 from .listing import scantree as scantree
 from .path import AzurePath as AzurePath
 from .path import BasePath as BasePath

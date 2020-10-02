@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import datetime
 import functools
 import sys
 from typing import Any, Awaitable, Callable, List, TypeVar
@@ -32,15 +33,28 @@ DEFAULT_CONCURRENCY = 100
 
 
 @cli_decorate
-async def ls(path: str) -> None:
-    async for p in bbb.listdir(path):
-        print(p)
+async def ls(path: str, long: bool = False) -> None:
+    if long:
+        async for d in bbb.scandir(path):
+            size = d.stat.size if d.stat else ""
+            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
+            print(f"{size:12}  {mtime:19}  {d.path}")
+    else:
+        async for p in bbb.listdir(path):
+            print(p)
 
 
 @cli_decorate
-async def lstree(path: str) -> None:
-    async for p in bbb.listtree(path):
-        print(p)
+async def lstree(path: str, long: bool = False) -> None:
+    if long:
+        async for d in bbb.scantree(path):
+            assert d.stat is not None
+            size = d.stat.size
+            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat()
+            print(f"{size:12}  {mtime:19}  {d.path}")
+    else:
+        async for p in bbb.listtree(path):
+            print(p)
 
 
 @cli_decorate
@@ -104,9 +118,15 @@ def parse_options(args: List[str]) -> argparse.Namespace:
 
     subparser = subparsers.add_parser("ls", help="List files in a directory")
     subparser.add_argument("path", help="Path of directory to list")
+    subparser.add_argument(
+        "-l", "--long", action="store_true", help="List information about each file"
+    )
 
     subparser = subparsers.add_parser("lstree", help="List all files in a directory tree")
     subparser.add_argument("path", help="Root of directory tree to list")
+    subparser.add_argument(
+        "-l", "--long", action="store_true", help="List information about each file"
+    )
 
     subparser = subparsers.add_parser("cat", help="Print the contents of a file")
     subparser.add_argument("path", help="File whose contents to print")
