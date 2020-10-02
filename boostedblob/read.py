@@ -30,12 +30,15 @@ async def read_byte_range(path: Union[CloudPath, str], byte_range: OptByteRange)
 
 @read_byte_range.register  # type: ignore
 async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
+    range_str = _byte_range_to_str(byte_range)
+    range_header = {"Range": range_str} if range_str is not None else {}
+    success_codes = (206,) if range_header else (200,)
     request = await azurify_request(
         Request(
             method="GET",
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers={"Range": _byte_range_to_str(byte_range)},
-            success_codes=(206,),
+            headers=range_header,
+            success_codes=success_codes,
         )
     )
     async with request.execute() as resp:
@@ -44,13 +47,16 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
 
 @read_byte_range.register  # type: ignore
 async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) -> bytes:
+    range_str = _byte_range_to_str(byte_range)
+    range_header = {"Range": range_str} if range_str is not None else {}
+    success_codes = (206,) if range_header else (200,)
     request = await googlify_request(
         Request(
             method="GET",
             url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
             params=dict(alt="media"),
-            headers={"Range": _byte_range_to_str(byte_range)},
-            success_codes=(206,),
+            headers=range_header,
+            success_codes=success_codes,
         )
     )
     async with request.execute() as resp:
@@ -74,7 +80,7 @@ async def read_single(path: Union[BasePath, str]) -> bytes:
 
 @read_single.register  # type: ignore
 async def _cloud_read_single(path: CloudPath) -> bytes:
-    return await read_byte_range(path, (0, None))
+    return await read_byte_range(path, (None, None))
 
 
 @read_single.register  # type: ignore
@@ -171,7 +177,7 @@ async def read_stream_unordered(
 # ==============================
 
 
-def _byte_range_to_str(byte_range: OptByteRange) -> str:
+def _byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-the-range-header-for-blob-service-operations
     # https://cloud.google.com/storage/docs/xml-api/get-object-download
     # oddly range requests are not mentioned in JSON API, only in the XML API
@@ -185,4 +191,4 @@ def _byte_range_to_str(byte_range: OptByteRange) -> str:
             return f"bytes=0-{end-1}"
         # This form is not supported by Azure
         return f"bytes=-{-int(end)}"
-    raise AssertionError
+    return None
