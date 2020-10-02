@@ -52,6 +52,12 @@ def test_path_methods():
         assert subpath.relative_to(path.parent) == "blob/subblob"
 
 
+def test_local_path_parent():
+    assert LocalPath("asdf").parent == LocalPath(".")
+    assert LocalPath(".").parent == LocalPath(".")
+    assert LocalPath("/").parent == LocalPath("/")
+
+
 def test_path_directory_like():
     for path in PATHS.values():
         assert not path.is_directory_like()

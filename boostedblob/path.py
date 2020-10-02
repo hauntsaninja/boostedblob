@@ -71,7 +71,7 @@ class LocalPath(BasePath):
 
     @property
     def parent(self) -> LocalPath:
-        return LocalPath(os.path.dirname(self.path))
+        return LocalPath(os.path.dirname(self.path) or ".")
 
     def relative_to(self, other: LocalPath) -> str:
         other = other.ensure_directory_like()
