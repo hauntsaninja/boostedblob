@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
@@ -18,7 +19,7 @@ from .path import (
     url_format,
 )
 from .read import read_single, read_stream, read_stream_unordered
-from .request import Request, azurify_request, googlify_request
+from .request import Request, azurify_request, exponential_sleep_generator, googlify_request
 from .write import write_single, write_stream, write_stream_unordered
 
 # ==============================
@@ -171,7 +172,13 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
     # wait for potentially async copy operation to finish
     # https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob
     # pending, success, aborted, failed
+    sleep = exponential_sleep_generator(
+        initial=config.backoff_initial,
+        maximum=config.backoff_max,
+        jitter_fraction=config.backoff_jitter_fraction,
+    )
     while copy_status == "pending":
+        await asyncio.sleep(next(sleep))
         request = await azurify_request(
             Request(
                 method="GET",
@@ -193,6 +200,12 @@ async def _google_cloudcopyfile(src: GooglePath, dst: GooglePath, overwrite: boo
         if await exists(dst):
             raise FileExistsError(dst)
     params: Dict[str, Any] = {}
+
+    sleep = exponential_sleep_generator(
+        initial=config.backoff_initial,
+        maximum=config.backoff_max,
+        jitter_fraction=config.backoff_jitter_fraction,
+    )
     while True:
         request = await googlify_request(
             Request(
@@ -213,9 +226,10 @@ async def _google_cloudcopyfile(src: GooglePath, dst: GooglePath, overwrite: boo
         )
         async with request.execute() as resp:
             result = await resp.json()
-            if result["done"]:
-                return
-            params["rewriteToken"] = result["rewriteToken"]
+        if result["done"]:
+            return
+        params["rewriteToken"] = result["rewriteToken"]
+        await asyncio.sleep(next(sleep))
 
 
 # ==============================

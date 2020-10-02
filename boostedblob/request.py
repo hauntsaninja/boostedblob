@@ -40,7 +40,7 @@ class Request:
         """
 
         for attempt, backoff in enumerate(
-            _exponential_sleep_generator(
+            exponential_sleep_generator(
                 initial=config.backoff_initial,
                 maximum=config.backoff_max,
                 jitter_fraction=config.backoff_jitter_fraction,
@@ -243,7 +243,7 @@ async def google_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]
 # ==============================
 
 
-def _exponential_sleep_generator(
+def exponential_sleep_generator(
     initial: float, maximum: float, jitter_fraction: float, multiplier: float = 2
 ) -> Iterator[float]:
     """Yields amounts to sleep by.
