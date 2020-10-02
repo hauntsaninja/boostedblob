@@ -130,27 +130,27 @@ def parse_options(args: List[str]) -> argparse.Namespace:
 
     subparser = subparsers.add_parser("cat", help="Print the contents of a file")
     subparser.add_argument("path", help="File whose contents to print")
-    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("cp", help="Copy files")
     subparser.add_argument("srcs", nargs="+", help="File(s) to copy from")
     subparser.add_argument("dst", help="File or directory to copy to")
-    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("cptree", help="Copy a directory tree")
     subparser.add_argument("src", help="Directory to copy from")
     subparser.add_argument("dst", help="Directory to copy to")
     subparser.add_argument("-q", "--quiet", action="store_true")
-    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("rm", help="Remove files")
     subparser.add_argument("paths", nargs="+", help="File(s) to delete")
-    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
 
     subparser = subparsers.add_parser("rmtree", help="Remove a directory tree")
     subparser.add_argument("path", help="Directory to delete")
     subparser.add_argument("-q", "--quiet", action="store_true")
-    subparser.add_argument("--concurrency", default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
 
     return parser.parse_args(args)
 
