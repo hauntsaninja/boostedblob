@@ -196,9 +196,23 @@ async def _cloud_scantree(path: CloudPath) -> AsyncIterator[DirEntry]:
 
 @scantree.register  # type: ignore
 async def _local_scantree(path: LocalPath) -> AsyncIterator[DirEntry]:
-    for base, _subdirs, _files in os.walk(path):
-        async for entry in scandir(base):
-            yield entry
+    path_absolute = os.path.abspath(path)
+
+    def inner(current: str) -> Iterator[DirEntry]:
+        entries = list(os.scandir(current))
+        for entry in entries:
+            if entry.is_dir():
+                yield from inner(entry.path)
+            else:
+                yield DirEntry(
+                    path=LocalPath(entry.path),
+                    is_dir=False,
+                    is_file=True,
+                    stat=Stat.from_local(entry.stat()),
+                )
+
+    for entry in inner(path_absolute):
+        yield entry
 
 
 # ==============================
