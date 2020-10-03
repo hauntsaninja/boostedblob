@@ -25,7 +25,7 @@ class Request:
     headers: Mapping[str, str] = field(default_factory=dict, repr=False)
     success_codes: Sequence[int] = (200,)
     retry_codes: Sequence[int] = (408, 429, 500, 502, 503, 504)
-    failure_exceptions: Mapping[int, Exception] = field(default_factory=dict)
+    failure_exceptions: Mapping[int, Exception] = field(default_factory=dict, repr=False)
 
     @contextlib.asynccontextmanager
     async def execute(self) -> AsyncIterator[aiohttp.ClientResponse]:

@@ -75,7 +75,7 @@ def configure(**kwargs: Any) -> Iterator[None]:
 @contextlib.asynccontextmanager
 async def session_context() -> AsyncIterator[None]:
     if config.session is None:
-        ignore_aiohttp_ssl_eror()  # TODO: put this in a better place
+        set_event_loop_exception_handler()  # there could be a better place for this
         connector = aiohttp.TCPConnector(limit=0)
         async with aiohttp.ClientSession(connector=connector) as session:
             with configure(session=session):
@@ -93,25 +93,23 @@ def ensure_session(fn: F) -> F:
     return wrapper  # type: ignore
 
 
-def ignore_aiohttp_ssl_eror() -> None:  # pragma: no cover
-    """Ignore aiohttp #3535 / cpython #13548 issue with SSL data after close.
-
-    Copied from https://github.com/aio-libs/aiohttp/issues/3535#issuecomment-483268542
-
-    """
-    if sys.version_info >= (3, 7, 4):
-        return
-
+def set_event_loop_exception_handler() -> None:
     loop = asyncio.get_event_loop()
-    orig_handler = loop.get_exception_handler()
 
-    import ssl
-    from asyncio.sslproto import SSLProtocol
+    def handler(
+        loop: asyncio.AbstractEventLoop, context: Dict[str, Any]
+    ) -> None:  # pragma: no cover
+        message = context["message"]
+        exception = context.get("exception", Exception)
+        if sys.version_info < (3, 7, 4) and message in (
+            "SSL error in data received",
+            "Fatal error on transport",
+        ):
+            # Ignore aiohttp #3535 / cpython #13548 issue with SSL data after close
+            # Adapted from https://github.com/aio-libs/aiohttp/issues/3535#issuecomment-483268542
+            import ssl
+            from asyncio.sslproto import SSLProtocol
 
-    def ignore_ssl_error(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
-        if context.get("message") in ("SSL error in data received", "Fatal error on transport"):
-            # validate we have the right exception, transport and protocol
-            exception = context.get("exception")
             protocol = context.get("protocol")
             if (
                 isinstance(exception, ssl.SSLError)
@@ -119,9 +117,14 @@ def ignore_aiohttp_ssl_eror() -> None:  # pragma: no cover
                 and isinstance(protocol, SSLProtocol)
             ):
                 return
-        if orig_handler is not None:
-            orig_handler(loop, context)
+
+        # Our main interest here is minimising the other various errors and tracebacks that
+        # drown out the politely formatted errors from cli.py when things go wrong
+        if "exception was never retrieved" in message:
+            print(f"ERROR (while closing down): {type(exception).__name__}: {exception}")
         else:
+            print(f"ERROR (from event loop): {type(exception).__name__}: {message}")
+        if loop.get_debug():
             loop.default_exception_handler(context)
 
-    loop.set_exception_handler(ignore_ssl_error)
+    loop.set_exception_handler(handler)
