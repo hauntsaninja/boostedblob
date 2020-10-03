@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import io
 from typing import Any, List
 from unittest.mock import MagicMock
@@ -30,6 +31,16 @@ def test_cli():
                     BasePath.from_str(p).relative_to(remote_dir) for p in output.splitlines()
                 )
 
+            def normalise_long(output: str) -> List[List[str]]:
+                entries = [line.split() for line in output.splitlines()]
+                for entry in entries:
+                    entry[-1] = BasePath.from_str(entry[-1]).relative_to(remote_dir)
+                    if len(entry) > 1:
+                        datetime.datetime.fromisoformat(entry[1])
+                        entry[0] = entry[0]
+                        entry[1] = "mtime"
+                return sorted(entries)
+
             f3_contents = b"f3_contents"
 
             helpers.create_file(local_dir / "f1")
@@ -52,6 +63,19 @@ def test_cli():
 
             run_bbb(["cptree", local_dir, remote_dir])
             assert normalise(run_bbb(["ls", remote_dir])) == ["d1/", "f1", "f2", "f3"]
+            assert normalise_long(run_bbb(["ls", "-l", remote_dir])) == [
+                ["11", "mtime", "f3"],
+                ["4", "mtime", "f1"],
+                ["4", "mtime", "f2"],
+                ["d1/"],
+            ]
+
             assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "f3"]
+            assert normalise_long(run_bbb(["lstree", "-l", remote_dir])) == [
+                ["11", "mtime", "d1/f4"],
+                ["11", "mtime", "f3"],
+                ["4", "mtime", "f1"],
+                ["4", "mtime", "f2"],
+            ]
             run_bbb(["rmtree", remote_dir])
             assert run_bbb(["lstree", remote_dir]) == ""
