@@ -24,8 +24,6 @@ async def remove(path: Union[BasePath, str]) -> None:
 
 @remove.register  # type: ignore
 async def _azure_remove(path: AzurePath) -> None:
-    if path.is_directory_like():
-        raise IsADirectoryError(path)
     request = await azurify_request(
         Request(
             method="DELETE",
@@ -39,8 +37,6 @@ async def _azure_remove(path: AzurePath) -> None:
 
 @remove.register  # type: ignore
 async def _google_remove(path: GooglePath) -> None:
-    if path.is_directory_like():
-        raise IsADirectoryError(path)
     request = await googlify_request(
         Request(
             method="DELETE",
