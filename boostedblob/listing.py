@@ -50,6 +50,25 @@ async def _azure_list_blobs(path: AzurePath, delimiter: Optional[str]) -> AsyncI
     prefix = path
     if delimiter:
         assert not prefix.blob or prefix.blob.endswith(delimiter)
+    if not path.container and delimiter == "/":
+        it = azure_page_iterator(
+            Request(
+                method="GET",
+                url=prefix.format_url("https://{account}.blob.core.windows.net/"),
+                params=dict(comp="list"),
+                failure_exceptions={404: FileNotFoundError(path)},
+            )
+        )
+        async for result in it:
+            for container in result["Containers"]["Container"]:
+                yield DirEntry(
+                    path=AzurePath(prefix.account, container["Name"], ""),
+                    is_dir=True,
+                    is_file=False,
+                    stat=None,
+                )
+        return
+
     params = {}
     if delimiter is not None:
         params["delimiter"] = delimiter

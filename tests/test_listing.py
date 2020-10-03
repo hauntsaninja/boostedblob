@@ -1,6 +1,7 @@
 import pytest
 
 import boostedblob as bbb
+from boostedblob.path import AzurePath
 
 from . import helpers
 
@@ -50,6 +51,14 @@ async def test_listtree(any_dir):
         [p.name async for p in bbb.listdir(any_dir / "alp")]
     with pytest.raises(NotADirectoryError):
         [p.name async for p in bbb.listdir(any_dir / "alpha")]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_list_container():
+    with helpers.tmp_azure_dir() as az_dir:
+        account = AzurePath(az_dir.account, "", "")
+        assert az_dir.container in [p.name async for p in bbb.listdir(account)]
 
 
 # TODO: test scandir
