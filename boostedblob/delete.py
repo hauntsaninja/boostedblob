@@ -72,24 +72,19 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
 
     """
     dirpath = path.ensure_directory_like()
-    subpath_exists = False
 
     async def remove_wrapper(entry: CloudPath) -> CloudPath:
-        nonlocal subpath_exists
-        subpath_exists = True
         await remove(entry)
         return entry
 
     it: EagerAsyncIterator[CloudPath] = EagerAsyncIterator(listtree(dirpath))  # type: ignore
-    async for path in executor.map_unordered(remove_wrapper, it):
-        yield path
-
-    # If we find nothing, then run some checks so we throw the appropriate error.
-    # Doing this means we avoid extra requests in the happy path.
-    if not subpath_exists:
-        if not await isfile(path):
-            raise FileNotFoundError(path)
-        raise NotADirectoryError(path)
+    try:
+        async for subpath in executor.map_unordered(remove_wrapper, it):
+            yield subpath
+    except FileNotFoundError:
+        if await isfile(path):
+            raise NotADirectoryError(path)
+        raise
 
 
 @pathdispatch
