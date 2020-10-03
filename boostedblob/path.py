@@ -75,9 +75,12 @@ class LocalPath(BasePath):
 
     def relative_to(self, other: LocalPath) -> str:
         other = other.ensure_directory_like()
-        if not self.path.startswith(other.path):
+        other_path = other.path
+        if other_path.startswith("./") and not self.path.startswith("./"):
+            other_path = other_path[len("./") :]
+        if not self.path.startswith(other_path):
             raise ValueError(f"'{other}' is not a subpath of '{self}'")
-        return self.path[len(other.path) :]
+        return self.path[len(other_path) :]
 
     def is_directory_like(self) -> bool:
         return not self.path or self.path.endswith("/")
