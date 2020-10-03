@@ -8,6 +8,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise ValueError",
 ]
+omit = ["boostedblob/__main__.py"]
 
 [tool.isort]
 profile = "black"
