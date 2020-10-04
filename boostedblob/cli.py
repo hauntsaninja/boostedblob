@@ -161,5 +161,5 @@ def run_bbb(argv: List[str]) -> None:
     try:
         eval(command)(**args.__dict__)
     except Exception as e:
-        print(f"ERROR: {type(e).__name__}: {e}")
+        print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         raise

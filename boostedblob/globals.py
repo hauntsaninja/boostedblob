@@ -121,9 +121,14 @@ def set_event_loop_exception_handler() -> None:
         # Our main interest here is minimising the other various errors and tracebacks that
         # drown out the politely formatted errors from cli.py when things go wrong
         if "exception was never retrieved" in message:
-            print(f"ERROR (while closing down): {type(exception).__name__}: {exception}")
+            print(
+                f"ERROR (while closing down): {type(exception).__name__}: {exception}",
+                file=sys.stderr,
+            )
         else:
-            print(f"ERROR (from event loop): {type(exception).__name__}: {message}")
+            print(
+                f"ERROR (from event loop): {type(exception).__name__}: {message}", file=sys.stderr
+            )
         if loop.get_debug():
             loop.default_exception_handler(context)
 

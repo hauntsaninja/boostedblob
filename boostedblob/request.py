@@ -76,8 +76,9 @@ class Request:
 
             print(
                 f"[boostedblob] Error when executing request on attempt {attempt}, sleeping for "
-                f"{backoff:.1f}s before retrying. Details: {error}"
-            )  # TODO: remove
+                f"{backoff:.1f}s before retrying. Details: {error}",
+                file=sys.stderr,
+            )
             await asyncio.sleep(backoff)
 
     async def execute_reponseless(self) -> None:
