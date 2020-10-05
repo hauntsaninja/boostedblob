@@ -1,3 +1,5 @@
+__version__ = "0.1.2+dev"
+
 from . import read as read
 from . import share as share
 from . import write as write

@@ -122,6 +122,11 @@ async def share(path: str) -> None:
 
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"boostedblob {bbb.__version__}",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparser = subparsers.add_parser("ls", help="List files in a directory")
