@@ -60,7 +60,12 @@ async def _azure_list_blobs(path: AzurePath, delimiter: Optional[str]) -> AsyncI
             )
         )
         async for result in it:
-            for container in result["Containers"]["Container"]:
+            result_containers = result["Containers"]["Container"]
+            containers = (
+                [result_containers] if isinstance(result_containers, dict) else result_containers
+            )
+            assert isinstance(containers, list)
+            for container in containers:
                 yield DirEntry(
                     path=AzurePath(prefix.account, container["Name"], ""),
                     is_dir=True,

@@ -116,7 +116,8 @@ class AzurePath(CloudPath):
         if parsed_url.scheme != "https" or host != "blob.core.windows.net" or parts[0]:
             raise ValueError(f"Invalid URL '{url}'")
 
-        return AzurePath(account=account, container=parts[1], blob="/".join(parts[2:]))
+        container = parts[1] if len(parts) >= 2 else ""
+        return AzurePath(account=account, container=container, blob="/".join(parts[2:]))
 
     @property
     def name(self) -> str:
