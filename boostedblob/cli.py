@@ -112,6 +112,14 @@ async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONC
             await bbb.rmtree(path_obj, executor)
 
 
+@cli_decorate
+async def share(path: str) -> None:
+    url, expiration = await bbb.share.get_url(path)
+    print(url)
+    if expiration is not None:
+        print(f"Expires on: {expiration.isoformat()}")
+
+
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -151,6 +159,9 @@ def parse_options(args: List[str]) -> argparse.Namespace:
     subparser.add_argument("path", help="Directory to delete")
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+
+    subparser = subparsers.add_parser("share", help="Get a shareable link to a file")
+    subparser.add_argument("path", help="Path to share")
 
     return parser.parse_args(args)
 

@@ -1,4 +1,5 @@
 from . import read as read
+from . import share as share
 from . import write as write
 from .boost import BoostExecutor as BoostExecutor
 from .copying import copyfile as copyfile

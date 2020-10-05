@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import base64
+import binascii
+import datetime
+import hashlib
 import json
 import os
 import socket
@@ -14,7 +17,10 @@ from Cryptodome.PublicKey import RSA
 from Cryptodome.Signature import pkcs1_15
 
 if TYPE_CHECKING:
+    from .path import GooglePath
     from .request import Request
+
+MAX_EXPIRATION_SECONDS = 7 * 24 * 60 * 60
 
 
 def load_credentials() -> Mapping[str, Any]:
@@ -173,3 +179,78 @@ def _create_jwt(private_key: str, data: Mapping[str, Any]) -> bytes:
     to_sign = header_b64 + b"." + body_b64
     signature_b64 = encode(_sign(private_key, to_sign))
     return header_b64 + b"." + body_b64 + b"." + signature_b64
+
+
+def generate_signed_url(path: GooglePath) -> Tuple[str, datetime.datetime]:
+    # https://cloud.google.com/storage/docs/access-control/signing-urls-manually
+    creds = load_credentials()
+    if "private_key" not in creds:
+        raise RuntimeError(
+            "Private key not found in credentials.  Please set the "
+            "`GOOGLE_APPLICATION_CREDENTIALS` environment variable to point to a JSON key for "
+            "a service account to use this call"
+        )
+
+    host = "storage.googleapis.com"
+    canonical_uri = path.format_url("/{bucket}/{blob}")
+
+    datetime_now = datetime.datetime.utcnow()
+    request_timestamp = datetime_now.strftime("%Y%m%dT%H%M%SZ")
+    datestamp = datetime_now.strftime("%Y%m%d")
+
+    credential_scope = f"{datestamp}/auto/storage/goog4_request"
+    credential = f"{creds['client_email']}/{credential_scope}"
+
+    canonical_headers = ""
+    ordered_headers = sorted({"host": host}.items())
+    for k, v in ordered_headers:
+        lower_k = str(k).lower()
+        strip_v = str(v).lower()
+        canonical_headers += f"{lower_k}:{strip_v}\n"
+
+    signed_headers_parts = []
+    for k, _ in ordered_headers:
+        lower_k = str(k).lower()
+        signed_headers_parts.append(lower_k)
+    signed_headers = ";".join(signed_headers_parts)
+
+    params = {
+        "X-Goog-Algorithm": "GOOG4-RSA-SHA256",
+        "X-Goog-Credential": credential,
+        "X-Goog-Date": request_timestamp,
+        "X-Goog-Expires": str(MAX_EXPIRATION_SECONDS),
+        "X-Goog-SignedHeaders": signed_headers,
+    }
+
+    canonical_query_string_parts = []
+    ordered_params = sorted(params.items())
+    for k, v in ordered_params:
+        encoded_k = urllib.parse.quote(str(k), safe="")
+        encoded_v = urllib.parse.quote(str(v), safe="")
+        canonical_query_string_parts.append(f"{encoded_k}={encoded_v}")
+    canonical_query_string = "&".join(canonical_query_string_parts)
+
+    canonical_request = "\n".join(
+        [
+            "GET",
+            canonical_uri,
+            canonical_query_string,
+            canonical_headers,
+            signed_headers,
+            "UNSIGNED-PAYLOAD",
+        ]
+    )
+    canonical_request_hash = hashlib.sha256(canonical_request.encode()).hexdigest()
+
+    string_to_sign = "\n".join(
+        [
+            "GOOG4-RSA-SHA256",
+            request_timestamp,
+            credential_scope,
+            canonical_request_hash,
+        ]
+    ).encode("utf8")
+    signature = binascii.hexlify(_sign(creds["private_key"], string_to_sign)).decode("utf8")
+    signed_url = f"https://{host}{canonical_uri}"
+    signed_url += f"?{canonical_query_string}&X-Goog-Signature={signature}"
+    return signed_url, datetime_now + datetime.timedelta(seconds=MAX_EXPIRATION_SECONDS)
