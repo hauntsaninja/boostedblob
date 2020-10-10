@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import configparser
 import os
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
 
+from . import google_auth
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
 from .request import Request, azure_page_iterator, google_page_iterator
 
@@ -53,27 +55,8 @@ async def _azure_list_blobs(path: AzurePath, delimiter: Optional[str]) -> AsyncI
     if not path.container:
         if delimiter != "/":
             raise ValueError("Cannot list blobs in storage account")
-        it = azure_page_iterator(
-            Request(
-                method="GET",
-                url=prefix.format_url("https://{account}.blob.core.windows.net/"),
-                params=dict(comp="list"),
-                failure_exceptions={404: FileNotFoundError(path)},
-            )
-        )
-        async for result in it:
-            result_containers = result["Containers"]["Container"]
-            containers = (
-                [result_containers] if isinstance(result_containers, dict) else result_containers
-            )
-            assert isinstance(containers, list)
-            for container in containers:
-                yield DirEntry(
-                    path=AzurePath(prefix.account, container["Name"], ""),
-                    is_dir=True,
-                    is_file=False,
-                    stat=None,
-                )
+        async for entry in _azure_list_containers(prefix.account):
+            yield entry
         return
 
     params = {}
@@ -97,6 +80,13 @@ async def _google_list_blobs(path: GooglePath, delimiter: Optional[str]) -> Asyn
     prefix = path
     if delimiter:
         assert not prefix.blob or prefix.blob.endswith(delimiter)
+    if not path.bucket:
+        if delimiter != "/":
+            raise ValueError("Cannot list blobs across buckets")
+        async for entry in _google_list_buckets():
+            yield entry
+        return
+
     params = {}
     if delimiter is not None:
         params["delimiter"] = delimiter
@@ -314,3 +304,59 @@ def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirE
                 yield DirEntry.from_dirpath(path)
             else:
                 yield DirEntry.from_path_stat(path, Stat.from_google(item))
+
+
+async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
+    it = azure_page_iterator(
+        Request(
+            method="GET",
+            url=f"https://{account}.blob.core.windows.net/",
+            params=dict(comp="list"),
+            failure_exceptions={404: FileNotFoundError(AzurePath(account, "", ""))},
+        )
+    )
+    async for result in it:
+        result_containers = result["Containers"]["Container"]
+        containers = (
+            [result_containers] if isinstance(result_containers, dict) else result_containers
+        )
+        assert isinstance(containers, list)
+        for container in containers:
+            yield DirEntry(
+                path=AzurePath(account, container["Name"], ""),
+                is_dir=True,
+                is_file=False,
+                stat=None,
+            )
+
+
+async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[DirEntry]:
+    if project is None:
+        try:
+            config = configparser.ConfigParser()
+            config.read(
+                os.path.join(google_auth.default_gcloud_path(), "configurations/config_default")
+            )
+            project = config["core"]["project"]
+        except (KeyError, FileNotFoundError):
+            raise ValueError(
+                "Could not determine project in which to list buckets; try setting it with `gsutil config`"
+            )
+
+    it = google_page_iterator(
+        Request(
+            method="GET",
+            url="https://storage.googleapis.com/storage/v1/b",
+            params=dict(project=project),
+        )
+    )
+    async for result in it:
+        buckets = result["items"]
+        assert isinstance(buckets, list)
+        for bucket in buckets:
+            yield DirEntry(
+                path=GooglePath(bucket["name"], ""),
+                is_dir=True,
+                is_file=False,
+                stat=None,
+            )

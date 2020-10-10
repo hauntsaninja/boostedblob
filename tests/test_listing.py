@@ -1,7 +1,7 @@
 import pytest
 
 import boostedblob as bbb
-from boostedblob.path import AzurePath
+from boostedblob.path import AzurePath, GooglePath
 
 from . import helpers
 
@@ -55,10 +55,18 @@ async def test_listtree(any_dir):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_container():
+async def test_azure_list_containers():
     with helpers.tmp_azure_dir() as az_dir:
         account = AzurePath(az_dir.account, "", "")
         assert az_dir.container in [p.name async for p in bbb.listdir(account)]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_google_list_buckets():
+    with helpers.tmp_google_dir() as google_dir:
+        bucket = GooglePath("", "")
+        assert google_dir.bucket in [p.name async for p in bbb.listdir(bucket)]
 
 
 # TODO: test scandir

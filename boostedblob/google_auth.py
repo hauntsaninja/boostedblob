@@ -23,6 +23,13 @@ if TYPE_CHECKING:
 MAX_EXPIRATION_SECONDS = 7 * 24 * 60 * 60
 
 
+def default_gcloud_path() -> str:
+    if sys.platform == "win32":
+        # https://www.jhanley.com/google-cloud-application-default-credentials/
+        return os.path.join(os.environ["APPDATA"], "gcloud")
+    return os.path.join(os.environ["HOME"], ".config/gcloud")
+
+
 def load_credentials() -> Mapping[str, Any]:
     if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
         creds_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
@@ -33,16 +40,8 @@ def load_credentials() -> Mapping[str, Any]:
             )
         with open(creds_path) as f:
             return json.load(f)
-    if sys.platform == "win32":
-        # https://www.jhanley.com/google-cloud-application-default-credentials/
-        default_creds_path = os.path.join(
-            os.environ["APPDATA"], "gcloud/application_default_credentials.json"
-        )
-    else:
-        default_creds_path = os.path.join(
-            os.environ["HOME"], ".config/gcloud/application_default_credentials.json"
-        )
 
+    default_creds_path = os.path.join(default_gcloud_path(), "application_default_credentials.json")
     if os.path.exists(default_creds_path):
         with open(default_creds_path) as f:
             return json.load(f)
@@ -60,7 +59,7 @@ async def get_access_token(_: str) -> Tuple[Any, float]:
 
     # https://github.com/googleapis/google-auth-library-java/blob/master/README.md#application-default-credentials
     try:
-        load_credentials()
+        creds = load_credentials()
     except RuntimeError:
         if os.environ.get("NO_GCE_CHECK", "false").lower() != "true" and _is_gce_instance():
             # see if the metadata server has a token for us
@@ -75,7 +74,7 @@ async def get_access_token(_: str) -> Tuple[Any, float]:
         raise
 
     req = create_access_token_request(
-        scopes=["https://www.googleapis.com/auth/devstorage.full_control"]
+        creds, scopes=["https://www.googleapis.com/auth/devstorage.full_control"]
     )
     req.success_codes = (200, 400)
 
@@ -99,8 +98,7 @@ async def get_access_token(_: str) -> Tuple[Any, float]:
     return result["access_token"], now + float(result["expires_in"])
 
 
-def create_access_token_request(scopes: List[str]) -> Request:
-    creds = load_credentials()
+def create_access_token_request(creds: Mapping[str, Any], scopes: List[str]) -> Request:
     if "private_key" in creds:
         # looks like GCS does not support the no-oauth flow
         # https://developers.google.com/identity/protocols/OAuth2ServiceAccount#jwt-auth
