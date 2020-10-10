@@ -123,7 +123,7 @@ async def share(path: str) -> None:
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version=f"boostedblob {bbb.__version__}")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(required=True)
 
     concurrency_kwargs: Dict[str, Any] = dict(
         type=int,
@@ -207,6 +207,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=ls_desc,
     )
+    subparser.set_defaults(command=ls)
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
@@ -218,6 +219,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=lstree_desc,
     )
+    subparser.set_defaults(command=lstree)
     subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
@@ -229,6 +231,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=cat_desc,
     )
+    subparser.set_defaults(command=cat)
     subparser.add_argument("path", help="File whose contents to print")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
@@ -238,6 +241,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=cp_desc,
     )
+    subparser.set_defaults(command=cp)
     subparser.add_argument("srcs", nargs="+", help="File(s) to copy from")
     subparser.add_argument("dst", help="File or directory to copy to")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
@@ -248,6 +252,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=cptree_desc,
     )
+    subparser.set_defaults(command=cptree)
     subparser.add_argument("src", help="Directory to copy from")
     subparser.add_argument("dst", help="Directory to copy to")
     subparser.add_argument("-q", "--quiet", action="store_true")
@@ -259,6 +264,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=rm_desc,
     )
+    subparser.set_defaults(command=rm)
     subparser.add_argument("paths", nargs="+", help="File(s) to delete")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
@@ -268,6 +274,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=rmtree_desc,
     )
+    subparser.set_defaults(command=rmtree)
     subparser.add_argument("path", help="Directory to delete")
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
@@ -278,6 +285,7 @@ $ bbb share gs://bucket/frogs.txt
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=share_desc,
     )
+    subparser.set_defaults(command=share)
     subparser.add_argument("path", help="Path to share")
 
     return parser.parse_args(args)
@@ -287,7 +295,7 @@ def run_bbb(argv: List[str]) -> None:
     args = parse_options(argv)
     command = args.__dict__.pop("command")
     try:
-        eval(command)(**args.__dict__)
+        command(**args.__dict__)
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         raise
