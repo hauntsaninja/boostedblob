@@ -340,7 +340,8 @@ async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[D
             project = config["core"]["project"]
         except (KeyError, FileNotFoundError):
             raise ValueError(
-                "Could not determine project in which to list buckets; try setting it with `gsutil config`"
+                "Could not determine project in which to list buckets; try setting it "
+                "with `gsutil config`"
             )
 
     it = google_page_iterator(

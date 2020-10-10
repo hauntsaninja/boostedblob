@@ -188,8 +188,8 @@ async def _google_write_stream(
             if is_finalised:
                 raise ValueError(
                     "The upload was already finalised. A likely cause is the given stream was "
-                    "chunked incorrectly. Uploads to Google Cloud need to be chunked in multiples of "
-                    "256 KB (except for the last chunk)."
+                    "chunked incorrectly. Uploads to Google Cloud need to be chunked in "
+                    "multiples of 256 KB (except for the last chunk)."
                 )
             total_size = str(end)
             is_finalised = True
