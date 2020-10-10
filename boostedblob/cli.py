@@ -215,6 +215,7 @@ $ bbb share gs://bucket/frogs.txt
 
     subparser = subparsers.add_parser(
         "lstree",
+        aliases=["lsr"],
         help="List all files in a directory tree",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=lstree_desc,
@@ -248,6 +249,7 @@ $ bbb share gs://bucket/frogs.txt
 
     subparser = subparsers.add_parser(
         "cptree",
+        aliases=["cpr"],
         help="Copy a directory tree",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=cptree_desc,
@@ -270,6 +272,7 @@ $ bbb share gs://bucket/frogs.txt
 
     subparser = subparsers.add_parser(
         "rmtree",
+        aliases=["rmr"],
         help="Remove a directory tree",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=rmtree_desc,
