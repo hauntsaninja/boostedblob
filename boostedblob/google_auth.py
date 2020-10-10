@@ -243,12 +243,7 @@ def generate_signed_url(path: GooglePath) -> Tuple[str, datetime.datetime]:
     canonical_request_hash = hashlib.sha256(canonical_request.encode()).hexdigest()
 
     string_to_sign = "\n".join(
-        [
-            "GOOG4-RSA-SHA256",
-            request_timestamp,
-            credential_scope,
-            canonical_request_hash,
-        ]
+        ["GOOG4-RSA-SHA256", request_timestamp, credential_scope, canonical_request_hash]
     ).encode("utf8")
     signature = binascii.hexlify(_sign(creds["private_key"], string_to_sign)).decode("utf8")
     signed_url = f"https://{host}{canonical_uri}"

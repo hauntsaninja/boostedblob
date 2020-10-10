@@ -60,7 +60,7 @@ async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = 
         Request(
             method="POST",
             url=path.format_url(
-                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={blob}",
+                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={blob}"
             ),
             data=data,
             headers={"Content-Type": "application/octet-stream"},
