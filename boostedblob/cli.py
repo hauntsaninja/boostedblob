@@ -3,7 +3,7 @@ import asyncio
 import datetime
 import functools
 import sys
-from typing import Any, Awaitable, Callable, List, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, TypeVar
 
 import boostedblob as bbb
 
@@ -122,50 +122,162 @@ async def share(path: str) -> None:
 
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"boostedblob {bbb.__version__}",
-    )
+    parser.add_argument("--version", action="version", version=f"boostedblob {bbb.__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparser = subparsers.add_parser("ls", help="List files in a directory")
+    concurrency_kwargs: Dict[str, Any] = dict(
+        type=int,
+        metavar="N",
+        default=DEFAULT_CONCURRENCY,
+        help="Number of concurrent requests to use",
+    )
+
+    ls_desc = """\
+`bbb ls` lists the immediate contents of a directory (both files and
+subdirectories).
+
+To see the contents of the current directory:
+$ bbb ls .
+
+To additionally see size and mtime of files in the current directory:
+$ bbb ls -l .
+"""
+    lstree_desc = """\
+`bbb lstree` lists all files present anywhere in the given directory tree.
+Note that `bbb lstree` only lists files and will not list subdirectories.
+
+To see all files in your bucket:
+$ bbb lstree gs://my_bucket/
+
+To additionally see size and mtime of files:
+$ bbb lstree -l gs://my_bucket/
+"""
+    cat_desc = """\
+`bbb cat` copies the contents of a given file to stdout.
+
+Example:
+$ bbb cat boostedblob/boost.py
+"""
+    cp_desc = """\
+`bbb cp` copies a file to another location. If the location is a directory, the
+file will be copied there under the same name, otherwise it will be copied to
+the name provided. If the destination file already exists, it will be
+overwritten.
+
+Copy a file into a directory:
+$ bbb cp frogs.txt my_directory
+
+Copy multiple files into a directory:
+$ bbb cp frogs.txt worms.txt my_directory/
+
+Copy a file to a file with a different name:
+$ bbb cp frogs.txt renamed_frogs.txt
+"""
+    cptree_desc = """\
+`bbb cptree` copies an entire directory tree. The rule here is simple: provide
+two directory paths, and bbb will create a copy of the files with the same
+structure under the destination directory. If any of the files already exist,
+they will be overwritten.
+
+Create an exact copy of a directory somewhere else:
+$ bbb cptree boostedblob gs://tmp/boostedblob
+"""
+    rm_desc = """\
+`bbb rm` deletes the given files.
+
+Example:
+$ bbb rm frog.txt worm.txt
+"""
+    rmtree_desc = """\
+`bbb rmtree` deletes an entire directory tree.
+
+Example:
+$ bbb rmtree boostedblob
+"""
+    share_desc = """\
+`bbb share` prints a link you can use to open a file in a browser.
+
+Example:
+$ bbb share gs://bucket/frogs.txt
+"""
+
+    subparser = subparsers.add_parser(
+        "ls",
+        help="List contents of a directory",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=ls_desc,
+    )
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
     )
 
-    subparser = subparsers.add_parser("lstree", help="List all files in a directory tree")
+    subparser = subparsers.add_parser(
+        "lstree",
+        help="List all files in a directory tree",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=lstree_desc,
+    )
     subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
     )
 
-    subparser = subparsers.add_parser("cat", help="Print the contents of a file")
+    subparser = subparsers.add_parser(
+        "cat",
+        help="Print the contents of a file",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=cat_desc,
+    )
     subparser.add_argument("path", help="File whose contents to print")
-    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("cp", help="Copy files")
+    subparser = subparsers.add_parser(
+        "cp",
+        help="Copy files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=cp_desc,
+    )
     subparser.add_argument("srcs", nargs="+", help="File(s) to copy from")
     subparser.add_argument("dst", help="File or directory to copy to")
-    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("cptree", help="Copy a directory tree")
+    subparser = subparsers.add_parser(
+        "cptree",
+        help="Copy a directory tree",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=cptree_desc,
+    )
     subparser.add_argument("src", help="Directory to copy from")
     subparser.add_argument("dst", help="Directory to copy to")
     subparser.add_argument("-q", "--quiet", action="store_true")
-    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("rm", help="Remove files")
+    subparser = subparsers.add_parser(
+        "rm",
+        help="Remove files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=rm_desc,
+    )
     subparser.add_argument("paths", nargs="+", help="File(s) to delete")
-    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("rmtree", help="Remove a directory tree")
+    subparser = subparsers.add_parser(
+        "rmtree",
+        help="Remove a directory tree",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=rmtree_desc,
+    )
     subparser.add_argument("path", help="Directory to delete")
     subparser.add_argument("-q", "--quiet", action="store_true")
-    subparser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("share", help="Get a shareable link to a file")
+    subparser = subparsers.add_parser(
+        "share",
+        help="Get a shareable link to a file",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=share_desc,
+    )
     subparser.add_argument("path", help="Path to share")
 
     return parser.parse_args(args)
