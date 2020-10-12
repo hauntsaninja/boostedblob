@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v0.1.4]
+
 - Improved `--help` output for subcommands
 - `bbb ls gs://` will now attempt to list all buckets
 - Added short aliases for lstree, cptree, rmtree

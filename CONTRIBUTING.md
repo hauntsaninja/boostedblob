@@ -15,3 +15,4 @@ To make a new release for `boostedblob`:
 - Update the version in `pyproject.toml`
 - Update the version in `boostedblob/__init__.py`
 - Run `poetry publish --build`
+- Tag the release on Github
