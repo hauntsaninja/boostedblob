@@ -8,3 +8,15 @@ boostedblob is derived from the excellent [blobfile](https://github.com/christop
 The fun part of implementing boostedblob is `boostedblob/boost.py`, which provides a
 `concurrent.futures`-like interface for running and composing async tasks in a concurrency limited
 environment.
+
+## Usage
+
+```sh
+pip install boostedblob
+bbb -h
+```
+
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md)
