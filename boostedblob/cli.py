@@ -48,9 +48,8 @@ async def ls(path: str, long: bool = False) -> None:
 async def lstree(path: str, long: bool = False) -> None:
     if long:
         async for d in bbb.scantree(path):
-            assert d.stat is not None
-            size = d.stat.size
-            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat()
+            size = d.stat.size if d.stat else ""
+            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
             print(f"{size:12}  {mtime:19}  {d.path}")
     else:
         async for p in bbb.listtree(path):
