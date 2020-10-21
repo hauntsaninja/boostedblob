@@ -10,4 +10,4 @@ def create_file(path: BasePath, contents: bytes = b"asdf") -> None:
 
 
 async def unsafe_create_file(path: BasePath, contents: bytes = b"asdf") -> None:
-    await bbb.write.write_single(path, contents)
+    await bbb.write.write_single(path, contents, overwrite=True)

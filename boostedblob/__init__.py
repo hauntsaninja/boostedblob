@@ -23,3 +23,4 @@ from .path import getsize as getsize
 from .path import isdir as isdir
 from .path import isfile as isfile
 from .path import stat as stat
+from .syncing import sync as sync

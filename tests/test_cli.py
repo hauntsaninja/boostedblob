@@ -70,6 +70,10 @@ def test_cli():
                 ["d1/"],
             ]
 
+            run_bbb(["rmtree", remote_dir / "d1"])
+            helpers.create_file(remote_dir / "f5")
+            run_bbb(["sync", "--delete", local_dir, remote_dir])
+
             assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "f3"]
             assert normalise_long(run_bbb(["lstree", "-l", remote_dir])) == [
                 ["11", "mtime", "d1/f4"],
@@ -77,5 +81,6 @@ def test_cli():
                 ["4", "mtime", "f1"],
                 ["4", "mtime", "f2"],
             ]
+
             run_bbb(["rmtree", remote_dir])
             assert run_bbb(["lstree", remote_dir]) == ""

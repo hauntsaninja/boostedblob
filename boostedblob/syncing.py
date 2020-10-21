@@ -1,0 +1,113 @@
+import asyncio
+from dataclasses import dataclass
+from typing import AsyncIterator, Iterator, List, Optional, Tuple, Union
+
+from .boost import BoostExecutor
+from .copying import copyfile
+from .delete import remove
+from .listing import DirEntry, scantree
+from .path import BasePath, Stat
+
+
+@dataclass
+class Action:
+    relpath: str
+
+
+@dataclass
+class CopyAction(Action):
+    size: Optional[int]
+
+
+@dataclass
+class DeleteAction(Action):
+    pass
+
+
+async def sync_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
+    async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
+        return [(p.path.relative_to(tree), p) async for p in scantree(tree)]
+
+    # We currently don't attempt to stream these actions, for fear that the list operations might
+    # start to reflect our changes, causing weird things to happen.
+    src_files, dst_files = await asyncio.gather(collect_tree(src), collect_tree(dst))
+    src_files.sort(key=lambda p: p[0])
+    dst_files.sort(key=lambda p: p[0])
+
+    def action_iterator() -> Iterator[Action]:
+        i = 0
+        j = 0
+        while i < len(src_files) or j < len(dst_files):
+            if i < len(src_files) and (j == len(dst_files) or src_files[i][0] < dst_files[j][0]):
+                src_stat = src_files[i][1].stat
+                size = src_stat.size if src_stat else None
+                yield CopyAction(src_files[i][0], size)
+                i += 1
+                continue
+            if j < len(dst_files) and (i == len(src_files) or src_files[i][0] > dst_files[j][0]):
+                yield DeleteAction(dst_files[j][0])
+                j += 1
+                continue
+            if src_files[i][0] == dst_files[j][0]:
+                if should_copy(src_files[i][1].stat, dst_files[j][1].stat):
+                    src_stat = src_files[i][1].stat
+                    size = src_stat.size if src_stat else None
+                    yield CopyAction(src_files[i][0], size)
+                i += 1
+                j += 1
+                continue
+            raise AssertionError
+
+    return action_iterator()
+
+
+async def sync(
+    src: Union[str, BasePath],
+    dst: Union[str, BasePath],
+    executor: BoostExecutor,
+    delete: bool = False,
+) -> AsyncIterator[BasePath]:
+    src_obj = src if isinstance(src, BasePath) else BasePath.from_str(src)
+    dst_obj = dst if isinstance(dst, BasePath) else BasePath.from_str(dst)
+
+    async def copy_wrapper(relpath: str, size: Optional[int]) -> BasePath:
+        src_file = src_obj / relpath
+        dst_file = dst_obj / relpath
+        await copyfile(src_file, dst_file, executor, size=size, overwrite=True)
+        return src_file
+
+    async def delete_wrapper(relpath: str) -> BasePath:
+        dst_file = dst_obj / relpath
+        await remove(dst_file)
+        return dst_file
+
+    for action in await sync_iterator(src_obj, dst_obj):
+        if isinstance(action, CopyAction):
+            yield await copy_wrapper(action.relpath, action.size)
+        if isinstance(action, DeleteAction):
+            if delete:
+                yield await delete_wrapper(action.relpath)
+
+
+def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
+    if src_stat is None and dst_stat is None:
+        return False
+    if src_stat is None or dst_stat is None:
+        # We'll only run into this if a cloud directory has a file marker. For most cases in which
+        # we're asked to overwrite directories with files or vice versa, we'll either get an
+        # IsADirectoryError / NotADirectoryError from local directories or no error because
+        # directories are an illusion in cloud storage.
+        raise IsADirectoryError(
+            "Sync does not support overwriting directories with files or vice versa. "
+            "Please rmtree your destination and try again"
+        )
+    if src_stat.size != dst_stat.size:
+        return True
+    if src_stat.md5 and dst_stat.md5 and src_stat.md5 != dst_stat.md5:
+        return True
+    # Round mtime, since different stores have different precisions
+    if int(src_stat.mtime) >= int(dst_stat.mtime):
+        return True
+    # If hashes are unavailable (or equal), sizes are the same and the dst file has a newer mtime
+    # than the src file, we take our chances.
+    return False

@@ -119,6 +119,26 @@ async def share(path: str) -> None:
         print(f"Expires on: {expiration.isoformat()}")
 
 
+@cli_decorate
+async def sync(
+    src: str,
+    dst: str,
+    delete: bool = False,
+    quiet: bool = False,
+    concurrency: int = DEFAULT_CONCURRENCY,
+) -> None:
+    src_obj = bbb.BasePath.from_str(src)
+    dst_obj = bbb.BasePath.from_str(dst)
+
+    src_is_dirlike = src_obj.is_directory_like() or await bbb.isdir(src_obj)
+    if not src_is_dirlike:
+        raise ValueError(f"{src_obj} is not a directory")
+    async with bbb.BoostExecutor(concurrency) as executor:
+        async for p in bbb.sync(src_obj, dst_obj, executor, delete=delete):
+            if not quiet:
+                print(p)
+
+
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version=f"boostedblob {bbb.__version__}")
@@ -198,6 +218,20 @@ $ bbb rmtree boostedblob
 
 Example:
 $ bbb share gs://bucket/frogs.txt
+"""
+    sync_desc = """\
+`bbb sync` synchronises two directory trees. Provide two directory paths, and
+bbb will change the destination so that it better mirrors the source.
+Specifically, bbb will copy over or replace files in the destination that are
+missing or have changed in the source. If --delete is specified, bbb will delete
+files in the destination that are not present in the source.
+
+Example:
+$ bbb sync gs://tmp/boostedblob boostedblob
+
+Using --delete and re-syncing will delete spurious_file.txt:
+$ touch boostedblob/spurious_file.txt
+$ bbb sync --delete gs://tmp/boostedblob boostedblob
 """
 
     subparser = subparsers.add_parser(
@@ -289,6 +323,21 @@ $ bbb share gs://bucket/frogs.txt
     )
     subparser.set_defaults(command=share)
     subparser.add_argument("path", help="Path to share")
+
+    subparser = subparsers.add_parser(
+        "sync",
+        help="Sync a directory tree",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=sync_desc,
+    )
+    subparser.set_defaults(command=sync)
+    subparser.add_argument("src", help="Directory to sync from")
+    subparser.add_argument("dst", help="Directory to sync to")
+    subparser.add_argument(
+        "--delete", action="store_true", help="Delete destination files that don't exist in source"
+    )
+    subparser.add_argument("-q", "--quiet", action="store_true")
+    subparser.add_argument("--concurrency", **concurrency_kwargs)
 
     return parser.parse_args(args)
 
