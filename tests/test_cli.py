@@ -48,6 +48,8 @@ def test_cli():
             helpers.create_file(local_dir / "f3", f3_contents)
             helpers.create_file(local_dir / "d1" / "f4", f3_contents)
 
+            assert run_bbb(["share", local_dir / "f1"]).startswith("file://")
+
             assert run_bbb(["ls", remote_dir]) == ""
             with pytest.raises(ValueError):
                 run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir / "missing"])
