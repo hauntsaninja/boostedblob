@@ -25,7 +25,13 @@ class DeleteAction(Action):
     pass
 
 
-async def sync_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
+async def sync_action_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
+    """Yields the actions to take to sync the tree rooted at ``src`` to ``dst``.
+
+    :param src: The root of the tree to copy from.
+    :param dst: The root of the tree to copy to.
+
+    """
     if isinstance(src, LocalPath):
         src = LocalPath(os.path.abspath(src.path))
     if isinstance(dst, LocalPath):
@@ -58,7 +64,7 @@ async def sync_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
                 j += 1
                 continue
             if src_files[i][0] == dst_files[j][0]:
-                if should_copy(src_files[i][1].stat, dst_files[j][1].stat):
+                if _should_copy(src_files[i][1].stat, dst_files[j][1].stat):
                     src_stat = src_files[i][1].stat
                     size = src_stat.size if src_stat else None
                     yield CopyAction(src_files[i][0], size)
@@ -70,14 +76,34 @@ async def sync_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
     return action_iterator()
 
 
+# ==============================
+# sync
+# ==============================
+
+
 async def sync(
     src: Union[str, BasePath],
     dst: Union[str, BasePath],
     executor: BoostExecutor,
     delete: bool = False,
 ) -> AsyncIterator[BasePath]:
+    """Syncs the tree rooted at ``src`` to ``dst``.
+
+    Yields the paths as they are copied or deleted.
+
+    :param src: The root of the tree to sync from.
+    :param dst: The root of the tree to sync to.
+    :param executor: An executor.
+    :param delete: Whether to delete files present in the destination but missing in the source.
+
+    """
     src_obj = src if isinstance(src, BasePath) else BasePath.from_str(src)
+    src_obj = src_obj.ensure_directory_like()
     dst_obj = dst if isinstance(dst, BasePath) else BasePath.from_str(dst)
+    dst_obj = dst_obj.ensure_directory_like()
+
+    if src_obj.is_relative_to(dst_obj) or dst_obj.is_relative_to(src_obj):
+        raise ValueError("Cannot sync overlapping directories")
 
     async def copy_wrapper(relpath: str, size: Optional[int]) -> BasePath:
         src_file = src_obj / relpath
@@ -90,7 +116,7 @@ async def sync(
         await remove(dst_file)
         return dst_file
 
-    for action in await sync_iterator(src_obj, dst_obj):
+    for action in await sync_action_iterator(src_obj, dst_obj):
         if isinstance(action, CopyAction):
             yield await copy_wrapper(action.relpath, action.size)
         if isinstance(action, DeleteAction):
@@ -98,7 +124,7 @@ async def sync(
                 yield await delete_wrapper(action.relpath)
 
 
-def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
+def _should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
     if src_stat is None and dst_stat is None:
         return False
     if src_stat is None or dst_stat is None:
@@ -112,11 +138,11 @@ def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
         )
     if src_stat.size != dst_stat.size:
         return True
-    if src_stat.md5 and dst_stat.md5 and src_stat.md5 != dst_stat.md5:
-        return True
+    if src_stat.md5 and dst_stat.md5:
+        return src_stat.md5 != dst_stat.md5
     # Round mtime, since different stores have different precisions
     if int(src_stat.mtime) >= int(dst_stat.mtime):
         return True
-    # If hashes are unavailable (or equal), sizes are the same and the dst file has a newer mtime
+    # If hashes are unavailable, sizes are the same and the dst file has a newer mtime
     # than the src file, we take our chances.
     return False

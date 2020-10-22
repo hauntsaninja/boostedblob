@@ -12,7 +12,7 @@ from . import helpers
 async def test_sync(any_dir, other_any_dir):
     await asyncio.wait(
         [
-            helpers.unsafe_create_file(any_dir / "f1"),
+            helpers.unsafe_create_file(any_dir / "f1", b"samesize"),
             helpers.unsafe_create_file(any_dir / "f2"),
             helpers.unsafe_create_file(any_dir / "f3"),
             helpers.unsafe_create_file(any_dir / "alpha" / "f4"),
@@ -20,7 +20,7 @@ async def test_sync(any_dir, other_any_dir):
             helpers.unsafe_create_file(any_dir / "alpha" / "beta" / "f6"),
             helpers.unsafe_create_file(any_dir / "alpha" / "beta" / "f7"),
             helpers.unsafe_create_file(any_dir / "alpha" / "beta" / "gamma" / "f8"),
-            helpers.unsafe_create_file(any_dir / "delta" / "f9", b"1234"),
+            helpers.unsafe_create_file(any_dir / "delta" / "f9", b"samesize"),
             helpers.unsafe_create_file(any_dir / "delta" / "epsilon" / "f10"),
         ]
     )
@@ -38,16 +38,17 @@ async def test_sync(any_dir, other_any_dir):
         await asyncio.wait(
             [
                 bbb.remove(any_dir / "f2"),
-                # note the file size of f9 remains the same
-                helpers.unsafe_create_file(any_dir / "delta" / "f9", b"ABCD"),
+                helpers.unsafe_create_file(any_dir / "f1", b"sizesame"),
+                helpers.unsafe_create_file(any_dir / "delta" / "f9", b"differentsize"),
             ]
         )
 
         actions = sorted(
-            await bbb.syncing.sync_iterator(any_dir, other_any_dir), key=lambda x: x.relpath
+            await bbb.syncing.sync_action_iterator(any_dir, other_any_dir), key=lambda x: x.relpath
         )
         assert actions == [
-            bbb.syncing.CopyAction("delta/f9", 4),
+            bbb.syncing.CopyAction("delta/f9", 13),
+            bbb.syncing.CopyAction("f1", 8),
             bbb.syncing.DeleteAction("f2"),
         ]
         await bbb.boost.consume(bbb.sync(any_dir, other_any_dir, e, delete=True))
