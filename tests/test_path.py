@@ -51,6 +51,15 @@ def test_path_methods():
         assert subpath.relative_to(path) == "subblob"
         assert subpath.relative_to(path.parent) == "blob/subblob"
 
+        assert subsubpath.is_relative_to(path)
+        assert not path.is_relative_to(subsubpath)
+
+        for other_path in PATHS.values():
+            if not isinstance(other_path, type(path)):
+                with pytest.raises(ValueError):
+                    subsubpath.relative_to(other_path)
+                assert not subsubpath.is_relative_to(other_path)
+
 
 def test_local_path_parent():
     assert LocalPath("asdf").parent == LocalPath(".")

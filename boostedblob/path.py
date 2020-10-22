@@ -44,6 +44,13 @@ class BasePath:
     def relative_to(self: T, other: T) -> str:
         raise NotImplementedError
 
+    def is_relative_to(self: T, other: T) -> bool:
+        try:
+            self.relative_to(other)  # type: ignore
+            return True
+        except ValueError:
+            return False
+
     def is_directory_like(self) -> bool:
         raise NotImplementedError
 
@@ -74,6 +81,8 @@ class LocalPath(BasePath):
         return LocalPath(os.path.dirname(self.path) or ".")
 
     def relative_to(self, other: LocalPath) -> str:
+        if not isinstance(other, LocalPath):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         other = other.ensure_directory_like()
         other_path = other.path
         if other_path.startswith("./") and not self.path.startswith("./"):
@@ -128,6 +137,8 @@ class AzurePath(CloudPath):
         return AzurePath(self.account, self.container, os.path.dirname(self.blob))
 
     def relative_to(self, other: AzurePath) -> str:
+        if not isinstance(other, AzurePath):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         other = other.ensure_directory_like()
         if (
             self.account != other.account
@@ -179,6 +190,8 @@ class GooglePath(CloudPath):
         return GooglePath(self.bucket, os.path.dirname(self.blob))
 
     def relative_to(self, other: GooglePath) -> str:
+        if not isinstance(other, GooglePath):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
         other = other.ensure_directory_like()
         if self.bucket != other.bucket or not self.blob.startswith(other.blob):
             raise ValueError(f"'{other}' is not a subpath of '{self}'")
