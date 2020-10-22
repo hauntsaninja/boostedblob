@@ -1,4 +1,5 @@
 import asyncio
+import os
 from dataclasses import dataclass
 from typing import AsyncIterator, Iterator, List, Optional, Tuple, Union
 
@@ -6,7 +7,7 @@ from .boost import BoostExecutor
 from .copying import copyfile
 from .delete import remove
 from .listing import DirEntry, scantree
-from .path import BasePath, Stat
+from .path import BasePath, LocalPath, Stat
 
 
 @dataclass
@@ -25,8 +26,16 @@ class DeleteAction(Action):
 
 
 async def sync_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
+    if isinstance(src, LocalPath):
+        src = LocalPath(os.path.abspath(src.path))
+    if isinstance(dst, LocalPath):
+        dst = LocalPath(os.path.abspath(dst.path))
+
     async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
-        return [(p.path.relative_to(tree), p) async for p in scantree(tree)]
+        try:
+            return [(p.path.relative_to(tree), p) async for p in scantree(tree)]
+        except FileNotFoundError:
+            return []
 
     # We currently don't attempt to stream these actions, for fear that the list operations might
     # start to reflect our changes, causing weird things to happen.
