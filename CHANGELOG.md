@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added `bbb sync`
+- Fix for listing directory marker files
+- Faster pip installs
+
 ## [v0.1.4]
 
 - Improved `--help` output for subcommands
