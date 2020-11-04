@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Fixed shared key request signing
+- Adjusted dependency specifications
+
+## [v0.2.0]
+
 - Added `bbb sync`
 - Fix for listing directory marker files
 - Faster pip installs
