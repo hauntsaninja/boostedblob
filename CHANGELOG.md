@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.2.1]
 
 - Fixed shared key request signing
 - Adjusted dependency specifications
