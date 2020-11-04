@@ -56,6 +56,11 @@ def test_cli():
             run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir])
             assert normalise(run_bbb(["ls", remote_dir])) == ["f1", "f2"]
 
+            # ls a file prints that file
+            assert normalise(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]
+            with pytest.raises(FileNotFoundError):
+                run_bbb(["ls", remote_dir / "f999"])
+
             run_bbb(["rm", remote_dir / "f1", remote_dir / "f2"])
             assert run_bbb(["ls", remote_dir]) == ""
 

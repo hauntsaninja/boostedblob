@@ -34,26 +34,36 @@ DEFAULT_CONCURRENCY = 100
 
 @cli_decorate
 async def ls(path: str, long: bool = False) -> None:
-    if long:
-        async for d in bbb.scandir(path):
-            size = d.stat.size if d.stat else ""
-            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
-            print(f"{size:12}  {mtime:19}  {d.path}")
-    else:
-        async for p in bbb.listdir(path):
-            print(p)
+    try:
+        if long:
+            async for d in bbb.scandir(path):
+                size = d.stat.size if d.stat else ""
+                mtime = (
+                    datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
+                )
+                print(f"{size:12}  {mtime:19}  {d.path}")
+        else:
+            async for p in bbb.listdir(path):
+                print(p)
+    except NotADirectoryError:
+        print(path)
 
 
 @cli_decorate
 async def lstree(path: str, long: bool = False) -> None:
-    if long:
-        async for d in bbb.scantree(path):
-            size = d.stat.size if d.stat else ""
-            mtime = datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
-            print(f"{size:12}  {mtime:19}  {d.path}")
-    else:
-        async for p in bbb.listtree(path):
-            print(p)
+    try:
+        if long:
+            async for d in bbb.scantree(path):
+                size = d.stat.size if d.stat else ""
+                mtime = (
+                    datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
+                )
+                print(f"{size:12}  {mtime:19}  {d.path}")
+        else:
+            async for p in bbb.listtree(path):
+                print(p)
+    except NotADirectoryError:
+        print(path)
 
 
 @cli_decorate
@@ -160,6 +170,9 @@ $ bbb ls .
 
 To additionally see size and mtime of files in the current directory:
 $ bbb ls -l .
+
+To check whether a file exists:
+$ bbb ls schrodingers_file.txt
 """
     lstree_desc = """\
 `bbb lstree` lists all files present anywhere in the given directory tree.

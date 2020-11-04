@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- `bbb ls <file>` now works; it no longer complains about the file not being a directory
+
 ## [v0.2.1]
 
 - Fixed shared key request signing

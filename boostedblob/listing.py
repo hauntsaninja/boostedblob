@@ -208,6 +208,7 @@ async def _cloud_scantree(path: CloudPath) -> AsyncIterator[DirEntry]:
     if not subpath_exists:
         if not await isfile(path):
             raise FileNotFoundError(path)
+        raise NotADirectoryError(path)
 
 
 @scantree.register  # type: ignore
