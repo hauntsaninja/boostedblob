@@ -145,17 +145,11 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
 
     from .azure_auth import OAUTH_TOKEN, SHARED_KEY, sign_request_with_shared_key
 
-    if kind == SHARED_KEY:
-        # make sure we are signing the request that has the ms headers added already
-        headers["Authorization"] = sign_request_with_shared_key(request, token)
-    elif kind == OAUTH_TOKEN:
-        headers["Authorization"] = f"Bearer {token}"
-
     data = request.data
     if data is not None and not isinstance(data, (bytes, bytearray)):
         data = xmltodict.unparse(data).encode("utf8")
 
-    return Request(
+    result = Request(
         method=request.method,
         url=request.url,
         params=request.params,
@@ -165,6 +159,17 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
         retry_codes=request.retry_codes,
         failure_exceptions=request.failure_exceptions,
     )
+
+    # mutate headers to add the authorization header to result
+    if kind == SHARED_KEY:
+        # make sure we are signing a request that includes changes made in this function
+        # i.e., the request has the x-ms-* headers added and data bytes-ified.
+        assert "x-ms-date" in headers
+        headers["Authorization"] = sign_request_with_shared_key(result, token)
+    elif kind == OAUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {token}"
+
+    return result
 
 
 async def googlify_request(request: Request, access_token: Optional[str] = None) -> Request:
