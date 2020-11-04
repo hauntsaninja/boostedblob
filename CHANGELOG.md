@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.2.2]
 
 - `bbb ls <file>` now works; it no longer complains about the file not being a directory
 - More helpful error message for token refresh failures
