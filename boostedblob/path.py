@@ -26,7 +26,9 @@ class BasePath:
         url = urllib.parse.urlparse(path)
         if url.scheme == "gs":
             return GooglePath.from_str(path)
-        if url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net"):
+        if url.scheme == "az" or (
+            url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net")
+        ):
             return AzurePath.from_str(path)
         if url.scheme:
             raise ValueError(f"Invalid path '{path}'")
@@ -120,11 +122,18 @@ class AzurePath(CloudPath):
     @staticmethod
     def from_str(url: str) -> AzurePath:
         parsed_url = urllib.parse.urlparse(url)
-        account, host = parsed_url.netloc.split(".", maxsplit=1)
-        parts = parsed_url.path.split("/", maxsplit=2)
-        if parsed_url.scheme != "https" or host != "blob.core.windows.net" or parts[0]:
+        if parsed_url.scheme == "https":
+            account, host = parsed_url.netloc.split(".", maxsplit=1)
+            if host != "blob.core.windows.net":
+                raise ValueError(f"Invalid URL '{url}'")
+        elif parsed_url.scheme == "az":
+            account = parsed_url.netloc
+        else:
             raise ValueError(f"Invalid URL '{url}'")
 
+        parts = parsed_url.path.split("/", maxsplit=2)
+        if parts[0]:
+            raise ValueError(f"Invalid URL '{url}'")
         container = parts[1] if len(parts) >= 2 else ""
         return AzurePath(account=account, container=container, blob="/".join(parts[2:]))
 

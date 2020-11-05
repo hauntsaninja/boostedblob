@@ -32,6 +32,8 @@ def test_path_from_str():
                 with pytest.raises(ValueError):
                     path_cls.from_str(str(path))
 
+    assert BasePath.from_str("az://shantanutest/container/blob") == PATHS[AzurePath]
+
 
 def test_path_methods():
     for path in PATHS.values():

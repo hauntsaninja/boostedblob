@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Support specifying Azure paths as `az://storage_account/container/blob`
 - Better error when listing a storage account with no containers
 - Set BBB_TRACEBACK env variable to get a traceback on error
 

@@ -46,7 +46,7 @@ async def ls(path: str, long: bool = False) -> None:
             async for p in bbb.listdir(path):
                 print(p)
     except NotADirectoryError:
-        print(path)
+        print(bbb.BasePath.from_str(path))
 
 
 @cli_decorate
@@ -63,7 +63,7 @@ async def lstree(path: str, long: bool = False) -> None:
             async for p in bbb.listtree(path):
                 print(p)
     except NotADirectoryError:
-        print(path)
+        print(bbb.BasePath.from_str(path))
 
 
 @cli_decorate
