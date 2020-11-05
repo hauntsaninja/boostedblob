@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.3.0]
 
 - Support specifying Azure paths as `az://storage_account/container/blob`
 - Better error when listing a storage account with no containers
