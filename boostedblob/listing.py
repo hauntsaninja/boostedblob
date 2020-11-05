@@ -317,7 +317,10 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
         )
     )
     async for result in it:
-        result_containers = result["Containers"]["Container"]
+        result_containers = result["Containers"]
+        if result_containers is None:
+            raise ValueError(f"No containers found in storage account {account}")
+        result_containers = result_containers["Container"]
         containers = (
             [result_containers] if isinstance(result_containers, dict) else result_containers
         )

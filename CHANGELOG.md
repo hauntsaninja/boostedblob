@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Better error when listing a storage account with no containers
+
 ## [v0.2.2]
 
 - `bbb ls <file>` now works; it no longer complains about the file not being a directory
