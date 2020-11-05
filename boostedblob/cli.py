@@ -352,6 +352,8 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
+    if not args:
+        parser.error("missing subcommand, see `bbb --help`")
     return parser.parse_args(args)
 
 
