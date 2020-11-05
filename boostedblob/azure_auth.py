@@ -140,8 +140,9 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
                         "Your refresh token has expired, please run `az login` to refresh it"
                     )
                 raise RuntimeError(
-                    "Encountered an error when requesting an access token: "
-                    f"`{result['error']}: {result['error_description']}`"
+                    "Encountered an error when requesting an access token:\n"
+                    f"{result['error']}: {result['error_description']}\n\n"
+                    "Try running `az login`?"
                 )
 
         auth = (OAUTH_TOKEN, result["access_token"])
