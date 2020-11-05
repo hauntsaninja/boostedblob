@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Better error when listing a storage account with no containers
+- Set BBB_TRACEBACK env variable to get a traceback on error
 
 ## [v0.2.2]
 
