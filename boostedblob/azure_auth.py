@@ -24,7 +24,7 @@ OAUTH_TOKEN = "oauth_token"
 SHARED_KEY = "shared_key"
 
 
-def load_credentials() -> Dict[str, str]:
+def load_credentials() -> Dict[str, Any]:
     # AZURE_STORAGE_KEY seems to be the environment variable mentioned by the az cli
     # AZURE_STORAGE_ACCOUNT_KEY is mentioned elsewhere on the internet
     for varname in ["AZURE_STORAGE_KEY", "AZURE_STORAGE_ACCOUNT_KEY"]:
@@ -72,7 +72,9 @@ def load_credentials() -> Dict[str, str]:
         with open(default_profile_path, "rb") as g:
             # this file has a UTF-8 BOM
             profile = json.loads(g.read().decode("utf-8-sig"))
-            subscriptions = [sub["id"] for sub in profile["subscriptions"]]
+        subscriptions = profile["subscriptions"]
+        subscriptions.sort(key=lambda x: x["isDefault"], reverse=True)
+        subscriptions = [sub["id"] for sub in subscriptions]
 
         with open(default_creds_path) as f:
             tokens = json.load(f)
@@ -251,7 +253,7 @@ def create_access_token_request(
 
 
 async def get_storage_account_key(
-    account: str, creds: Mapping[str, str]
+    account: str, creds: Mapping[str, Any]
 ) -> Optional[Tuple[Any, float]]:
     from .request import Request, azurify_request
 
@@ -262,16 +264,19 @@ async def get_storage_account_key(
         result = await resp.json()
     auth = (OAUTH_TOKEN, result["access_token"])
 
-    # get a list of subscriptions so we can query each one for storage accounts
-    req = Request(
-        method="GET",
-        url="https://management.azure.com/subscriptions",
-        params={"api-version": "2020-01-01"},
-    )
-    req = await azurify_request(req, auth=auth)
-    async with req.execute() as resp:
-        result = await resp.json()
-    subscription_ids = [item["subscriptionId"] for item in result["value"]]
+    if "subscriptions" in creds:
+        subscription_ids = creds["subscriptions"]
+    else:
+        # get a list of subscriptions so we can query each one for storage accounts
+        req = Request(
+            method="GET",
+            url="https://management.azure.com/subscriptions",
+            params={"api-version": "2020-01-01"},
+        )
+        req = await azurify_request(req, auth=auth)
+        async with req.execute() as resp:
+            result = await resp.json()
+        subscription_ids = [item["subscriptionId"] for item in result["value"]]
 
     for subscription_id in subscription_ids:
         # get a list of storage accounts
