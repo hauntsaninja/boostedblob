@@ -51,7 +51,7 @@ class Config:
     backoff_initial: float = 0.1
     backoff_max: float = 60.0
     backoff_jitter_fraction: float = 0.9
-    retry_limit: int = 100
+    retry_limit: int = 15
 
     token_early_expiration_seconds: int = 300
     azure_access_token_manager: TokenManager = TokenManager(azure_auth.get_access_token)
