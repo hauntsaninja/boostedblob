@@ -68,7 +68,7 @@ class Request:
                     if hostname and hostname.endswith(".blob.core.windows.net"):
                         if await _bad_hostname_check(hostname):
                             # TODO: consider porting over blobfile's fake status code
-                            raise FileNotFoundError from None
+                            raise FileNotFoundError(hostname) from None
                 error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
 
             if attempt >= config.retry_limit:
