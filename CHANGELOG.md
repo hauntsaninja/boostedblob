@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.3.1]
 
 - Utilise cached subscriptions; speeds up storage key based Azure auth
 - Fixed `isdir` for an Azure edge case
