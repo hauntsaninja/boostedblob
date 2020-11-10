@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Utilise cached subscriptions; speeds up storage key based Azure auth
+- Fixed `isdir` for an Azure edge case
+- Lower default retry limits
+- Better error message for non-existent Azure storage account
+
 ## [v0.3.0]
 
 - Support specifying Azure paths as `az://storage_account/container/blob`
