@@ -9,9 +9,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, NamedTuple, Optional, TypeVar, Union
 
-import xmltodict
-
-from .request import Request, azurify_request, googlify_request
+from .request import Request, azure_page_iterator, azurify_request, googlify_request
 
 T = TypeVar("T")
 
@@ -375,7 +373,8 @@ async def _azure_isdir(path: AzurePath) -> bool:
             prefix: str = path.blob
             if not prefix.endswith("/"):
                 prefix += "/"
-            request = await azurify_request(
+
+            it = azure_page_iterator(
                 Request(
                     method="GET",
                     url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
@@ -389,12 +388,10 @@ async def _azure_isdir(path: AzurePath) -> bool:
                     failure_exceptions={404: FileNotFoundError()},
                 )
             )
-            async with request.execute() as resp:
-                body = await resp.read()
-                result = xmltodict.parse(body)["EnumerationResults"]
-                return result["Blobs"] is not None and (
-                    "BlobPrefix" in result["Blobs"] or "Blob" in result["Blobs"]
-                )
+            async for result in it:
+                if result["Blobs"] is not None:
+                    return "BlobPrefix" in result["Blobs"] or "Blob" in result["Blobs"]
+            return False
         else:
             request = await azurify_request(
                 Request(
@@ -404,8 +401,8 @@ async def _azure_isdir(path: AzurePath) -> bool:
                     failure_exceptions={404: FileNotFoundError()},
                 )
             )
-            async with request.execute() as resp:
-                return True
+            await request.execute_reponseless()
+            return True
     except FileNotFoundError:
         # execute might raise FileNotFoundError if storage account doesn't exist
         return False
