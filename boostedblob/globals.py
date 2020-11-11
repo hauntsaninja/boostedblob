@@ -24,19 +24,16 @@ class TokenManager:
     def __init__(self, get_token_fn: Callable[[str], Awaitable[Tuple[Any, float]]]) -> None:
         self._get_token_fn = get_token_fn
         self._tokens: Dict[str, Any] = {}
-        self._expiration: Optional[float] = None
+        self._expirations: Dict[str, float] = {}
 
     async def get_token(self, key: str) -> Any:
         now = time.time()
-        if (
-            self._expiration is None
-            or (now + config.token_early_expiration_seconds) > self._expiration
-        ):
-            if key in self._tokens:
-                del self._tokens[key]
+        expiration = self._expirations.get(key)
+        if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
+            self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
+            assert self._expirations[key] is not None
 
-        if key not in self._tokens:
-            self._tokens[key], self._expiration = await self._get_token_fn(key)
+        assert key in self._tokens
         return self._tokens[key]
 
 
