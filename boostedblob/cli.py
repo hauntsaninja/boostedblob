@@ -111,7 +111,11 @@ async def cptree(
 @cli_decorate
 async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
     async with bbb.BoostExecutor(concurrency) as executor:
-        await bbb.boost.consume(executor.map_unordered(bbb.remove, iter(paths)))
+        if len(paths) == 1 and "*" in paths[0]:
+            it = bbb.boost.EagerAsyncIterator(bbb.listing.globscandir(paths[0]))
+            await bbb.boost.consume(executor.map_unordered(lambda x: bbb.remove(x.path), it))
+        else:
+            await bbb.boost.consume(executor.map_unordered(bbb.remove, iter(paths)))
 
 
 @cli_decorate
