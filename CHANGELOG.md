@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Preliminary support for wildcards in `bbb ls` and `bbb rm`
+- Fix `bbb ls -l <file>` to show info
+- Use a per token expiration within each TokenManager
+
 ## [v0.3.1]
 
 - Utilise cached subscriptions; speeds up storage key based Azure auth
