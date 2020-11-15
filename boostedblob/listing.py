@@ -3,6 +3,7 @@ from __future__ import annotations
 import configparser
 import datetime
 import os
+import re
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
 
 from . import google_auth
@@ -279,6 +280,70 @@ async def _local_listtree(path: LocalPath) -> AsyncIterator[LocalPath]:
 
 
 # ==============================
+# globscandir
+# ==============================
+
+
+@pathdispatch
+def globscandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
+    """Iterate over a glob in a directory.
+
+    :param path: The directory we want to glob in.
+
+    """
+    raise ValueError(f"Unsupported path: {path}")
+
+
+@globscandir.register  # type: ignore
+async def _azure_globscandir(path: AzurePath) -> AsyncIterator[DirEntry]:
+    if "*" in path.account or "*" in path.container:
+        raise ValueError("Cannot use wildcard in storage account or container")
+    if "*" in os.path.dirname(path.blob):
+        raise ValueError("Currently only supports wildcards inside the filename")
+    if "*" not in path.name:
+        path = path / "*"
+    pattern = _glob_to_regex(path.name)
+
+    blob_prefix = path.blob.split("*", maxsplit=1)[0]
+    prefix = AzurePath(account=path.account, container=path.container, blob=blob_prefix)
+    async for entry in list_blobs(prefix, delimiter="/", allow_prefix=True):
+        assert isinstance(entry.path, type(path))
+        if re.match(pattern, entry.path.name):
+            yield entry
+
+
+@globscandir.register  # type: ignore
+async def _google_globscandir(path: GooglePath) -> AsyncIterator[DirEntry]:
+    if "*" in path.bucket:
+        raise ValueError("Cannot use wildcard in bucket")
+    if "*" in os.path.dirname(path.blob):
+        raise ValueError("Currently only supports wildcards inside the filename")
+    if "*" not in path.name:
+        path = path / "*"
+    pattern = _glob_to_regex(path.name)
+
+    blob_prefix = path.blob.split("*", maxsplit=1)[0]
+    prefix = GooglePath(bucket=path.bucket, blob=blob_prefix)
+    async for entry in list_blobs(prefix, delimiter="/", allow_prefix=True):
+        assert isinstance(entry.path, type(path))
+        if re.match(pattern, entry.path.name):
+            yield entry
+
+
+@globscandir.register  # type: ignore
+async def _local_globscandir(path: LocalPath) -> AsyncIterator[DirEntry]:
+    if "*" in os.path.dirname(path):
+        raise ValueError("Currently only supports wildcards inside the filename")
+    if "*" not in path.name:
+        path = path / "*"
+    pattern = _glob_to_regex(path.name)
+
+    async for entry in scandir(path.parent):
+        if re.match(pattern, entry.path.name):
+            yield entry
+
+
+# ==============================
 # helpers
 # ==============================
 
@@ -379,3 +444,16 @@ async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[D
             yield DirEntry(
                 path=GooglePath(bucket["name"], ""), is_dir=True, is_file=False, stat=None
             )
+
+
+def _glob_to_regex(pattern: str) -> str:
+    tokens = (token for token in re.split("([*]+)", pattern) if token != "")
+    regexp = ""
+    for token in tokens:
+        if token == "*":
+            regexp += r"[^/]*"
+        elif token == "**":
+            regexp += r".*"
+        else:
+            regexp += re.escape(token)
+    return regexp + r"/?$"
