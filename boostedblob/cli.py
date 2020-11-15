@@ -33,13 +33,21 @@ DEFAULT_CONCURRENCY = 100
 
 @cli_decorate
 async def ls(path: str, long: bool = False) -> None:
+    path_obj = bbb.BasePath.from_str(path)
+    if "*" in path:
+        async for entry in bbb.listing.globscandir(path_obj):
+            if long:
+                print(entry)
+            else:
+                print(entry.path)
+        return
+
     try:
-        it = bbb.scandir(path) if long else bbb.listdir(path)
+        it = bbb.scandir(path_obj) if long else bbb.listdir(path_obj)
         assert isinstance(it, AsyncIterator)
         async for entry in it:
             print(entry)
     except NotADirectoryError:
-        path_obj = bbb.BasePath.from_str(path)
         if long:
             stat = await bbb.stat(path_obj)
             print(bbb.listing.DirEntry.from_path_stat(path_obj, stat))
