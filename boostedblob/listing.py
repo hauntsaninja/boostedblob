@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import datetime
 import os
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
 
@@ -28,6 +29,13 @@ class DirEntry(NamedTuple):
     def from_path_stat(path: BasePath, stat: Stat) -> DirEntry:
         assert not path.is_directory_like()
         return DirEntry(path=path, is_dir=False, is_file=True, stat=stat)
+
+    def __str__(self) -> str:
+        size = self.stat.size if self.stat else ""
+        mtime = (
+            datetime.datetime.fromtimestamp(int(self.stat.mtime)).isoformat() if self.stat else ""
+        )
+        return f"{size:12}  {mtime:19}  {self.path}"
 
 
 # ==============================
