@@ -44,22 +44,28 @@ class DirEntry(NamedTuple):
 
 
 @pathdispatch
-def list_blobs(path: Union[CloudPath, str], delimiter: Optional[str]) -> AsyncIterator[DirEntry]:
+def list_blobs(
+    path: Union[CloudPath, str], delimiter: Optional[str], allow_prefix: bool = False
+) -> AsyncIterator[DirEntry]:
     """List all blobs whose prefix matches ``path``.
 
     :param path: The prefix we want to list.
     :param delimiter: Group blobs matching the prefix up to a delimiter. This allows us to emulate
         directories on blob storage.
+    :param allow_prefix: Whether to allow prefixes that do not end with a delimiter (or "/").
 
     """
     raise ValueError(f"Unsupported path: {path}")
 
 
 @list_blobs.register  # type: ignore
-async def _azure_list_blobs(path: AzurePath, delimiter: Optional[str]) -> AsyncIterator[DirEntry]:
+async def _azure_list_blobs(
+    path: AzurePath, delimiter: Optional[str], allow_prefix: bool = False
+) -> AsyncIterator[DirEntry]:
     prefix = path
-    if delimiter:
-        assert not prefix.blob or prefix.blob.endswith(delimiter)
+    if not allow_prefix:
+        _delimiter = delimiter or "/"
+        assert not prefix.blob or prefix.blob.endswith(_delimiter)
     if not path.container:
         if delimiter != "/":
             raise ValueError("Cannot list blobs in storage account; must specify container")
@@ -84,10 +90,13 @@ async def _azure_list_blobs(path: AzurePath, delimiter: Optional[str]) -> AsyncI
 
 
 @list_blobs.register  # type: ignore
-async def _google_list_blobs(path: GooglePath, delimiter: Optional[str]) -> AsyncIterator[DirEntry]:
+async def _google_list_blobs(
+    path: GooglePath, delimiter: Optional[str], allow_prefix: bool = False
+) -> AsyncIterator[DirEntry]:
     prefix = path
-    if delimiter:
-        assert not prefix.blob or prefix.blob.endswith(delimiter)
+    if not allow_prefix:
+        _delimiter = delimiter or "/"
+        assert not prefix.blob or prefix.blob.endswith(_delimiter)
     if not path.bucket:
         if delimiter != "/":
             raise ValueError("Cannot list blobs across buckets")
