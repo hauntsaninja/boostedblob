@@ -7,9 +7,7 @@ from .path import AzurePath, BasePath, GooglePath, LocalPath, pathdispatch
 
 
 @pathdispatch
-async def get_url(
-    path: Union[BasePath, str],
-) -> Tuple[str, Optional[datetime.datetime]]:
+async def get_url(path: Union[BasePath, str]) -> Tuple[str, Optional[datetime.datetime]]:
     raise ValueError(f"Unsupported path: {path}")
 
 

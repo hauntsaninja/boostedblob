@@ -360,8 +360,5 @@ async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[D
         assert isinstance(buckets, list)
         for bucket in buckets:
             yield DirEntry(
-                path=GooglePath(bucket["name"], ""),
-                is_dir=True,
-                is_file=False,
-                stat=None,
+                path=GooglePath(bucket["name"], ""), is_dir=True, is_file=False, stat=None
             )
