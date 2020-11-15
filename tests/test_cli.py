@@ -36,8 +36,8 @@ def test_cli():
                 for entry in entries:
                     entry[-1] = BasePath.from_str(entry[-1]).relative_to(remote_dir)
                     if len(entry) > 1:
+                        int(entry[0])
                         datetime.datetime.fromisoformat(entry[1])
-                        entry[0] = entry[0]
                         entry[1] = "mtime"
                 return sorted(entries)
 
@@ -58,6 +58,9 @@ def test_cli():
 
             # ls a file prints that file
             assert normalise(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]
+            assert normalise_long(run_bbb(["ls", "-l", remote_dir / "f1"])) == [
+                ["4", "mtime", "f1"]
+            ]
             with pytest.raises(FileNotFoundError):
                 run_bbb(["ls", remote_dir / "f999"])
 

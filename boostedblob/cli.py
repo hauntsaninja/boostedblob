@@ -3,7 +3,7 @@ import asyncio
 import datetime
 import functools
 import sys
-from typing import Any, Awaitable, Callable, Dict, List, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
 
 import boostedblob as bbb
 
@@ -32,21 +32,28 @@ def cli_decorate(fn: F) -> F:
 DEFAULT_CONCURRENCY = 100
 
 
+def _long_format(path: bbb.BasePath, stat: Optional[bbb.path.Stat]) -> str:
+    size = stat.size if stat else ""
+    mtime = datetime.datetime.fromtimestamp(int(stat.mtime)).isoformat() if stat else ""
+    return f"{size:12}  {mtime:19}  {path}"
+
+
 @cli_decorate
 async def ls(path: str, long: bool = False) -> None:
     try:
         if long:
             async for d in bbb.scandir(path):
-                size = d.stat.size if d.stat else ""
-                mtime = (
-                    datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
-                )
-                print(f"{size:12}  {mtime:19}  {d.path}")
+                print(_long_format(d.path, d.stat))
         else:
             async for p in bbb.listdir(path):
                 print(p)
     except NotADirectoryError:
-        print(bbb.BasePath.from_str(path))
+        path_obj = bbb.BasePath.from_str(path)
+        stat = await bbb.stat(path_obj)
+        if long:
+            print(_long_format(path_obj, stat))
+        else:
+            print(path_obj)
 
 
 @cli_decorate
@@ -54,16 +61,17 @@ async def lstree(path: str, long: bool = False) -> None:
     try:
         if long:
             async for d in bbb.scantree(path):
-                size = d.stat.size if d.stat else ""
-                mtime = (
-                    datetime.datetime.fromtimestamp(int(d.stat.mtime)).isoformat() if d.stat else ""
-                )
-                print(f"{size:12}  {mtime:19}  {d.path}")
+                print(_long_format(d.path, d.stat))
         else:
             async for p in bbb.listtree(path):
                 print(p)
     except NotADirectoryError:
-        print(bbb.BasePath.from_str(path))
+        path_obj = bbb.BasePath.from_str(path)
+        stat = await bbb.stat(path_obj)
+        if long:
+            print(_long_format(path_obj, stat))
+        else:
+            print(path_obj)
 
 
 @cli_decorate
