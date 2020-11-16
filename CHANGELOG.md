@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.3.3]
 
 - Speed up `bbb sync`
 
