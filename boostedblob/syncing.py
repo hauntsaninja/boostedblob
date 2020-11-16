@@ -116,12 +116,18 @@ async def sync(
         await remove(dst_file)
         return dst_file
 
-    for action in await sync_action_iterator(src_obj, dst_obj):
+    async def action_wrapper(action: Action) -> Optional[BasePath]:
         if isinstance(action, CopyAction):
-            yield await copy_wrapper(action.relpath, action.size)
+            return await copy_wrapper(action.relpath, action.size)
         if isinstance(action, DeleteAction):
             if delete:
-                yield await delete_wrapper(action.relpath)
+                return await delete_wrapper(action.relpath)
+        return None
+
+    actions = executor.map_unordered(action_wrapper, await sync_action_iterator(src_obj, dst_obj))
+    async for path in actions:
+        if path is not None:
+            yield path
 
 
 def _should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:

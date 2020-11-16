@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Speed up `bbb sync`
+
 ## [v0.3.2]
 
 - Preliminary support for wildcards in `bbb ls` and `bbb rm`
