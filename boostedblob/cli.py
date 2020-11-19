@@ -415,9 +415,9 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
 
 
 def run_bbb(argv: List[str]) -> None:
-    args = parse_options(argv)
-    command = args.__dict__.pop("command")
     try:
+        args = parse_options(argv)
+        command = args.__dict__.pop("command")
         command(**args.__dict__)
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
