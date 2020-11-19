@@ -10,6 +10,8 @@ Note you'll need to have a functional Azure and Google Cloud situation for tests
 [these locations](https://github.com/hauntsaninja/boostedblob/blob/af48ecc4250a0b7652f55a01c7aa7cfb35dc8694/tests/helpers/tmp_dir.py#L11)
 for testing. Ask me for access / feel free to swap them out / make it configurable via env var.
 
+To get `bbb` to spit out a full traceback on error, use `export BBB_TRACEBACK=1`.
+
 To make a new release for `boostedblob`:
 - Update the changelog
 - Update the version in `pyproject.toml`
