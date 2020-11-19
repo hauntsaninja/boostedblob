@@ -10,6 +10,15 @@ from . import google_auth
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
 from .request import Request, azure_page_iterator, google_page_iterator
 
+
+def sizeof_fmt(num, suffix="B"):
+    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
+        if abs(num) < 1024.0:
+            return "%3.1f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, "Yi", suffix)
+
+
 # ==============================
 # DirEntry
 # ==============================
@@ -36,7 +45,11 @@ class DirEntry(NamedTuple):
         mtime = (
             datetime.datetime.fromtimestamp(int(self.stat.mtime)).isoformat() if self.stat else ""
         )
+
         return f"{size:12}  {mtime:19}  {self.path}"
+
+    def to_human_readable_str(self):
+        return f"{sizeof_fmt(self.stat.size):12}  {self.path}"
 
 
 # ==============================
