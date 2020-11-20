@@ -48,7 +48,9 @@ def test_cli():
                     return (size, mtime, path)
 
                 return sorted(
-                    parse_line(line) for line in output.splitlines() if not line.startswith("TOTAL")
+                    parse_line(line)
+                    for line in output.splitlines()
+                    if not line.startswith("Listed")
                 )
 
             f3_contents = b"f3_contents"

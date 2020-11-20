@@ -11,7 +11,7 @@ from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, i
 from .request import Request, azure_page_iterator, google_page_iterator
 
 
-def sizeof_fmt(num: float, suffix: str = "B") -> str:
+def format_size(num: float, suffix: str = "B") -> str:
     for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
         if abs(num) < 1024.0:
             unit += suffix
@@ -43,7 +43,7 @@ class DirEntry(NamedTuple):
 
     def format(self, human_readable: bool = False) -> str:
         size = (
-            (sizeof_fmt(self.stat.size) if human_readable else self.stat.size) if self.stat else ""
+            (format_size(self.stat.size) if human_readable else self.stat.size) if self.stat else ""
         )
         mtime = (
             datetime.datetime.fromtimestamp(int(self.stat.mtime)).isoformat() if self.stat else ""

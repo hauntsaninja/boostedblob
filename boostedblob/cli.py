@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import functools
 import sys
-from typing import Any, Awaitable, Callable, Dict, List, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, TypeVar
 
 import boostedblob as bbb
 
@@ -31,38 +31,34 @@ def cli_decorate(fn: F) -> F:
 DEFAULT_CONCURRENCY = 100
 
 
-def _summarise(num_objs: int, total: int) -> str:
-    return f"TOTAL: {num_objs} objects, {total} bytes ({bbb.listing.sizeof_fmt(total)})"
+async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bool) -> None:
+    total = 0
+    num_files = 0
+    async for entry in it:
+        if entry.is_file:
+            num_files += 1
+        if entry.stat:
+            total += entry.stat.size
+        print(entry.format(human_readable=human_readable))
+    human_total = bbb.listing.format_size(total).strip()
+    print(f"Listed {num_files} files summing to {total} bytes ({human_total})")
 
 
 @cli_decorate
 async def ls(path: str, long: bool = False, number: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
     if "*" in path:
-        total = 0
-        num_objs = 0
-        async for entry in bbb.listing.globscandir(path_obj):
-            if long:
-                num_objs += 1
-                if entry.stat:
-                    total += entry.stat.size
-                print(entry.format(human_readable=not number))
-            else:
-                print(entry.path)
+        it = bbb.listing.globscandir(path_obj)
         if long:
-            print(_summarise(num_objs, total))
+            await print_long(it, human_readable=not number)
+        else:
+            async for entry in it:
+                print(entry.path)
         return
 
     try:
         if long:
-            total = 0
-            num_objs = 0
-            async for entry in bbb.scandir(path_obj):
-                num_objs += 1
-                if entry.stat:
-                    total += entry.stat.size
-                print(entry.format(human_readable=not number))
-            print(_summarise(num_objs, total))
+            await print_long(bbb.scandir(path_obj), human_readable=not number)
         else:
             async for p in bbb.listdir(path_obj):
                 print(p)
@@ -79,18 +75,10 @@ async def ls(path: str, long: bool = False, number: bool = False) -> None:
 async def lstree(path: str, long: bool = False, number: bool = False) -> None:
     try:
         if long:
-            total = 0
-            num_objs = 0
-            async for entry in bbb.scantree(path):
-                num_objs += 1
-                if entry.stat:
-                    total += entry.stat.size
-                print(entry.format(human_readable=not number))
-            print(_summarise(num_objs, total))
+            await print_long(bbb.scantree(path), human_readable=not number)
         else:
             async for p in bbb.listtree(path):
                 print(p)
-
     except NotADirectoryError:
         path_obj = bbb.BasePath.from_str(path)
         if long:
