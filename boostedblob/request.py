@@ -74,11 +74,12 @@ class Request:
             if attempt >= config.retry_limit:
                 raise error
 
-            print(
-                f"[boostedblob] Error when executing request on attempt {attempt}, sleeping for "
-                f"{backoff:.1f}s before retrying. Details: {error}",
-                file=sys.stderr,
-            )
+            if attempt + 1 >= 3:
+                print(
+                    f"[boostedblob] Error when executing request on attempt {attempt + 1}, sleeping for "
+                    f"{backoff:.1f}s before retrying. Details: {error}",
+                    file=sys.stderr,
+                )
             await asyncio.sleep(backoff)
 
     async def execute_reponseless(self) -> None:
