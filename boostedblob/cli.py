@@ -58,6 +58,7 @@ async def ls(path: str, long: bool = False) -> None:
 @cli_decorate
 async def lstree(path: str, long: bool = False, number: bool = False) -> None:
     total = 0
+    num_objs = 0
 
     def print_entry(x: bbb.listing.DirEntry):
         print(x if number else x.to_human_readable_str())
@@ -66,13 +67,14 @@ async def lstree(path: str, long: bool = False, number: bool = False) -> None:
         it = bbb.scantree(path) if long else bbb.listtree(path)
         assert isinstance(it, AsyncIterator)
         async for entry in it:
+            num_objs += 1
             if entry.stat:
                 total += entry.stat.size
             print_entry(entry)
         if long:
-            if not number:
-                total = bbb.listing.sizeof_fmt(total)
-            print(f"{total:12}  {path}")
+            print(
+                f"TOTAL: {num_objs} objects, {total} bytes ({bbb.listing.sizeof_fmt(total).strip()})"
+            )
     except NotADirectoryError:
         path_obj = bbb.BasePath.from_str(path)
         if long:
