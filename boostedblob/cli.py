@@ -56,40 +56,30 @@ async def ls(path: str, long: bool = False) -> None:
 
 
 @cli_decorate
-async def lstree(path: str, long: bool = False) -> None:
+async def lstree(path: str, long: bool = False, number: bool = False) -> None:
+    total = 0
+
+    def print_entry(x: bbb.listing.DirEntry):
+        print(x if number else x.to_human_readable_str())
+
     try:
         it = bbb.scantree(path) if long else bbb.listtree(path)
         assert isinstance(it, AsyncIterator)
         async for entry in it:
-            print(entry)
+            if entry.stat:
+                total += entry.stat.size
+            print_entry(entry)
+        if long:
+            if not number:
+                total = bbb.listing.sizeof_fmt(total)
+            print(f"{total:12}  {path}")
     except NotADirectoryError:
         path_obj = bbb.BasePath.from_str(path)
         if long:
             stat = await bbb.stat(path_obj)
-            print(bbb.listing.DirEntry.from_path_stat(path_obj, stat))
+            print_entry(bbb.listing.DirEntry.from_path_stat(path_obj, stat))
         else:
             print(path_obj)
-
-
-@cli_decorate
-async def du(path: str, human_readable: bool = False, summary: bool = False) -> None:
-    total = 0
-    try:
-        it = bbb.scantree(path)
-        assert isinstance(it, AsyncIterator)
-        async for entry in it:
-            if entry.stat:
-                total += entry.stat.size
-            if not summary:
-                print(entry.to_human_readable_str() if human_readable else entry)
-        if human_readable:
-            total = bbb.listing.sizeof_fmt(total)
-        print(f"{total:12}  {path}")
-    except NotADirectoryError:
-        path_obj = bbb.BasePath.from_str(path)
-        stat = await bbb.stat(path_obj)
-        dir_entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
-        print(dir_entry.to_human_readable_str() if human_readable else dir_entry)
 
 
 @cli_decorate
@@ -214,15 +204,6 @@ $ bbb lstree gs://my_bucket/
 To additionally see size and mtime of files:
 $ bbb lstree -l gs://my_bucket/
 """
-    du_desc = """\
-`bbb du` lists sizes of files present anywhere in the given directory tree.
-
-To sizes for all files in your bucket
-$ bbb du gs://my_bucket/
-
-To render the sizes in human readable form (ie 23.2 GiB) and only show the total:
-$ bbb du -sh gs://my_bucket/
-"""
     cat_desc = """\
 `bbb cat` copies the contents of a given file to stdout.
 
@@ -310,23 +291,11 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
     )
-
-    subparser = subparsers.add_parser(
-        "du",
-        help="Display object size usage",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=du_desc,
-    )
-    subparser.set_defaults(command=du)
-    subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(
-        "-h",
-        "--human_readable",
+        "-n",
+        "--number",
         action="store_true",
-        help="Prints object sizes in human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
-    )
-    subparser.add_argument(
-        "-s", "--summary", action="store_true", help="Displays only the grand total."
+        help="Prints object sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
     )
 
     subparser = subparsers.add_parser(
