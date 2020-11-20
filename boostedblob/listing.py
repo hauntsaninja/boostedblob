@@ -10,6 +10,16 @@ from . import google_auth
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
 from .request import Request, azure_page_iterator, google_page_iterator
 
+
+def sizeof_fmt(num: float, suffix: str = "B") -> str:
+    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
+        if abs(num) < 1024.0:
+            unit += suffix
+            return f"{num:.1f} {unit:<3}"
+        num /= 1024.0
+    return f"{num:.1f} Yi{suffix}"
+
+
 # ==============================
 # DirEntry
 # ==============================
@@ -31,12 +41,14 @@ class DirEntry(NamedTuple):
         assert not path.is_directory_like()
         return DirEntry(path=path, is_dir=False, is_file=True, stat=stat)
 
-    def __str__(self) -> str:
-        size = self.stat.size if self.stat else ""
+    def format(self, human_readable: bool = False) -> str:
+        size = (
+            (sizeof_fmt(self.stat.size) if human_readable else self.stat.size) if self.stat else ""
+        )
         mtime = (
             datetime.datetime.fromtimestamp(int(self.stat.mtime)).isoformat() if self.stat else ""
         )
-        return f"{size:12}  {mtime:19}  {self.path}"
+        return f"{size:>12}  {mtime:19}  {self.path}"
 
 
 # ==============================
