@@ -301,7 +301,17 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         "-n",
         "--number",
         action="store_true",
-        help="Prints object sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+    )
+
+    subparser = subparsers.add_parser("ll", description="Alias of `bbb ls -l`")
+    subparser.set_defaults(command=functools.partial(ls, long=True))
+    subparser.add_argument("path", help="Path of directory to list")
+    subparser.add_argument(
+        "-n",
+        "--number",
+        action="store_true",
+        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
     )
 
     subparser = subparsers.add_parser(
@@ -320,7 +330,17 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         "-n",
         "--number",
         action="store_true",
-        help="Prints object sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+    )
+
+    subparser = subparsers.add_parser("llr", aliases=["du"], description="Alias of `bbb lstree -l`")
+    subparser.set_defaults(command=functools.partial(lstree, long=True))
+    subparser.add_argument("path", help="Root of directory tree to list")
+    subparser.add_argument(
+        "-n",
+        "--number",
+        action="store_true",
+        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
     )
 
     subparser = subparsers.add_parser(
