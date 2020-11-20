@@ -31,55 +31,72 @@ def cli_decorate(fn: F) -> F:
 DEFAULT_CONCURRENCY = 100
 
 
+def _summarise(num_objs: int, total: int) -> str:
+    return f"TOTAL: {num_objs} objects, {total} bytes ({bbb.listing.sizeof_fmt(total)})"
+
+
 @cli_decorate
-async def ls(path: str, long: bool = False) -> None:
+async def ls(path: str, long: bool = False, number: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
     if "*" in path:
+        total = 0
+        num_objs = 0
         async for entry in bbb.listing.globscandir(path_obj):
             if long:
-                print(entry)
+                num_objs += 1
+                if entry.stat:
+                    total += entry.stat.size
+                print(entry.format(human_readable=not number))
             else:
                 print(entry.path)
+        if long:
+            print(_summarise(num_objs, total))
         return
 
     try:
-        it = bbb.scandir(path_obj) if long else bbb.listdir(path_obj)
-        assert isinstance(it, AsyncIterator)
-        async for entry in it:
-            print(entry)
+        if long:
+            total = 0
+            num_objs = 0
+            async for entry in bbb.scandir(path_obj):
+                num_objs += 1
+                if entry.stat:
+                    total += entry.stat.size
+                print(entry.format(human_readable=not number))
+            print(_summarise(num_objs, total))
+        else:
+            async for p in bbb.listdir(path_obj):
+                print(p)
     except NotADirectoryError:
         if long:
             stat = await bbb.stat(path_obj)
-            print(bbb.listing.DirEntry.from_path_stat(path_obj, stat))
+            entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
+            print(entry.format(human_readable=not number))
         else:
             print(path_obj)
 
 
 @cli_decorate
 async def lstree(path: str, long: bool = False, number: bool = False) -> None:
-    total = 0
-    num_objs = 0
-
-    def print_entry(x: bbb.listing.DirEntry):
-        print(x if number else x.to_human_readable_str())
-
     try:
-        it = bbb.scantree(path) if long else bbb.listtree(path)
-        assert isinstance(it, AsyncIterator)
-        async for entry in it:
-            num_objs += 1
-            if entry.stat:
-                total += entry.stat.size
-            print_entry(entry)
         if long:
-            print(
-                f"TOTAL: {num_objs} objects, {total} bytes ({bbb.listing.sizeof_fmt(total).strip()})"
-            )
+            total = 0
+            num_objs = 0
+            async for entry in bbb.scantree(path):
+                num_objs += 1
+                if entry.stat:
+                    total += entry.stat.size
+                print(entry.format(human_readable=not number))
+            print(_summarise(num_objs, total))
+        else:
+            async for p in bbb.listtree(path):
+                print(p)
+
     except NotADirectoryError:
         path_obj = bbb.BasePath.from_str(path)
         if long:
             stat = await bbb.stat(path_obj)
-            print_entry(bbb.listing.DirEntry.from_path_stat(path_obj, stat))
+            entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
+            print(entry.format(human_readable=not number))
         else:
             print(path_obj)
 
@@ -279,6 +296,12 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
         "-l", "--long", action="store_true", help="List information about each file"
+    )
+    subparser.add_argument(
+        "-n",
+        "--number",
+        action="store_true",
+        help="Prints object sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
     )
 
     subparser = subparsers.add_parser(
