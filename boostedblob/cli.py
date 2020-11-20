@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import functools
 import sys
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, TypeVar
+from typing import Any, Awaitable, Callable, Dict, List, TypeVar
 
 import boostedblob as bbb
 
