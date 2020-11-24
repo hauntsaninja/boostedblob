@@ -39,7 +39,9 @@ async def sync_action_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]
 
     async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
         try:
-            return [(p.path.relative_to(tree), p) async for p in scantree(tree)]
+            # Note that if you create marker files to mark directories, scantree will return
+            # those. Filter by is_file to avoid syncing these files that represent directories.
+            return [(p.path.relative_to(tree), p) async for p in scantree(tree) if p.is_file]
         except FileNotFoundError:
             return []
 
