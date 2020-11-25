@@ -216,9 +216,9 @@ async def azure_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]
                 return
             body = await resp.read()
             result = xmltodict.parse(body)["EnumerationResults"]
-            yield result
-            if result["NextMarker"] is None:
-                break
+        yield result
+        if result["NextMarker"] is None:
+            break
         params["marker"] = result["NextMarker"]
 
 
@@ -239,9 +239,9 @@ async def google_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]
             if resp.status == 404:
                 return
             result = await resp.json()
-            yield result
-            if "nextPageToken" not in result:
-                break
+        yield result
+        if "nextPageToken" not in result:
+            break
         params["pageToken"] = result["nextPageToken"]
 
 
