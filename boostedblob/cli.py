@@ -201,16 +201,27 @@ $ bbb ls -l .
 
 To check whether a file exists:
 $ bbb ls schrodingers_file.txt
+
+Aliases:
+bbb ll == bbb ls -l
 """
     lstree_desc = """\
 `bbb lstree` lists all files present anywhere in the given directory tree.
-Note that `bbb lstree` only lists files and will not list subdirectories.
+Note that `bbb lstree` only lists files and will not list subdirectories
+(unless they are marked by marker files).
 
 To see all files in your bucket:
 $ bbb lstree gs://my_bucket/
 
 To additionally see size and mtime of files:
 $ bbb lstree -l gs://my_bucket/
+
+To make output more easily machine readable:
+$ bbb lstree --machine .
+
+Aliases:
+bbb lsr == bbb lstree
+bbb llr == bbb lstree -l == bbb lsr -l == bbb du
 """
     cat_desc = """\
 `bbb cat` copies the contents of a given file to stdout.
@@ -241,6 +252,9 @@ they will be overwritten.
 
 Create an exact copy of a directory somewhere else:
 $ bbb cptree boostedblob gs://tmp/boostedblob
+
+Aliases:
+bbb cpr == bbb cptree
 """
     rm_desc = """\
 `bbb rm` deletes the given files.
@@ -292,7 +306,9 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         help="Make output more easily machine readable",
     )
 
-    subparser = subparsers.add_parser("ll", description="Alias of `bbb ls -l`")
+    subparser = subparsers.add_parser(
+        "ll", formatter_class=argparse.RawDescriptionHelpFormatter, description=ls_desc
+    )
     subparser.set_defaults(command=functools.partial(ls, long=True))
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
@@ -319,7 +335,12 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         help="Make output more easily machine readable",
     )
 
-    subparser = subparsers.add_parser("llr", aliases=["du"], description="Alias of `bbb lstree -l`")
+    subparser = subparsers.add_parser(
+        "llr",
+        aliases=["du"],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=lstree_desc,
+    )
     subparser.set_defaults(command=functools.partial(lstree, long=True))
     subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(

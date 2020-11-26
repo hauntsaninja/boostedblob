@@ -9,13 +9,24 @@ The fun part of implementing boostedblob is `boostedblob/boost.py`, which provid
 `concurrent.futures`-like interface for running and composing async tasks in a concurrency limited
 environment.
 
+## Installation
+
+Just run `pip install boostedblob`. boostedblob requires Python 3.7 or better.
+
+<sup>(For Python 3.9 support, you'll need to run `pip uninstall uvloop`)</sup>
+
+
 ## Usage
 
+For an overview and list of commands:
 ```sh
-pip install boostedblob
-bbb -h
+bbb --help
 ```
 
+For help with a specific command:
+```sh
+bbb ls --help
+```
 
 ## Contributing
 
