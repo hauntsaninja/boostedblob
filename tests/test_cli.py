@@ -70,7 +70,7 @@ def test_cli():
 
             # ls a file prints that file
             assert normalise(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]
-            assert normalise_long(run_bbb(["ls", "-l", "-n", remote_dir / "f1"])) == [
+            assert normalise_long(run_bbb(["ls", "-l", "--machine", remote_dir / "f1"])) == [
                 ("4", "mtime", "f1")
             ]
             with pytest.raises(FileNotFoundError):
@@ -97,7 +97,7 @@ def test_cli():
             run_bbb(["sync", "--delete", local_dir, remote_dir])
 
             assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "f3"]
-            assert normalise_long(run_bbb(["lstree", "-l", "-n", remote_dir])) == [
+            assert normalise_long(run_bbb(["lstree", "-l", "--machine", remote_dir])) == [
                 ("11", "mtime", "d1/f4"),
                 ("11", "mtime", "f3"),
                 ("4", "mtime", "f1"),

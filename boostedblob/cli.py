@@ -40,17 +40,18 @@ async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bo
         if entry.stat:
             total += entry.stat.size
         print(entry.format(human_readable=human_readable))
-    human_total = bbb.listing.format_size(total).strip()
-    print(f"Listed {num_files} files summing to {total} bytes ({human_total})")
+    if human_readable:
+        human_total = bbb.listing.format_size(total).strip()
+        print(f"Listed {num_files} files summing to {total} bytes ({human_total})")
 
 
 @cli_decorate
-async def ls(path: str, long: bool = False, number: bool = False) -> None:
+async def ls(path: str, long: bool = False, machine: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
     if "*" in path:
         it = bbb.listing.globscandir(path_obj)
         if long:
-            await print_long(it, human_readable=not number)
+            await print_long(it, human_readable=not machine)
         else:
             async for entry in it:
                 print(entry.path)
@@ -58,7 +59,7 @@ async def ls(path: str, long: bool = False, number: bool = False) -> None:
 
     try:
         if long:
-            await print_long(bbb.scandir(path_obj), human_readable=not number)
+            await print_long(bbb.scandir(path_obj), human_readable=not machine)
         else:
             async for p in bbb.listdir(path_obj):
                 print(p)
@@ -66,16 +67,16 @@ async def ls(path: str, long: bool = False, number: bool = False) -> None:
         if long:
             stat = await bbb.stat(path_obj)
             entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
-            print(entry.format(human_readable=not number))
+            print(entry.format(human_readable=not machine))
         else:
             print(path_obj)
 
 
 @cli_decorate
-async def lstree(path: str, long: bool = False, number: bool = False) -> None:
+async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
     try:
         if long:
-            await print_long(bbb.scantree(path), human_readable=not number)
+            await print_long(bbb.scantree(path), human_readable=not machine)
         else:
             async for p in bbb.listtree(path):
                 print(p)
@@ -84,7 +85,7 @@ async def lstree(path: str, long: bool = False, number: bool = False) -> None:
         if long:
             stat = await bbb.stat(path_obj)
             entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
-            print(entry.format(human_readable=not number))
+            print(entry.format(human_readable=not machine))
         else:
             print(path_obj)
 
@@ -286,20 +287,18 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         "-l", "--long", action="store_true", help="List information about each file"
     )
     subparser.add_argument(
-        "-n",
-        "--number",
+        "--machine",
         action="store_true",
-        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Make output more easily machine readable",
     )
 
     subparser = subparsers.add_parser("ll", description="Alias of `bbb ls -l`")
     subparser.set_defaults(command=functools.partial(ls, long=True))
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
-        "-n",
-        "--number",
+        "--machine",
         action="store_true",
-        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Make output more easily machine readable",
     )
 
     subparser = subparsers.add_parser(
@@ -315,20 +314,18 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
         "-l", "--long", action="store_true", help="List information about each file"
     )
     subparser.add_argument(
-        "-n",
-        "--number",
+        "--machine",
         action="store_true",
-        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Make output more easily machine readable",
     )
 
     subparser = subparsers.add_parser("llr", aliases=["du"], description="Alias of `bbb lstree -l`")
     subparser.set_defaults(command=functools.partial(lstree, long=True))
     subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(
-        "-n",
-        "--number",
+        "--machine",
         action="store_true",
-        help="Prints sizes in bytes instead of human-readable format (e.g., 1 KiB, 234 MiB, 2GiB, etc.)",
+        help="Make output more easily machine readable",
     )
 
     subparser = subparsers.add_parser(
