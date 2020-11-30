@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.3.4]
+
+- Add summary for long listing, use human readable sizes
+- Add several aliases for list operations (e.g. `bbb ll`)
+- Fixed syncing in the presence of directory marker files
+- Only log retrying of requests after a couple attempts
+- Release responses before yielding in paginated requests
+- Fixed Azure auth edge case with service principals
+- Documentation improvements
+
 ## [v0.3.3]
 
 - Speed up `bbb sync`
