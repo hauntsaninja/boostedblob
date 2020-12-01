@@ -410,6 +410,25 @@ async def test_composition_ordered_unordered():
         assert results == list(reversed(range(N)))
 
 
+@pytest.mark.asyncio
+async def test_composition_unordered_unordered():
+    N = 1000
+    inner_futures = {}
+    outer_futures = {}
+    results = []
+    async with bbb.BoostExecutor(N * 2) as e:
+        inner_it = e.map_unordered(get_futures_fn(inner_futures), iter(range(N)))
+        outer_it = e.map_unordered(get_futures_fn(outer_futures), inner_it)
+        asyncio.create_task(collect(outer_it, results))
+        await pause()
+
+        while outer_futures or inner_futures:
+            futures = random.choice([fs for fs in (outer_futures, inner_futures) if fs])
+            futures[next(iter(futures))].set_result(None)
+            await pause()
+        assert sorted(results) == list(range(N))
+
+
 # ==============================
 # miscellaneous
 # ==============================

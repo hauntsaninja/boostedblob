@@ -287,10 +287,6 @@ class UnorderedBoostable(Boostable[T, R]):
         self.waiter: Optional[asyncio.Future[asyncio.Task[R]]] = None
 
     def done_callback(self, task: asyncio.Task[R]) -> None:
-        # this can happen if we've already dequeued. cancelling the callback doesn't seem to work.
-        # TODO: can this cause __anext__ to block?
-        if task not in self.buffer:
-            return
         if self.waiter and not self.waiter.done():
             self.waiter.set_result(task)
 
@@ -300,11 +296,16 @@ class UnorderedBoostable(Boostable[T, R]):
         task.add_done_callback(self.done_callback)
         return task
 
-    def dequeue(self) -> R:
-        try:
-            task = next(t for t in self.buffer if t.done())
-        except StopIteration:
-            raise NotReady
+    def dequeue(self, hint: Optional[asyncio.Task[R]] = None) -> R:
+        # hint is a task that we suspect is dequeuable, which allows us to skip the linear check
+        # against all outstanding tasks in the happy case.
+        if hint is not None and hint in self.buffer and hint.done():
+            task = hint
+        else:
+            try:
+                task = next(t for t in self.buffer if t.done())
+            except StopIteration:
+                raise NotReady
         self.buffer.remove(task)
         return task.result()
 
@@ -313,19 +314,19 @@ class UnorderedBoostable(Boostable[T, R]):
             arg = await next_underlying(self.iterable)
             self.enqueue(arg)
 
-        try:
-            return self.dequeue()
-        except NotReady:
-            pass
-
         loop = asyncio.get_event_loop()
-        self.waiter = loop.create_future()
-        task = await self.waiter
-        self.waiter = None
-
-        assert task.done()
-        self.buffer.remove(task)
-        return task.result()
+        task = None
+        while True:
+            try:
+                return self.dequeue(hint=task)
+            except NotReady:
+                pass
+            # note that dequeues are racy, so the task we get from self.waiter may already have been
+            # dequeued. in the happy case, however, it's probably the task we want to return, so we
+            # use it as the hint for the next dequeue.
+            self.waiter = loop.create_future()
+            task = await self.waiter
+            self.waiter = None
 
 
 class EagerAsyncIterator(Generic[T]):
