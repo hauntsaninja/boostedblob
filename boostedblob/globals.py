@@ -41,7 +41,7 @@ class TokenManager:
 class Config:
     session: Optional[aiohttp.ClientSession] = None
 
-    chunk_size: int = 32 * MB
+    chunk_size: int = 16 * MB
 
     connect_timeout: float = 10.0
     read_timeout: float = 30.0
