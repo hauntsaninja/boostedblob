@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.3.5]
+- Fixed issue with racy dequeues in UnorderedBoostable
+- Silence errors caused by removal of session during shutdown
+- Reduce chunk size to 16MB
+
 ## [v0.3.4]
 
 - Add summary for long listing, use human readable sizes
