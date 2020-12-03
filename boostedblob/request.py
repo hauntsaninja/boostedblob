@@ -15,6 +15,10 @@ import xmltodict
 from .globals import config
 
 
+class MissingSession(Exception):
+    pass
+
+
 @dataclass
 class Request:
     method: str
@@ -93,7 +97,7 @@ class Request:
         # TODO: investigate asyncio unclosed transport warnings from
         # -X dev -X tracemalloc=20
         if config.session is None:
-            raise RuntimeError(
+            raise MissingSession(
                 "No session available, use `async with session_context()` or `@ensure_session`"
             )
         ctx = config.session.request(
