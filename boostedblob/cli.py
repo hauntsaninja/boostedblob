@@ -24,7 +24,7 @@ def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     return wrapper
 
 
-def cli_decorate(fn: F) -> F:
+def sync_with_session(fn: F) -> F:
     return syncify(bbb.ensure_session(fn))  # type: ignore
 
 
@@ -45,7 +45,7 @@ async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bo
         print(f"Listed {num_files} files summing to {total} bytes ({human_total})")
 
 
-@cli_decorate
+@sync_with_session
 async def ls(path: str, long: bool = False, machine: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
     if "*" in path:
@@ -72,7 +72,7 @@ async def ls(path: str, long: bool = False, machine: bool = False) -> None:
             print(path_obj)
 
 
-@cli_decorate
+@sync_with_session
 async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
     try:
         if long:
@@ -90,7 +90,7 @@ async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
             print(path_obj)
 
 
-@cli_decorate
+@sync_with_session
 async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     loop = asyncio.get_event_loop()
     async with bbb.BoostExecutor(concurrency) as executor:
@@ -99,7 +99,7 @@ async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
             await loop.run_in_executor(None, sys.stdout.buffer.write, data)
 
 
-@cli_decorate
+@sync_with_session
 async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     dst_obj = bbb.BasePath.from_str(dst)
     dst_is_dirlike = dst_obj.is_directory_like() or await bbb.isdir(dst_obj)
@@ -116,7 +116,7 @@ async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) 
         await bbb.boost.consume(executor.map_unordered(copy_wrapper, iter(srcs)))
 
 
-@cli_decorate
+@sync_with_session
 async def cptree(
     src: str, dst: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY
 ) -> None:
@@ -127,7 +127,7 @@ async def cptree(
                 print(p)
 
 
-@cli_decorate
+@sync_with_session
 async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
     async with bbb.BoostExecutor(concurrency) as executor:
         if len(paths) == 1 and "*" in paths[0]:
@@ -137,7 +137,7 @@ async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
             await bbb.boost.consume(executor.map_unordered(bbb.remove, iter(paths)))
 
 
-@cli_decorate
+@sync_with_session
 async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     path_obj = bbb.BasePath.from_str(path)
     async with bbb.BoostExecutor(concurrency) as executor:
@@ -149,7 +149,7 @@ async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONC
             await bbb.rmtree(path_obj, executor)
 
 
-@cli_decorate
+@sync_with_session
 async def share(path: str) -> None:
     url, expiration = await bbb.share.get_url(path)
     print(url)
@@ -157,7 +157,7 @@ async def share(path: str) -> None:
         print(f"Expires on: {expiration.isoformat()}")
 
 
-@cli_decorate
+@sync_with_session
 async def sync(
     src: str,
     dst: str,
