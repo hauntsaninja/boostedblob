@@ -177,6 +177,60 @@ async def sync(
                 print(p)
 
 
+def complete_init(shell: str) -> None:
+    if shell == "zsh":
+        # zsh uses index-1 based arrays, so adjust CURRENT
+        # the (f) things splits the output on newlines into an array
+        # -U disables prefix matching
+        # -S '' prevents zsh from inserting a space after the completion
+        init_script = """\
+_bbb_complete() {
+    reply=( ${(f)"$(bbb complete command zsh $(( $CURRENT - 1)) $words)"} )
+}
+compctl -U -S '' -K _bbb_complete bbb
+"""
+    elif shell == "bash":
+        # use COMP_LINE instead of COMP_WORDS because bash uncustomisably splits words on colons
+        # -o nospace prevents bash from inserting a space after the completion
+        init_script = """\
+_bbb_complete() {
+    local completions="$(bbb complete command bash $COMP_POINT "$COMP_LINE")"
+    COMPREPLY=( $(compgen -W "$completions" '') )
+}
+complete -o nospace -F _bbb_complete bbb
+"""
+    else:
+        raise ValueError(f"Unrecognised shell {shell}")
+    print(init_script)
+
+
+@sync_with_session
+async def complete_command(shell: str, index: int, partial_command: List[str]) -> None:
+    if shell == "bash":
+        # the entire command is passed as a single argument and index is an index into that string
+        assert len(partial_command) == 1
+        command_str = partial_command[0]
+        partial_command = command_str.split()
+        if index == len(command_str):
+            index = len(partial_command) - (0 if command_str[index - 1] == " " else 1)
+        else:
+            return  # TODO: support bash completion in the middle of a command
+
+    if index <= 1:
+        # TODO: support completion of subcommands
+        return
+
+    # assume we're trying to complete a path; just add a wildcard
+    word_to_complete = partial_command[index] if index < len(partial_command) else ""
+    word_to_complete += "*"
+
+    try:
+        async for entry in bbb.listing.globscandir(word_to_complete):
+            print(entry.path)
+    except Exception:
+        pass  # ignore errors
+
+
 def parse_options(args: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version=f"boostedblob {bbb.__version__}")
@@ -287,6 +341,13 @@ $ bbb sync gs://tmp/boostedblob boostedblob
 Using --delete and re-syncing will delete spurious_file.txt:
 $ touch boostedblob/spurious_file.txt
 $ bbb sync --delete gs://tmp/boostedblob boostedblob
+"""
+    complete_desc = """\
+To enable tab completion for bash, add the following to your bashrc:
+eval "$(bbb complete init bash)"
+
+To enable tab completion for zsh, add the following to your zshrc:
+eval "$(bbb complete init zsh)"
 """
 
     subparser = subparsers.add_parser(
@@ -428,6 +489,27 @@ $ bbb sync --delete gs://tmp/boostedblob boostedblob
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
+
+    subparser = subparsers.add_parser(
+        "complete",
+        help="Tab complete a command",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=complete_desc,
+    )
+    subsubparsers = subparser.add_subparsers(required=True)
+    subsubparser = subsubparsers.add_parser(
+        "init", help="Print shell script to initialise tab completion"
+    )
+    subsubparser.set_defaults(command=complete_init)
+    subsubparser.add_argument("shell", choices=["bash", "zsh"])
+
+    subsubparser = subsubparsers.add_parser("command", help="Get a completion for a command")
+    subsubparser.set_defaults(command=complete_command)
+    subsubparser.add_argument("shell", help="Shell to complete for")
+    subsubparser.add_argument("index", type=int, help="Index into partial_command to complete")
+    subsubparser.add_argument(
+        "partial_command", nargs=argparse.REMAINDER, help="Command to complete"
+    )
 
     if not args:
         parser.print_help()
