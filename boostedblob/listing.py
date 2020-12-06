@@ -310,8 +310,17 @@ def globscandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
 
 @globscandir.register  # type: ignore
 async def _azure_globscandir(path: AzurePath) -> AsyncIterator[DirEntry]:
-    if "*" in path.account or "*" in path.container:
-        raise ValueError("Cannot use wildcard in storage account or container")
+    if "*" in path.account:
+        raise ValueError("Cannot use wildcard in storage account")
+    if "*" in path.container:
+        if path.blob:
+            raise ValueError("Cannot use wildcard in container")
+        pattern = _glob_to_regex(path.container)
+        async for entry in _azure_list_containers(path.account):
+            assert isinstance(entry.path, type(path))
+            if re.match(pattern, entry.path.container):
+                yield entry
+        return
     if "*" in os.path.dirname(path.blob):
         raise ValueError("Currently only supports wildcards inside the filename")
     if "*" not in path.name:
@@ -329,7 +338,14 @@ async def _azure_globscandir(path: AzurePath) -> AsyncIterator[DirEntry]:
 @globscandir.register  # type: ignore
 async def _google_globscandir(path: GooglePath) -> AsyncIterator[DirEntry]:
     if "*" in path.bucket:
-        raise ValueError("Cannot use wildcard in bucket")
+        if path.blob:
+            raise ValueError("Cannot use wildcard in bucket")
+        pattern = _glob_to_regex(path.bucket)
+        async for entry in _google_list_buckets():
+            assert isinstance(entry.path, type(path))
+            if re.match(pattern, entry.path.bucket):
+                yield entry
+        return
     if "*" in os.path.dirname(path.blob):
         raise ValueError("Currently only supports wildcards inside the filename")
     if "*" not in path.name:
