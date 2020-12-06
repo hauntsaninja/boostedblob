@@ -185,9 +185,9 @@ def complete_init(shell: str) -> None:
         # -S '' prevents zsh from inserting a space after the completion
         init_script = """\
 _bbb_complete() {
-    reply=( ${(f)"$(bbb complete command zsh $(( $CURRENT - 1)) $words)"} )
+    compadd -U  -S '' ${(f)"$(bbb complete command zsh $(( $CURRENT - 1)) $words)"}
 }
-compctl -U -S '' -K _bbb_complete bbb
+compdef _bbb_complete bbb
 """
     elif shell == "bash":
         # use COMP_LINE instead of COMP_WORDS because bash uncustomisably splits words on colons
