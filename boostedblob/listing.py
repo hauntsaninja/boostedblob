@@ -173,7 +173,9 @@ async def _local_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
         # entry.path is absolute since we're passing an absolute path to os.scandir
         entry_path = LocalPath(entry.path)
         if entry.is_dir():
-            yield DirEntry(path=entry_path, is_dir=True, is_file=False, stat=None)
+            yield DirEntry(
+                path=entry_path.ensure_directory_like(), is_dir=True, is_file=False, stat=None
+            )
         else:
             yield DirEntry(
                 path=entry_path, is_dir=False, is_file=True, stat=Stat.from_local(entry.stat())
