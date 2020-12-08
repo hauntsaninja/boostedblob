@@ -192,6 +192,7 @@ compdef _bbb_complete bbb
     elif shell == "bash":
         # use COMP_LINE instead of COMP_WORDS because bash uncustomisably splits words on colons
         # -o nospace prevents bash from inserting a space after the completion
+        # life would be simpler if we did COMP_WORDBREAKS=${COMP_WORDBREAKS//:}
         init_script = """\
 _bbb_complete() {
     local completions="$(bbb complete command bash $COMP_POINT "$COMP_LINE")"
@@ -222,11 +223,25 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
 
     # assume we're trying to complete a path; just add a wildcard
     word_to_complete = partial_command[index] if index < len(partial_command) else ""
-    word_to_complete += "*"
+    path_to_complete = word_to_complete.lstrip("'\"") + "*"
 
     try:
-        async for entry in bbb.listing.globscandir(word_to_complete):
-            print(entry.path)
+        async for entry in bbb.listing.globscandir(path_to_complete):
+            # bash won't let you complete before a colon without setting COMP_WORDBREAKS globally
+            # instead, we just make sure our completion matches the part before the colon
+            # to do that, we special case az:// paths
+            if isinstance(entry.path, bbb.AzurePath) and path_to_complete.startswith("az://"):
+                path_str = f"az://{entry.path.account}/{entry.path.container}/{entry.path.blob}"
+            else:
+                path_str = str(entry.path)
+
+            # bash won't split on a colon inside a quoted argument, though
+            if shell == "bash" and not word_to_complete.startswith(("'", '"')):
+                try:
+                    path_str = path_str[path_str.index(":") + 1: ]
+                except ValueError:
+                    pass
+            print(path_str)
     except Exception:
         pass  # ignore errors
 
