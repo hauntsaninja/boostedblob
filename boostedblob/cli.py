@@ -223,7 +223,9 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
 
     # assume we're trying to complete a path; just add a wildcard
     word_to_complete = partial_command[index] if index < len(partial_command) else ""
-    path_to_complete = word_to_complete.lstrip("'\"") + "*"
+    path_to_complete = word_to_complete.lstrip("'\"")
+    if not path_to_complete.endswith("*"):
+        path_to_complete += "*"
 
     try:
         async for entry in bbb.listing.globscandir(path_to_complete):
