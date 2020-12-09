@@ -71,7 +71,6 @@ class Request:
                     hostname = url.hostname
                     if hostname and hostname.endswith(".blob.core.windows.net"):
                         if await _bad_hostname_check(hostname):
-                            # TODO: consider porting over blobfile's fake status code
                             raise FileNotFoundError(hostname) from None
                 error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
 
@@ -119,7 +118,6 @@ class Request:
 
 
 class RequestFailure(Exception):
-    # TODO: fixup
     def __init__(self, reason: str, request: Request, status: Optional[int] = None):
         self.reason = reason
         self.request = request
