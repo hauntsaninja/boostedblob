@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import sys
 from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
 
 from . import azure_auth
@@ -314,4 +315,5 @@ async def _local_copytree(
         await consume(copytree_iterator(src, dst, executor))
         return
     assert isinstance(dst, LocalPath)
-    shutil.copytree(src, dst)
+    kwargs = {} if sys.version_info < (3, 8) else {"dirs_exist_ok": True}
+    shutil.copytree(src, dst, **kwargs)  # type: ignore[arg-type]
