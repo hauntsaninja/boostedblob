@@ -161,19 +161,21 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         raise RuntimeError(
             f"Could not find any credentials that grant access to storage account: '{account}'"
         )
+    if "appId" in creds:
+        # we have a service principal, get an oauth token
+        req = create_access_token_request(creds=creds, scope="https://storage.azure.com/")
 
-    # we have a service principal, get an oauth token
-    req = create_access_token_request(creds=creds, scope="https://storage.azure.com/")
+        async with req.execute() as resp:
+            result = await resp.json()
+        auth = (OAUTH_TOKEN, result["access_token"])
+        if await can_access_account(account, auth):
+            return (auth, now + float(result["expires_in"]))
 
-    async with req.execute() as resp:
-        result = await resp.json()
-    auth = (OAUTH_TOKEN, result["access_token"])
-    if await can_access_account(account, auth):
-        return (auth, now + float(result["expires_in"]))
+        # it didn't work, fall back to getting the storage keys
+        storage_account_key_auth = await get_storage_account_key(account=account, creds=creds)
+        if storage_account_key_auth is not None:
+            return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
-    storage_account_key_auth = await get_storage_account_key(account=account, creds=creds)
-    if storage_account_key_auth is not None:
-        return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
     raise RuntimeError(
         f"Could not find any credentials that grant access to storage account: '{account}'"
     )
