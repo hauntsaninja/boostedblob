@@ -233,14 +233,14 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
             # instead, we just make sure our completion matches the part before the colon
             # to do that, we special case az:// paths
             if isinstance(entry.path, bbb.AzurePath) and path_to_complete.startswith("az://"):
-                path_str = f"az://{entry.path.account}/{entry.path.container}/{entry.path.blob}"
+                path_str = entry.path.to_az_str()
             else:
                 path_str = str(entry.path)
 
             # bash won't split on a colon inside a quoted argument, though
             if shell == "bash" and not word_to_complete.startswith(("'", '"')):
                 try:
-                    path_str = path_str[path_str.index(":") + 1: ]
+                    path_str = path_str[path_str.index(":") + 1 :]
                 except ValueError:
                     pass
             print(path_str)

@@ -106,3 +106,26 @@ def test_cli():
 
             run_bbb(["rmtree", remote_dir])
             assert run_bbb(["lstree", remote_dir]) == ""
+
+
+def test_complete():
+    with helpers.tmp_azure_dir() as azure_dir:
+        helpers.create_file(azure_dir / "somefile")
+        path_str = str(azure_dir.ensure_directory_like())
+        az_path_str = str(azure_dir.ensure_directory_like().to_az_str())
+
+        # test a normal completion
+        expected_output = [f"{azure_dir}/", f"{azure_dir}/somefile"]
+        output = run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", path_str])
+        assert output.splitlines() == expected_output
+        output = run_bbb(["complete", "command", "bash", 7 + len(path_str), f"bbb ls {path_str}"])
+        assert [f"https:{p}" for p in output.splitlines()] == expected_output
+
+        # test a completion with an az:// url
+        expected_output = [az_path_str, f"{az_path_str}somefile"]
+        output = run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", az_path_str])
+        assert output.splitlines() == expected_output
+        output = run_bbb(
+            ["complete", "command", "bash", 7 + len(az_path_str), f"bbb ls {az_path_str}"]
+        )
+        assert [f"az:{p}" for p in output.splitlines()] == expected_output

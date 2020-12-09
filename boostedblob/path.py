@@ -171,6 +171,9 @@ class AzurePath(CloudPath):
     def __str__(self) -> str:
         return f"https://{self.account}.blob.core.windows.net/{self.container}/{self.blob}"
 
+    def to_az_str(self) -> str:
+        return f"az://{self.account}/{self.container}/{self.blob}"
+
     def format_url(self, template: str) -> str:
         return url_format(template, account=self.account, container=self.container, blob=self.blob)
 
