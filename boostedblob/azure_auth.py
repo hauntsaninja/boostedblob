@@ -8,7 +8,7 @@ import os
 import re
 import time
 import urllib.parse
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import xmltodict
 
@@ -66,16 +66,6 @@ def load_credentials() -> Dict[str, Any]:
     # https://mikhail.io/2019/07/how-azure-cli-manages-access-tokens/
     default_creds_path = os.path.expanduser("~/.azure/accessTokens.json")
     if os.path.exists(default_creds_path):
-        default_profile_path = os.path.expanduser("~/.azure/azureProfile.json")
-        if not os.path.exists(default_profile_path):
-            raise RuntimeError(f"Missing default profile path: '{default_profile_path}'")
-        with open(default_profile_path, "rb") as g:
-            # this file has a UTF-8 BOM
-            profile = json.loads(g.read().decode("utf-8-sig"))
-        subscriptions = profile["subscriptions"]
-        subscriptions.sort(key=lambda x: x["isDefault"], reverse=True)
-        subscriptions = [sub["id"] for sub in subscriptions]
-
         with open(default_creds_path) as f:
             tokens = json.load(f)
             best_token = None
@@ -83,12 +73,11 @@ def load_credentials() -> Dict[str, Any]:
                 if best_token is None:
                     best_token = token
                 else:
+                    # expiresOn may be missing for tokens from service principals
                     if token.get("expiresOn", "") > best_token.get("expiresOn", ""):
                         best_token = token
             if best_token is not None:
-                token = best_token.copy()
-                token["subscriptions"] = subscriptions
-                return token
+                return best_token
 
     raise RuntimeError(
         """Azure credentials not found, please do one of the following:
@@ -104,6 +93,25 @@ def load_credentials() -> Dict[str, Any]:
    'AZURE_TENANT_ID' environment variables
 """
     )
+
+
+def load_stored_subscription_ids() -> List[str]:
+    """Return a list of subscription ids from the local azure profile.
+
+    The default subscription will appear first in the list.
+
+    """
+    default_profile_path = os.path.expanduser("~/.azure/azureProfile.json")
+    if not os.path.exists(default_profile_path):
+        return []
+
+    with open(default_profile_path, "rb") as f:
+        # this file has a UTF-8 BOM
+        profile = json.loads(f.read().decode("utf-8-sig"))
+
+    subscriptions = profile["subscriptions"]
+    subscriptions.sort(key=lambda x: x["isDefault"], reverse=True)
+    return [sub["id"] for sub in subscriptions]
 
 
 async def get_access_token(account: str) -> Tuple[Any, float]:
@@ -254,6 +262,59 @@ def create_access_token_request(
     )
 
 
+async def get_storage_account_id_with_subscription(
+    subscription_id: str, account: str, auth: Tuple[str, str]
+) -> Optional[str]:
+    from .request import Request, azurify_request
+
+    req = Request(
+        method="GET",
+        url=f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
+        params={"api-version": "2019-04-01"},
+        success_codes=(200, 401, 403),
+    )
+    req = await azurify_request(req, auth=auth)
+
+    async with req.execute() as resp:
+        if resp.status in (401, 403):
+            # we aren't allowed to query this for this subscription, skip it
+            return None
+        out = await resp.json()
+
+    # search for the storage account
+    return next((obj["id"] for obj in out["value"] if obj["name"] == account), None)
+
+
+async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optional[str]:
+    from .request import Request, azurify_request
+
+    stored_subscription_ids = load_stored_subscription_ids()
+    for subscription_id in stored_subscription_ids:
+        storage_account_id = await get_storage_account_id_with_subscription(
+            subscription_id, account, auth
+        )
+        if storage_account_id:
+            return storage_account_id
+
+    req = Request(
+        method="GET",
+        url="https://management.azure.com/subscriptions",
+        params={"api-version": "2020-01-01"},
+    )
+    req = await azurify_request(req, auth=auth)
+    async with req.execute() as resp:
+        result = await resp.json()
+    subscription_ids = {item["subscriptionId"] for item in result["value"]}
+
+    for subscription_id in subscription_ids - set(stored_subscription_ids):
+        storage_account_id = await get_storage_account_id_with_subscription(
+            subscription_id, account, auth
+        )
+        if storage_account_id:
+            return storage_account_id
+    return None
+
+
 async def get_storage_account_key(
     account: str, creds: Mapping[str, Any]
 ) -> Optional[Tuple[Any, float]]:
@@ -266,66 +327,30 @@ async def get_storage_account_key(
         result = await resp.json()
     auth = (OAUTH_TOKEN, result["access_token"])
 
-    if "subscriptions" in creds:
-        subscription_ids = creds["subscriptions"]
-    else:
-        # get a list of subscriptions so we can query each one for storage accounts
-        req = Request(
-            method="GET",
-            url="https://management.azure.com/subscriptions",
-            params={"api-version": "2020-01-01"},
-        )
-        req = await azurify_request(req, auth=auth)
-        async with req.execute() as resp:
-            result = await resp.json()
-        subscription_ids = [item["subscriptionId"] for item in result["value"]]
+    storage_account_id = await get_storage_account_id(account, auth)
+    if not storage_account_id:
+        return None
 
-    for subscription_id in subscription_ids:
-        # get a list of storage accounts
-        req = Request(
-            method="GET",
-            url=f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
-            params={"api-version": "2019-04-01"},
-            success_codes=(200, 401, 403),
-        )
-        req = await azurify_request(req, auth=auth)
+    req = Request(
+        method="POST",
+        url=f"https://management.azure.com{storage_account_id}/listKeys",
+        params={"api-version": "2019-04-01"},
+    )
+    req = await azurify_request(req, auth=auth)
 
-        async with req.execute() as resp:
-            if resp.status in (401, 403):
-                # we aren't allowed to query this for this subscription, skip it
-                # it's unclear if this is still necessary since we query for subscriptions first
-                continue
-            out = await resp.json()
-
-        # check if we found the storage account we are looking for
-        for obj in out["value"]:
-            if obj["name"] == account:
-                storage_account_id = obj["id"]
-                break
-        else:
-            continue
-
-        req = Request(
-            method="POST",
-            url=f"https://management.azure.com{storage_account_id}/listKeys",
-            params={"api-version": "2019-04-01"},
-        )
-        req = await azurify_request(req, auth=auth)
-
-        async with req.execute() as resp:
-            result = await resp.json()
-        for key in result["keys"]:
-            if key["permissions"] == "FULL":
-                storage_key_auth = (SHARED_KEY, key["value"])
-                if await can_access_account(account, storage_key_auth):
-                    return storage_key_auth
-                raise RuntimeError(
-                    f"Found storage account key, but it was unable to access storage account: '{account}'"
-                )
-        raise RuntimeError(
-            f"Storage account was found, but storage account keys were missing: '{account}'"
-        )
-    return None
+    async with req.execute() as resp:
+        result = await resp.json()
+    for key in result["keys"]:
+        if key["permissions"] == "FULL":
+            storage_key_auth = (SHARED_KEY, key["value"])
+            if await can_access_account(account, storage_key_auth):
+                return storage_key_auth
+            raise RuntimeError(
+                f"Found storage account key, but it was unable to access storage account: '{account}'"
+            )
+    raise RuntimeError(
+        f"Storage account was found, but storage account keys were missing: '{account}'"
+    )
 
 
 def sign_request_with_shared_key(request: Request, key: str) -> str:
