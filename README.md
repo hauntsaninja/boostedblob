@@ -28,6 +28,11 @@ For help with a specific command:
 bbb ls --help
 ```
 
+To enable tab completion, add the following to your shell config (replacing `zsh` with `bash`, if appropriate):
+```sh
+eval "$(bbb complete init zsh)"
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md)
