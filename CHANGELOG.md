@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.4.0]
+- Added tab completion! See README for details
+- Extend preliminary globbing support to containers, buckets
+- More consistent output when listing local directories
+- `copytree` is more permissive about existing directories for Python 3.8 and up
+- Minor improvements to Azure auth
+
 ## [v0.3.5]
 - Fixed issue with racy dequeues in UnorderedBoostable
 - Silence errors caused by removal of session during shutdown
