@@ -117,6 +117,7 @@ def load_stored_subscription_ids() -> List[str]:
 async def get_access_token(account: str) -> Tuple[Any, float]:
     now = time.time()
     creds = load_credentials()
+
     if "storageAccountKey" in creds:
         if "account" in creds:
             if creds["account"] != account:
@@ -130,6 +131,14 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         raise RuntimeError(
             f"Found storage account key, but it was unable to access storage account: '{account}'"
         )
+
+    if "accessToken" in creds and creds.get("tokenType") == "Bearer" and "expiresOn" in creds:
+        expiration_time = datetime.datetime.fromisoformat(creds["expiresOn"]).timestamp()
+        if expiration_time > now:
+            auth = (OAUTH_TOKEN, creds["accessToken"])
+            if await can_access_account(account, auth):
+                return (auth, expiration_time)
+
     if "refreshToken" in creds:
         # we have a refresh token, convert it into an access token for this account
         req = create_access_token_request(
@@ -166,9 +175,6 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         if storage_account_key_auth is not None:
             return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
-        raise RuntimeError(
-            f"Could not find any credentials that grant access to storage account: '{account}'"
-        )
     if "appId" in creds:
         # we have a service principal, get an oauth token
         req = create_access_token_request(creds=creds, scope="https://storage.azure.com/")
