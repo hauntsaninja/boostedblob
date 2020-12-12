@@ -35,4 +35,4 @@ eval "$(bbb complete init zsh)"
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+To get started with developing boostedblob and running tests, see [CONTRIBUTING.md](CONTRIBUTING.md)
