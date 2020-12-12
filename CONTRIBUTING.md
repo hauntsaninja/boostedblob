@@ -19,7 +19,7 @@ for testing. Ask me for access / feel free to swap them out.
 
 ## Debugging tricks
 
-To get `bbb` to spit out a full traceback on error, use `export BBB_TRACEBACK=1`.
+Set the environment variable `BBB_DEBUG=1` to get full tracebacks on error and debug logs.
 
 ## Releasing
 

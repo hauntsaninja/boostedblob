@@ -8,7 +8,7 @@ def main() -> None:
     try:
         run_bbb(sys.argv[1:])
     except Exception:
-        if os.environ.get("BBB_TRACEBACK"):
+        if os.environ.get("BBB_DEBUG") or os.environ.get("BBB_TRACEBACK"):
             raise
         sys.exit(1)
 

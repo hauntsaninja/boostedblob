@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -40,6 +41,8 @@ class TokenManager:
 @dataclass
 class Config:
     session: Optional[aiohttp.ClientSession] = None
+
+    debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
 
     chunk_size: int = 16 * MB
 

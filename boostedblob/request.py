@@ -5,6 +5,7 @@ import json
 import random
 import socket
 import sys
+import time
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, Iterator, Mapping, Optional, Sequence, Tuple
@@ -24,12 +25,15 @@ class Request:
     method: str
     url: str
     params: Mapping[str, str] = field(default_factory=dict)
+    # data can be large, so don't put it in the repr
     data: Any = field(repr=False, default_factory=lambda: None)
     # headers can contain authorisation details, so don't put them in the repr
-    headers: Mapping[str, str] = field(default_factory=dict, repr=False)
-    success_codes: Sequence[int] = (200,)
-    retry_codes: Sequence[int] = (408, 429, 500, 502, 503, 504)
-    failure_exceptions: Mapping[int, Exception] = field(default_factory=dict, repr=False)
+    headers: Mapping[str, str] = field(repr=False, default_factory=dict)
+    success_codes: Sequence[int] = field(repr=False, default_factory=lambda: (200,))
+    retry_codes: Sequence[int] = field(
+        repr=False, default_factory=lambda: (408, 429, 500, 502, 503, 504)
+    )
+    failure_exceptions: Mapping[int, Exception] = field(repr=False, default_factory=dict)
 
     @contextlib.asynccontextmanager
     async def execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
@@ -77,7 +81,7 @@ class Request:
             if attempt >= config.retry_limit:
                 raise error
 
-            if attempt + 1 >= 3:
+            if config.debug_mode or attempt + 1 >= 3:
                 print(
                     f"[boostedblob] Error when executing request on attempt {attempt + 1}, sleeping for "
                     f"{backoff:.1f}s before retrying. Details: {error}",
@@ -113,7 +117,16 @@ class Request:
             # automatically was not fun
             skip_auto_headers={"Content-Type"},
         )
+        if config.debug_mode:
+            print(f"[boostedblob] Making request: {self}", file=sys.stderr)
+            now = time.time()
         async with ctx as resp:
+            if config.debug_mode:
+                duration = time.time() - now
+                print(
+                    f"[boostedblob] Completed request, took {duration:.3f}s: {self}",
+                    file=sys.stderr,
+                )
             yield resp
 
 
