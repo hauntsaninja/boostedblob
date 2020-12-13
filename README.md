@@ -32,6 +32,8 @@ To enable tab completion, add the following to your shell config (replacing `zsh
 ```sh
 eval "$(bbb complete init zsh)"
 ```
+Note that the quotes are necessary. You can also inline the result of `bbb complete init zsh` into
+your shell config to make your shell startup a little faster.
 
 ## Contributing
 
