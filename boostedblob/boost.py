@@ -91,16 +91,17 @@ class BoostExecutor:
 
     async def run(self) -> None:
         loop = asyncio.get_event_loop()
+        not_ready_boostables: Deque[Boostable[Any, Any]] = Deque()
         pending: Set[Awaitable[Any]] = set()
 
         MIN_TIMEOUT = 0.01
         MAX_TIMEOUT = 0.1
         timeout = MIN_TIMEOUT
+
         while True:
             await self.semaphore.acquire()
             self.semaphore.release()
 
-            not_ready_boostables: Deque[Boostable[Any, Any]] = Deque()
             while self.boostables:
                 # We round robin the boostables until they're either all exhausted or not ready
                 try:
@@ -118,6 +119,7 @@ class BoostExecutor:
                     break
             else:
                 self.boostables = not_ready_boostables
+                not_ready_boostables = Deque()
 
             if self.semaphore.locked():
                 # If we broke out of the inner loop due to a lack of available concurrency, go to
