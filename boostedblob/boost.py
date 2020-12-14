@@ -9,6 +9,7 @@ from typing import (
     Deque,
     Generic,
     Iterator,
+    List,
     Optional,
     Set,
     Tuple,
@@ -91,8 +92,8 @@ class BoostExecutor:
 
     async def run(self) -> None:
         loop = asyncio.get_event_loop()
+        exhausted_boostables: List[Boostable[Any, Any]] = []
         not_ready_boostables: Deque[Boostable[Any, Any]] = Deque()
-        pending: Set[Awaitable[Any]] = set()
 
         MIN_TIMEOUT = 0.01
         MAX_TIMEOUT = 0.1
@@ -105,14 +106,14 @@ class BoostExecutor:
             while self.boostables:
                 # We round robin the boostables until they're either all exhausted or not ready
                 try:
-                    boost_task = self.boostables[0].provide_boost()
+                    self.boostables[0].provide_boost()
                 except NotReady:
                     not_ready_boostables.append(self.boostables.popleft())
                     continue
                 except Exhausted:
-                    self.boostables.popleft()
+                    exhausted_boostables.append(self.boostables.popleft())
                     continue
-                pending.add(boost_task)
+
                 await asyncio.sleep(0)
                 self.boostables.rotate(-1)
                 if self.semaphore.locked():
@@ -144,8 +145,10 @@ class BoostExecutor:
                 pass
             self.waiter = None
 
-        if pending:
-            await asyncio.wait(pending)
+        # Boostables are exhausted if their underlying iterable has been consumed, but there still
+        # might be tasks running. Wait for them to finish.
+        for boostable in exhausted_boostables:
+            await boostable.wait()
 
 
 class Exhausted(Exception):
@@ -228,6 +231,10 @@ class Boostable(Generic[T, R]):
 
         return self.enqueue(arg)
 
+    async def wait(self) -> None:
+        """Wait for all tasks in this boostable to finish."""
+        raise NotImplementedError
+
     def enqueue(self, arg: T) -> asyncio.Task[R]:
         """Start and return an asyncio task based on an element from the underlying."""
         raise NotImplementedError
@@ -257,6 +264,10 @@ class OrderedBoostable(Boostable[T, R]):
         super().__init__(func, iterable, semaphore)
         self.buffer: Deque[asyncio.Task[R]] = Deque()
 
+    async def wait(self) -> None:
+        if self.buffer:
+            await asyncio.wait(self.buffer)
+
     def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
         self.buffer.append(task)
@@ -271,9 +282,9 @@ class OrderedBoostable(Boostable[T, R]):
         return task.result()
 
     async def __anext__(self) -> R:
-        if not self.buffer:
+        while not self.buffer:
             arg = await next_underlying(self.iterable)
-            return await self.func(arg)
+            await self.enqueue(arg)
         return await self.buffer.popleft()
 
 
@@ -291,6 +302,10 @@ class UnorderedBoostable(Boostable[T, R]):
     def done_callback(self, task: asyncio.Task[R]) -> None:
         if self.waiter and not self.waiter.done():
             self.waiter.set_result(task)
+
+    async def wait(self) -> None:
+        if self.buffer:
+            await asyncio.wait(self.buffer)
 
     def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
