@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
-from typing import AsyncIterator, Awaitable, Callable, Dict, List
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List
 
 import pytest
 
@@ -434,13 +434,29 @@ async def test_composition_unordered_unordered():
 # ==============================
 
 
+def get_coro(t: asyncio.Task[Any]) -> Any:
+    if sys.version_info >= (3, 8):
+        return t.get_coro()
+    return t._coro
+
+
+@pytest.mark.asyncio
+async def test_boost_executor_shutdown():
+    async with bbb.BoostExecutor(4) as e:
+        e.map_ordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
+    assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
+        "test_boost_executor_shutdown"
+    }
+
+    async with bbb.BoostExecutor(4) as e:
+        e.map_unordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
+    assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
+        "test_boost_executor_shutdown"
+    }
+
+
 @pytest.mark.asyncio
 async def test_boost_executor_exception():
-    def get_coro(t):
-        if sys.version_info >= (3, 8):
-            return t.get_coro()
-        return t._coro
-
     with pytest.raises(ValueError):
         async with bbb.BoostExecutor(10):
             assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
