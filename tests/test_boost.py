@@ -429,6 +429,36 @@ async def test_composition_unordered_unordered():
         assert sorted(results) == list(range(N))
 
 
+@pytest.mark.asyncio
+async def test_composition_nested_ordered():
+    N = 10
+    results = []
+    async with bbb.BoostExecutor(3) as e:
+
+        async def work_spawner(n):
+            await pause()
+            return [x async for x in e.map_ordered(identity, iter(range(n)))]
+
+        it = e.map_ordered(work_spawner, iter(range(N)))
+        asyncio.create_task(collect(it, results))
+    assert list(map(len, results)) == list(range(10))
+
+
+@pytest.mark.asyncio
+async def test_composition_nested_unordered():
+    N = 10
+    results = []
+    async with bbb.BoostExecutor(3) as e:
+
+        async def work_spawner(n):
+            await pause()
+            return [x async for x in e.map_unordered(identity, iter(range(n)))]
+
+        it = e.map_unordered(work_spawner, iter(range(N)))
+        asyncio.create_task(collect(it, results))
+    assert sorted(map(len, results)) == list(range(10))
+
+
 # ==============================
 # miscellaneous
 # ==============================
