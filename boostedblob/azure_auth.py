@@ -114,7 +114,9 @@ def load_stored_subscription_ids() -> List[str]:
     return [sub["id"] for sub in subscriptions]
 
 
-async def get_access_token(account: str) -> Tuple[Any, float]:
+async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
+    account, container = cache_key
+
     now = time.time()
     creds = load_credentials()
 
@@ -126,7 +128,7 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
                     f"for account '{account}'"
                 )
         auth = (SHARED_KEY, creds["storageAccountKey"])
-        if await can_access_account(account, auth):
+        if await can_access_account(account, container, auth):
             return (auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
         raise RuntimeError(
             f"Found storage account key, but it was unable to access storage account: '{account}'"
@@ -136,7 +138,7 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         expiration_time = datetime.datetime.fromisoformat(creds["expiresOn"]).timestamp()
         if expiration_time > now:
             auth = (OAUTH_TOKEN, creds["accessToken"])
-            if await can_access_account(account, auth):
+            if await can_access_account(account, container, auth):
                 return (auth, expiration_time)
 
     if "refreshToken" in creds:
@@ -167,11 +169,13 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         auth = (OAUTH_TOKEN, result["access_token"])
 
         # for some azure accounts this access token does not work, check if it works
-        if await can_access_account(account, auth):
+        if await can_access_account(account, container, auth):
             return (auth, now + float(result["expires_in"]))
 
         # it didn't work, fall back to getting the storage keys
-        storage_account_key_auth = await get_storage_account_key(account=account, creds=creds)
+        storage_account_key_auth = await get_storage_account_key(
+            account=account, creds=creds, container_hint=container
+        )
         if storage_account_key_auth is not None:
             return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
@@ -182,11 +186,13 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
         async with req.execute() as resp:
             result = await resp.json()
         auth = (OAUTH_TOKEN, result["access_token"])
-        if await can_access_account(account, auth):
+        if await can_access_account(account, container, auth):
             return (auth, now + float(result["expires_in"]))
 
         # it didn't work, fall back to getting the storage keys
-        storage_account_key_auth = await get_storage_account_key(account=account, creds=creds)
+        storage_account_key_auth = await get_storage_account_key(
+            account=account, creds=creds, container_hint=container
+        )
         if storage_account_key_auth is not None:
             return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
@@ -195,28 +201,32 @@ async def get_access_token(account: str) -> Tuple[Any, float]:
     )
 
 
-async def can_access_account(account: str, auth: Tuple[str, str]) -> bool:
+async def can_access_account(account: str, container: Optional[str], auth: Tuple[str, str]) -> bool:
     from .request import Request, azurify_request
 
-    req = Request(
-        method="GET",
-        url=f"https://{account}.blob.core.windows.net",
-        params={"comp": "list", "maxresults": "1"},
-        success_codes=(200, 403),
-    )
-    req = await azurify_request(req, auth=auth)
+    if not container:
+        # if a container isn't specified, check that we can list the storage account
+        req = Request(
+            method="GET",
+            url=f"https://{account}.blob.core.windows.net",
+            params={"comp": "list", "maxresults": "1"},
+            success_codes=(200, 403),
+        )
+        req = await azurify_request(req, auth=auth)
 
-    async with req.execute() as resp:
-        if resp.status == 403:
-            return False
-        data = await resp.read()
+        async with req.execute() as resp:
+            if resp.status == 403:
+                return False
+            data = await resp.read()
 
-    out = xmltodict.parse(data)
-    if out["EnumerationResults"]["Containers"] is None:
-        # there are no containers in this storage account
-        # we can't test if we can access this storage account or not, so presume we can
-        return True
-    container = out["EnumerationResults"]["Containers"]["Container"]["Name"]
+        out = xmltodict.parse(data)
+        if out["EnumerationResults"]["Containers"] is None:
+            # there are no containers in this storage account
+            # we can't test if we can access this storage account or not, so presume we can
+            return True
+
+        # then also test that we can list a container. this is perhaps unnecessary...
+        container = out["EnumerationResults"]["Containers"]["Container"]["Name"]
 
     # https://myaccount.blob.core.windows.net/mycontainer?restype=container&comp=list
     req = Request(
@@ -322,7 +332,7 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
 
 
 async def get_storage_account_key(
-    account: str, creds: Mapping[str, Any]
+    account: str, creds: Mapping[str, Any], container_hint: Optional[str] = None
 ) -> Optional[Tuple[Any, float]]:
     from .request import Request, azurify_request
 
@@ -349,7 +359,7 @@ async def get_storage_account_key(
     for key in result["keys"]:
         if key["permissions"] == "FULL":
             storage_key_auth = (SHARED_KEY, key["value"])
-            if await can_access_account(account, storage_key_auth):
+            if await can_access_account(account, container_hint, storage_key_auth):
                 return storage_key_auth
             raise RuntimeError(
                 f"Found storage account key, but it was unable to access storage account: '{account}'"
@@ -409,19 +419,23 @@ def sign_request_with_shared_key(request: Request, key: str) -> str:
     return f"SharedKey {storage_account}:{signature}"
 
 
-async def get_sas_token(account: str) -> Tuple[Any, float]:
+async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
     from .globals import config
     from .request import azurify_request
 
-    auth = await config.azure_access_token_manager.get_token(key=account)
+    auth = await config.azure_access_token_manager.get_token(key=cache_key)
+    account, container = cache_key
 
     if auth[0] != OAUTH_TOKEN:
-        # TODO: update this to az storage blob list once we have container level auth
+        cmd = (
+            f"az storage container list --auth-mode login --account-name {account}"
+            if container is None
+            else f"az storage blob list --auth-mode login --account-name {account} --container {container}"
+        )
         raise RuntimeError(
             "Only OAuth tokens can be used to get SAS tokens. You should set the "
             "Blob Data Reader or Storage Blob Data Contributor IAM role. You can run "
-            f"`az storage container list --auth-mode login --account-name {account}` "
-            "to confirm that the missing role is the issue."
+            f"`{cmd}` to confirm that the missing role is the issue."
         )
 
     req = create_user_delegation_sas_request(account=account)
@@ -456,7 +470,7 @@ async def generate_signed_url(path: AzurePath) -> Tuple[str, datetime.datetime]:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/service-sas-examples
     from .globals import config
 
-    key = await config.azure_sas_token_manager.get_token(key=path.account)
+    key = await config.azure_sas_token_manager.get_token(key=(path.account, path.container or None))
     params = {
         "st": key["SignedStart"],
         "se": key["SignedExpiry"],

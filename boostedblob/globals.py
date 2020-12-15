@@ -7,7 +7,18 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterator, Optional, Tuple, TypeVar
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    Optional,
+    Tuple,
+    TypeVar,
+)
 
 import aiohttp
 
@@ -16,18 +27,19 @@ from . import azure_auth, google_auth
 MB = 2 ** 20
 
 
+T = TypeVar("T")
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class TokenManager:
+class TokenManager(Generic[T]):
     """Automatically refresh a token when it expires."""
 
-    def __init__(self, get_token_fn: Callable[[str], Awaitable[Tuple[Any, float]]]) -> None:
+    def __init__(self, get_token_fn: Callable[[T], Awaitable[Tuple[Any, float]]]) -> None:
         self._get_token_fn = get_token_fn
-        self._tokens: Dict[str, Any] = {}
-        self._expirations: Dict[str, float] = {}
+        self._tokens: Dict[T, Any] = {}
+        self._expirations: Dict[T, float] = {}
 
-    async def get_token(self, key: str) -> Any:
+    async def get_token(self, key: T) -> Any:
         now = time.time()
         expiration = self._expirations.get(key)
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
@@ -54,9 +66,11 @@ class Config:
     retry_limit: int = 15
 
     token_early_expiration_seconds: int = 300
-    azure_access_token_manager: TokenManager = TokenManager(azure_auth.get_access_token)
-    azure_sas_token_manager: TokenManager = TokenManager(azure_auth.get_sas_token)
-    google_access_token_manager: TokenManager = TokenManager(google_auth.get_access_token)
+    azure_access_token_manager = TokenManager[Tuple[str, Optional[str]]](
+        azure_auth.get_access_token
+    )
+    azure_sas_token_manager = TokenManager[Tuple[str, Optional[str]]](azure_auth.get_sas_token)
+    google_access_token_manager = TokenManager[str](google_auth.get_access_token)
 
 
 config: Config = Config()

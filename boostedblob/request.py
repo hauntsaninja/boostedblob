@@ -149,8 +149,10 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
     """Return a Request that can be submitted to Azure Blob."""
     u = urllib.parse.urlparse(request.url)
     account = u.netloc.split(".")[0]
+    parts = u.path.split("/", maxsplit=2)
+    container = parts[1] if len(parts) >= 2 else None
     if auth is None:
-        auth = await config.azure_access_token_manager.get_token(key=account)
+        auth = await config.azure_access_token_manager.get_token(key=(account, container))
     assert auth is not None
     kind, token = auth
 
