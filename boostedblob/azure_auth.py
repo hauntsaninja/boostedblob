@@ -416,7 +416,13 @@ async def get_sas_token(account: str) -> Tuple[Any, float]:
     auth = await config.azure_access_token_manager.get_token(key=account)
 
     if auth[0] != OAUTH_TOKEN:
-        raise RuntimeError("Only oauth tokens can be used to get SAS tokens")
+        # TODO: update this to az storage blob list once we have container level auth
+        raise RuntimeError(
+            "Only OAuth tokens can be used to get SAS tokens. You should set the "
+            "Blob Data Reader or Storage Blob Data Contributor IAM role. You can run "
+            f"`az storage container list --auth-mode login --account-name {account}` "
+            "to confirm that the missing role is the issue."
+        )
 
     req = create_user_delegation_sas_request(account=account)
     req = await azurify_request(req, auth=auth)
