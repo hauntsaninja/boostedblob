@@ -177,9 +177,7 @@ async def _local_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
                 path=entry_path.ensure_directory_like(), is_dir=True, is_file=False, stat=None
             )
         else:
-            yield DirEntry(
-                path=entry_path, is_dir=False, is_file=True, stat=Stat.from_local(entry.stat())
-            )
+            yield DirEntry(path=entry_path, is_dir=False, is_file=True, stat=_os_safe_stat(entry))
 
 
 # ==============================
@@ -257,7 +255,7 @@ async def _local_scantree(path: LocalPath) -> AsyncIterator[DirEntry]:
                     path=LocalPath(entry.path),
                     is_dir=False,
                     is_file=True,
-                    stat=Stat.from_local(entry.stat()),
+                    stat=_os_safe_stat(entry),
                 )
 
     for entry in inner(path_absolute):
@@ -487,3 +485,13 @@ def _glob_to_regex(pattern: str) -> str:
         else:
             regexp += re.escape(token)
     return regexp + r"/?$"
+
+
+def _os_safe_stat(entry: os.DirEntry[Any]) -> Optional[Stat]:
+    # stat can fail and we don't want that to affect listing operations
+    # In particular, we ran into the equivalent of the following raising FileNotFoundError:
+    # next(x for x in os.scandir("/") if x.name == ".VolumeIcon.icns").stat()
+    try:
+        return Stat.from_local(entry.stat())
+    except Exception:
+        return None
