@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+- Set BBB_DEBUG=1 env var to get debug level logging and tracebacks
+- Use Azure CLI's cached tokens, if present
+- Fix for edge case of stat failures while long listing
+- Fix for more reliably providing boosts to boostables after they declare themselves not ready
+- Increase default connection timeouts to better support slow connections
+- Improve error message for when we require an OAuth token on Azure
+- Improved documentation
+
 ## [v0.4.0]
 - Added tab completion! See README for details
 - Extend preliminary globbing support to containers, buckets
