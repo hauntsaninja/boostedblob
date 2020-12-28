@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import functools
+import os
 import sys
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, TypeVar
 
@@ -245,7 +246,9 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
                     pass
             print(path_str)
     except Exception:
-        pass  # ignore errors
+        # ignore errors, usually
+        if os.environ.get("BBB_DEBUG"):
+            raise
 
 
 def parse_options(args: List[str]) -> argparse.Namespace:
