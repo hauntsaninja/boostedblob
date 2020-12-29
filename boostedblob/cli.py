@@ -105,7 +105,9 @@ async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
 
 
 @sync_with_session
-async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def cp(
+    srcs: List[str], dst: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY
+) -> None:
     dst_obj = bbb.BasePath.from_str(dst)
     dst_is_dirlike = dst_obj.is_directory_like() or await bbb.isdir(dst_obj)
 
@@ -115,8 +117,18 @@ async def cp(srcs: List[str], dst: str, concurrency: int = DEFAULT_CONCURRENCY) 
 
         async def copy_wrapper(src: str) -> None:
             src_obj = bbb.BasePath.from_str(src)
+            if is_glob(src):
+                if not dst_is_dirlike:
+                    raise ValueError(f"{dst_obj} is not a directory")
+                async for path in bbb.copying.copyglob_iterator(src_obj, dst_obj, executor):
+                    if not quiet:
+                        print(path)
+                return
+
             dst_file_obj = dst_obj / src_obj.name if dst_is_dirlike else dst_obj
             await bbb.copyfile(src_obj, dst_file_obj, executor, overwrite=True)
+            if not quiet:
+                print(src_obj)
 
         await bbb.boost.consume(executor.map_unordered(copy_wrapper, iter(srcs)))
 
@@ -468,6 +480,7 @@ eval "$(bbb complete init zsh)"
     subparser.set_defaults(command=cp)
     subparser.add_argument("srcs", nargs="+", help="File(s) to copy from")
     subparser.add_argument("dst", help="File or directory to copy to")
+    subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
     subparser = subparsers.add_parser(
