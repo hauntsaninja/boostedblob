@@ -32,6 +32,10 @@ def sync_with_session(fn: F) -> F:
 DEFAULT_CONCURRENCY = 100
 
 
+def is_glob(path: str) -> bool:
+    return "*" in path
+
+
 async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bool) -> None:
     total = 0
     num_files = 0
@@ -49,7 +53,7 @@ async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bo
 @sync_with_session
 async def ls(path: str, long: bool = False, machine: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
-    if "*" in path:
+    if is_glob(path):
         it = bbb.listing.globscandir(path_obj)
         if long:
             await print_long(it, human_readable=not machine)
@@ -129,20 +133,35 @@ async def cptree(
 
 
 @sync_with_session
-async def rm(paths: List[str], concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def rm(paths: List[str], quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     async with bbb.BoostExecutor(concurrency) as executor:
-        if len(paths) == 1 and "*" in paths[0]:
-            it = bbb.boost.EagerAsyncIterator(bbb.listing.globscandir(paths[0]))
-            await bbb.boost.consume(executor.map_unordered(lambda x: bbb.remove(x.path), it))
-        else:
-            await bbb.boost.consume(executor.map_unordered(bbb.remove, iter(paths)))
+
+        async def remove_wrapper(path: str) -> None:
+            path_obj = bbb.BasePath.from_str(path)
+            if is_glob(path):
+                async for p in bbb.delete.glob_remove(path_obj, executor):
+                    if not quiet:
+                        print(p)
+                return
+            await bbb.remove(path_obj)
+            if not quiet:
+                print(path_obj)
+
+        await bbb.boost.consume(executor.map_unordered(remove_wrapper, iter(paths)))
 
 
 @sync_with_session
 async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     path_obj = bbb.BasePath.from_str(path)
     async with bbb.BoostExecutor(concurrency) as executor:
-        if isinstance(path_obj, bbb.CloudPath):
+        if is_glob(path):
+            # this will fail if the glob matches a directory, which is a little contra the spirit of
+            # rmtree. but maybe the best way to do that (and least likely to result in accidents) is
+            # through recursive wildcards
+            async for p in bbb.delete.glob_remove(path_obj, executor):
+                if not quiet:
+                    print(p)
+        elif isinstance(path_obj, bbb.CloudPath):
             async for p in bbb.delete.rmtree_iterator(path_obj, executor):
                 if not quiet:
                     print(p)
@@ -472,6 +491,7 @@ eval "$(bbb complete init zsh)"
     )
     subparser.set_defaults(command=rm)
     subparser.add_argument("paths", nargs="+", help="File(s) to delete")
+    subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
     subparser = subparsers.add_parser(
