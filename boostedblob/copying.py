@@ -256,7 +256,6 @@ async def copytree_iterator(
     if isinstance(src, LocalPath):
         src = LocalPath(os.path.abspath(src.path))
 
-    dirpath = src.ensure_directory_like()
     subpath_exists = False
 
     async def copy_wrapper(entry: DirEntry) -> BasePath:
@@ -265,6 +264,7 @@ async def copytree_iterator(
 
         assert isinstance(dst, BasePath)
         if entry.is_dir:
+            # Filter out directory marker files
             return entry.path
         size = entry.stat.size if entry.stat else None
         await copyfile(
@@ -272,7 +272,7 @@ async def copytree_iterator(
         )
         return entry.path
 
-    async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(scantree(dirpath))):
+    async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(scantree(src))):
         yield path
 
     # If we find nothing, then run some checks so we throw the appropriate error.
