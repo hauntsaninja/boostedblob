@@ -30,21 +30,46 @@ async def consume(iterable: AsyncIterator[Any]) -> None:
 class BoostExecutor:
     """BoostExecutor implements a concurrent.futures-like interface for running async tasks.
 
-    The idea is: you want to run not more than some number of tasks at a time. However, if you have
-    spare capacity, you want to redistribute it to tasks you're running. For instance, when
-    downloading chunks of a file, we could use spare capacity to proactively download future chunks.
+    The idea is: you want to run a limited number of tasks at a time. Moreover, if you have spare
+    capacity, you want to redistribute it to tasks you're running. For instance, when downloading
+    chunks of a file, we could use spare capacity to proactively download future chunks. That is,
+    instead of the following serial code:
+    ```
+    for chunk in iterable_of_chunks:
+        data = await download_func(chunk)
+        write(data)
+    ```
+    You can instead do:
+    ```
+    async with BoostExecutor(4) as executor:
+        async for data in executor.map_ordered(download_func, iterable_of_chunks):
+            write(data)
+    ```
 
-    Example usage:
-    ```
-    async with BoostExecutor() as executor:
-        async for chunk in executor.map_ordered(func, iterable):
-            write(chunk)
-    ```
+    The number supplied to BoostExecutor is the number of units of concurrency you wish to maintain.
+    That is, using ``BoostExecutor(1)`` would make the above example function approximately similar
+    to the serial code.
 
     """
 
     def __init__(self, concurrency: int) -> None:
         assert concurrency > 0
+        # Okay, so this is a little tricky. We take away one unit of concurrency now, and give it
+        # back when you iterate over a boostable. You can think of concurrency - 1 as the number of
+        # units of "background" concurrency. When our "foreground" starts iterating over a
+        # boostable, for instance, with an async for loop, it donates one unit of concurrency to the
+        # cause for the duration of the iteration.
+        # Why this rigmarole? To avoid deadlocks on reentrancy. If a boostable spawns more work on
+        # the same executor and then blocks on that work, it's holding a unit of concurrency while
+        # trying to acquire another one. If that happens enough times, we deadlock. For examples,
+        # see test_composition_nested_(un)?ordered.
+        # To solve this, we treat Boostable.__aiter__ as an indicator that we are entrant. We then
+        # donate a unit of concurrency by releasing the semaphore. Conceptually, this is our
+        # "foreground" or "re-entrant" unit of concurrency. We give this back when the Boostable is
+        # done iterating. We could be more granular and do this on every Boostable.__anext__, but
+        # that's a lot more overhead, makes iteration less predictable and can result in what feels
+        # like unnecessary blocking. We could also do something complicated using contextvars, but
+        # that would have to be something complicated and would have to use contextvars.
         self.semaphore = asyncio.Semaphore(concurrency - 1)
         self.boostables: Deque[Boostable[Any, Any]] = Deque()
 
@@ -253,6 +278,7 @@ class Boostable(Generic[T, R]):
         raise NotImplementedError
 
     def __aiter__(self) -> AsyncIterator[R]:
+        # See comment in BoostExecutor.__init__
         self.semaphore.release()
         return self
 
@@ -292,6 +318,7 @@ class OrderedBoostable(Boostable[T, R]):
             try:
                 arg = await next_underlying(self.iterable)
             except StopAsyncIteration:
+                # See comment in BoostExecutor.__init__
                 await self.semaphore.acquire()
                 raise
             await self.enqueue(arg)
@@ -341,6 +368,7 @@ class UnorderedBoostable(Boostable[T, R]):
             try:
                 arg = await next_underlying(self.iterable)
             except StopAsyncIteration:
+                # See comment in BoostExecutor.__init__
                 await self.semaphore.acquire()
                 raise
             self.enqueue(arg)
