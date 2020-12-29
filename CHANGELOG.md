@@ -1,12 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-- Set BBB_DEBUG=1 env var to get debug level logging and tracebacks
+
+- Support container level auth for Azure
 - Use Azure CLI's cached tokens, if present
-- Fix for edge case of stat failures while long listing
-- Fix for more reliably providing boosts to boostables after they declare themselves not ready
-- Increase default connection timeouts to better support slow connections
 - Improve error message for when we require an OAuth token on Azure
+- Increase default connection timeouts to better support slow connections
+- Set BBB_DEBUG=1 env var to get debug level logging and tracebacks
+- Fix for edge case of stat failures while long listing
+- Fix for deadlock issue with low concurrency and boostables that spawn boostables
+- Fix for more reliably providing boosts to boostables after they declare themselves not ready
+- Reduce BoostExecutor memory usage
+- More tests for BoostExecutor
 - Improved documentation
 
 ## [v0.4.0]
