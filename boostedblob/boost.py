@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import (
     Any,
+    AsyncIterable,
     AsyncIterator,
     Awaitable,
     Callable,
@@ -22,7 +23,7 @@ T = TypeVar("T")
 R = TypeVar("R")
 
 
-async def consume(iterable: AsyncIterator[Any]) -> None:
+async def consume(iterable: AsyncIterable[Any]) -> None:
     async for _ in iterable:
         pass
 
@@ -277,13 +278,22 @@ class Boostable(Generic[T, R]):
         """
         raise NotImplementedError
 
-    def __aiter__(self) -> AsyncIterator[R]:
-        # See comment in BoostExecutor.__init__
-        self.semaphore.release()
-        return self
-
-    async def __anext__(self) -> R:
+    async def blocking_dequeue(self) -> R:
+        """Dequeue a result, waiting if necessary."""
         raise NotImplementedError
+
+    def __aiter__(self) -> AsyncIterator[R]:
+        async def iterator() -> AsyncIterator[R]:
+            try:
+                self.semaphore.release()
+                while True:
+                    yield await self.blocking_dequeue()
+            except StopAsyncIteration:
+                pass
+            finally:
+                await self.semaphore.acquire()
+
+        return iterator()
 
 
 class OrderedBoostable(Boostable[T, R]):
@@ -313,14 +323,9 @@ class OrderedBoostable(Boostable[T, R]):
         task = self.buffer.popleft()
         return task.result()
 
-    async def __anext__(self) -> R:
+    async def blocking_dequeue(self) -> R:
         while not self.buffer:
-            try:
-                arg = await next_underlying(self.iterable)
-            except StopAsyncIteration:
-                # See comment in BoostExecutor.__init__
-                await self.semaphore.acquire()
-                raise
+            arg = await next_underlying(self.iterable)
             await self.enqueue(arg)
         return await self.buffer.popleft()
 
@@ -363,14 +368,9 @@ class UnorderedBoostable(Boostable[T, R]):
         self.buffer.remove(task)
         return task.result()
 
-    async def __anext__(self) -> R:
+    async def blocking_dequeue(self) -> R:
         if not self.buffer:
-            try:
-                arg = await next_underlying(self.iterable)
-            except StopAsyncIteration:
-                # See comment in BoostExecutor.__init__
-                await self.semaphore.acquire()
-                raise
+            arg = await next_underlying(self.iterable)
             self.enqueue(arg)
 
         loop = asyncio.get_event_loop()
@@ -429,7 +429,9 @@ BoostUnderlying = Union[Iterator[T], Boostable[Any, T], EagerAsyncIterator[T]]
 
 async def next_underlying(iterable: BoostUnderlying[T]) -> T:
     """Like ``next``, but abstracts over a BoostUnderlying."""
-    if isinstance(iterable, (Boostable, EagerAsyncIterator)):
+    if isinstance(iterable, Boostable):
+        return await iterable.blocking_dequeue()
+    if isinstance(iterable, EagerAsyncIterator):
         return await iterable.__anext__()
     if isinstance(iterable, Iterator):
         try:

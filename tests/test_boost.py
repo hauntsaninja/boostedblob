@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List
+from typing import Any, AsyncIterable, AsyncIterator, Awaitable, Callable, Dict, List
 
 import pytest
 
@@ -32,7 +32,7 @@ async def identity(x: int) -> int:
     return x
 
 
-async def collect(it: AsyncIterator[int], results: List[int]) -> None:
+async def collect(it: AsyncIterable[int], results: List[int]) -> None:
     """Collect the results of ``it`` in the ``results`` list."""
     async for i in it:
         results.append(i)
@@ -48,13 +48,11 @@ async def test_map_ordered_single():
     futures = {}
     async with bbb.BoostExecutor(1) as e:
         assert e.semaphore._value == 0  # type: ignore
-        it = e.map_ordered(get_futures_fn(futures), iter([0, 1]))
-        it.__aiter__()
-        assert e.semaphore._value == 1  # type: ignore
+        it = e.map_ordered(get_futures_fn(futures), iter([0, 1])).__aiter__()
         assert not futures
         await pause()
         assert e.semaphore._value == 0  # type: ignore
-        assert set(futures) == {0}
+        assert set(futures) == set()
 
         next_task = asyncio.create_task(it.__anext__())
         await pause()
