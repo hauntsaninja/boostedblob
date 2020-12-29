@@ -292,22 +292,22 @@ async def _local_listtree(path: LocalPath) -> AsyncIterator[LocalPath]:
 
 
 # ==============================
-# globscandir
+# glob_scandir
 # ==============================
 
 
 @pathdispatch
-def globscandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
+def glob_scandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
     """Iterate over a glob in a directory.
 
-    :param path: The directory we want to glob in.
+    :param path: The glob to match against.
 
     """
     raise ValueError(f"Unsupported path: {path}")
 
 
-@globscandir.register  # type: ignore
-async def _azure_globscandir(path: AzurePath) -> AsyncIterator[DirEntry]:
+@glob_scandir.register  # type: ignore
+async def _azure_glob_scandir(path: AzurePath) -> AsyncIterator[DirEntry]:
     if "*" in path.account:
         raise ValueError("Cannot use wildcard in storage account")
     if "*" in path.container:
@@ -333,8 +333,8 @@ async def _azure_globscandir(path: AzurePath) -> AsyncIterator[DirEntry]:
             yield entry
 
 
-@globscandir.register  # type: ignore
-async def _google_globscandir(path: GooglePath) -> AsyncIterator[DirEntry]:
+@glob_scandir.register  # type: ignore
+async def _google_glob_scandir(path: GooglePath) -> AsyncIterator[DirEntry]:
     if "*" in path.bucket:
         if path.blob:
             raise ValueError("Cannot use wildcard in bucket")
@@ -358,8 +358,8 @@ async def _google_globscandir(path: GooglePath) -> AsyncIterator[DirEntry]:
             yield entry
 
 
-@globscandir.register  # type: ignore
-async def _local_globscandir(path: LocalPath) -> AsyncIterator[DirEntry]:
+@glob_scandir.register  # type: ignore
+async def _local_glob_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
     if "*" in os.path.dirname(path):
         raise ValueError("Currently only supports wildcards inside the filename")
     if "*" not in path.name:

@@ -3,7 +3,7 @@ import shutil
 from typing import AsyncIterator, Union
 
 from .boost import BoostExecutor, EagerAsyncIterator, consume
-from .listing import globscandir, listtree
+from .listing import glob_scandir, listtree
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isfile, pathdispatch
 from .request import Request, azurify_request, googlify_request
 
@@ -71,7 +71,7 @@ async def glob_remove(
 
     """
     async for subpath in executor.map_unordered(
-        lambda x: remove(x.path), EagerAsyncIterator(globscandir(path))
+        lambda x: remove(x.path), EagerAsyncIterator(glob_scandir(path))
     ):
         yield subpath
 

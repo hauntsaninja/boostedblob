@@ -54,7 +54,7 @@ async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bo
 async def ls(path: str, long: bool = False, machine: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
     if is_glob(path):
-        it = bbb.listing.globscandir(path_obj)
+        it = bbb.listing.glob_scandir(path_obj)
         if long:
             await print_long(it, human_readable=not machine)
         else:
@@ -248,7 +248,7 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
         path_to_complete += "*"
 
     try:
-        async for entry in bbb.listing.globscandir(path_to_complete):
+        async for entry in bbb.listing.glob_scandir(path_to_complete):
             # bash won't let you complete before a colon without setting COMP_WORDBREAKS globally
             # instead, we just make sure our completion matches the part before the colon
             # to do that, we special case az:// paths
