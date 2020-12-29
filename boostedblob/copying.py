@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
 from . import azure_auth
 from .boost import BoostExecutor, EagerAsyncIterator, consume
 from .globals import config
-from .listing import DirEntry, scantree
+from .listing import DirEntry, glob_scandir, scantree
 from .path import (
     AzurePath,
     BasePath,
@@ -317,3 +317,36 @@ async def _local_copytree(
     assert isinstance(dst, LocalPath)
     kwargs = {} if sys.version_info < (3, 8) else {"dirs_exist_ok": True}
     shutil.copytree(src, dst, **kwargs)  # type: ignore[arg-type]
+
+
+# ==============================
+# copyglob
+# ==============================
+
+
+async def copyglob_iterator(
+    src: BasePath, dst: Union[BasePath, str], executor: BoostExecutor
+) -> AsyncIterator[BasePath]:
+    """Copies files matching the glob ``src`` into the directory ``dst``.
+
+    :param src: The glob to match against.
+    :param dst: The destination directory.
+    :param executor: An executor.
+
+    """
+    if isinstance(dst, str):
+        dst = BasePath.from_str(dst)
+    dst = dst.ensure_directory_like()
+
+    async def copy_wrapper(entry: DirEntry) -> Optional[BasePath]:
+        assert isinstance(dst, BasePath)
+        if entry.is_dir:
+            # Skip directories (or marker files for directories)
+            return None
+        size = entry.stat.size if entry.stat else None
+        await copyfile(entry.path, dst / entry.path.name, executor, size=size, overwrite=True)
+        return entry.path
+
+    async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(glob_scandir(src))):
+        if path:
+            yield path
