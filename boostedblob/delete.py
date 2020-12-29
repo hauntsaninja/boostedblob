@@ -3,7 +3,7 @@ import shutil
 from typing import AsyncIterator, Union
 
 from .boost import BoostExecutor, EagerAsyncIterator, consume
-from .listing import listtree
+from .listing import globscandir, listtree
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isfile, pathdispatch
 from .request import Request, azurify_request, googlify_request
 
@@ -54,6 +54,26 @@ async def _google_remove(path: GooglePath) -> GooglePath:
 async def _local_remove(path: LocalPath) -> LocalPath:
     os.remove(path)
     return path
+
+
+# ==============================
+# glob_remove
+# ==============================
+
+
+async def glob_remove(
+    path: Union[BasePath, str], executor: BoostExecutor
+) -> AsyncIterator[BasePath]:
+    """Delete all files that match the glob ``path``.
+
+    :param path: The glob to match against.
+    :param executor: An executor.
+
+    """
+    async for subpath in executor.map_unordered(
+        lambda x: remove(x.path), EagerAsyncIterator(globscandir(path))
+    ):
+        yield subpath
 
 
 # ==============================
