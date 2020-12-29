@@ -47,8 +47,10 @@ async def collect(it: AsyncIterator[int], results: List[int]) -> None:
 async def test_map_ordered_single():
     futures = {}
     async with bbb.BoostExecutor(1) as e:
-        assert e.semaphore._value == 1  # type: ignore
+        assert e.semaphore._value == 0  # type: ignore
         it = e.map_ordered(get_futures_fn(futures), iter([0, 1]))
+        it.__aiter__()
+        assert e.semaphore._value == 1  # type: ignore
         assert not futures
         await pause()
         assert e.semaphore._value == 0  # type: ignore
@@ -79,7 +81,7 @@ async def test_map_ordered():
     futures = {}
     results = []
     async with bbb.BoostExecutor(2) as e:
-        assert e.semaphore._value == 2  # type: ignore
+        assert e.semaphore._value == 1  # type: ignore
         it = e.map_ordered(get_futures_fn(futures), iter(range(4)))
         asyncio.create_task(collect(it, results))
         await pause()
@@ -184,7 +186,7 @@ async def test_map_unordered():
     futures = {}
     results = []
     async with bbb.BoostExecutor(3) as e:
-        assert e.semaphore._value == 3  # type: ignore
+        assert e.semaphore._value == 2  # type: ignore
         it = e.map_unordered(get_futures_fn(futures), iter(range(5)))
         asyncio.create_task(collect(it, results))
         await pause()

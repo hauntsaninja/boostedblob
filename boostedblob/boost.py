@@ -45,7 +45,7 @@ class BoostExecutor:
 
     def __init__(self, concurrency: int) -> None:
         assert concurrency > 0
-        self.semaphore = asyncio.Semaphore(concurrency)
+        self.semaphore = asyncio.Semaphore(concurrency - 1)
         self.boostables: Deque[Boostable[Any, Any]] = Deque()
 
         self.waiter: Optional[asyncio.Future[None]] = None
@@ -207,6 +207,7 @@ class Boostable(Generic[T, R]):
 
         self.func = wrapper
         self.iterable = iterable
+        self.semaphore = semaphore
 
     def provide_boost(self) -> asyncio.Task[Any]:
         """Start an asyncio task to help speed up this boostable.
@@ -252,6 +253,7 @@ class Boostable(Generic[T, R]):
         raise NotImplementedError
 
     def __aiter__(self) -> AsyncIterator[R]:
+        self.semaphore.release()
         return self
 
     async def __anext__(self) -> R:
@@ -287,7 +289,11 @@ class OrderedBoostable(Boostable[T, R]):
 
     async def __anext__(self) -> R:
         while not self.buffer:
-            arg = await next_underlying(self.iterable)
+            try:
+                arg = await next_underlying(self.iterable)
+            except StopAsyncIteration:
+                await self.semaphore.acquire()
+                raise
             await self.enqueue(arg)
         return await self.buffer.popleft()
 
@@ -332,7 +338,11 @@ class UnorderedBoostable(Boostable[T, R]):
 
     async def __anext__(self) -> R:
         if not self.buffer:
-            arg = await next_underlying(self.iterable)
+            try:
+                arg = await next_underlying(self.iterable)
+            except StopAsyncIteration:
+                await self.semaphore.acquire()
+                raise
             self.enqueue(arg)
 
         loop = asyncio.get_event_loop()
