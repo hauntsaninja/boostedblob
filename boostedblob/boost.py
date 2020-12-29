@@ -150,6 +150,10 @@ class BoostExecutor:
         for boostable in exhausted_boostables:
             await boostable.wait()
 
+        # Yield, so that iterations over boostables are likely to have finished by the time we exit
+        # the BoostExecutor context
+        await asyncio.sleep(0)
+
 
 class Exhausted(Exception):
     pass
