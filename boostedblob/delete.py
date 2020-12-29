@@ -13,7 +13,7 @@ from .request import Request, azurify_request, googlify_request
 
 
 @pathdispatch
-async def remove(path: Union[BasePath, str]) -> None:
+async def remove(path: Union[BasePath, str]) -> BasePath:
     """Delete the file ``path``.
 
     :param path: The path to delete.
@@ -23,7 +23,7 @@ async def remove(path: Union[BasePath, str]) -> None:
 
 
 @remove.register  # type: ignore
-async def _azure_remove(path: AzurePath) -> None:
+async def _azure_remove(path: AzurePath) -> AzurePath:
     request = await azurify_request(
         Request(
             method="DELETE",
@@ -33,10 +33,11 @@ async def _azure_remove(path: AzurePath) -> None:
         )
     )
     await request.execute_reponseless()
+    return path
 
 
 @remove.register  # type: ignore
-async def _google_remove(path: GooglePath) -> None:
+async def _google_remove(path: GooglePath) -> GooglePath:
     request = await googlify_request(
         Request(
             method="DELETE",
@@ -46,11 +47,13 @@ async def _google_remove(path: GooglePath) -> None:
         )
     )
     await request.execute_reponseless()
+    return path
 
 
 @remove.register  # type: ignore
-async def _local_remove(path: LocalPath) -> None:
+async def _local_remove(path: LocalPath) -> LocalPath:
     os.remove(path)
+    return path
 
 
 # ==============================
@@ -58,7 +61,7 @@ async def _local_remove(path: LocalPath) -> None:
 # ==============================
 
 
-async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIterator[CloudPath]:
+async def rmtree_iterator(path: BasePath, executor: BoostExecutor) -> AsyncIterator[BasePath]:
     """Delete the directory ``path``.
 
     Yields the deleted paths as they are deleted.
@@ -69,13 +72,8 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
     """
     dirpath = path.ensure_directory_like()
 
-    async def remove_wrapper(entry: CloudPath) -> CloudPath:
-        await remove(entry)
-        return entry
-
-    it: EagerAsyncIterator[CloudPath] = EagerAsyncIterator(listtree(dirpath))  # type: ignore
     try:
-        async for subpath in executor.map_unordered(remove_wrapper, it):
+        async for subpath in executor.map_unordered(remove, EagerAsyncIterator(listtree(dirpath))):
             yield subpath
     except FileNotFoundError:
         if await isfile(path):

@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, cast
 
 import pytest
 
@@ -37,7 +38,7 @@ async def test_sync(any_dir, other_any_dir):
 
         await asyncio.wait(
             [
-                bbb.remove(any_dir / "f2"),
+                cast(Any, bbb.remove(any_dir / "f2")),
                 helpers.unsafe_create_file(any_dir / "f1", b"sizesame"),
                 helpers.unsafe_create_file(any_dir / "delta" / "f9", b"differentsize"),
             ]
