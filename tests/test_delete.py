@@ -12,6 +12,10 @@ from . import helpers
 async def test_remove(any_dir):
     assert [p async for p in bbb.listdir(any_dir)] == []
     helpers.create_file(any_dir / "alpha")
+
+    with pytest.raises((IsADirectoryError, PermissionError)):
+        await bbb.remove(any_dir)
+
     assert [p.name async for p in bbb.listdir(any_dir)] == ["alpha"]
     await bbb.remove(any_dir / "alpha")
     assert [p async for p in bbb.listdir(any_dir)] == []

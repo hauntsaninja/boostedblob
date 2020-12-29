@@ -4,7 +4,7 @@ from typing import AsyncIterator, Union
 
 from .boost import BoostExecutor, EagerAsyncIterator, consume
 from .listing import glob_scandir, listtree
-from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isfile, pathdispatch
+from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isdir, isfile, pathdispatch
 from .request import Request, azurify_request, googlify_request
 
 # ==============================
@@ -32,7 +32,13 @@ async def _azure_remove(path: AzurePath) -> AzurePath:
             failure_exceptions={404: FileNotFoundError(path)},
         )
     )
-    await request.execute_reponseless()
+    try:
+        await request.execute_reponseless()
+    except FileNotFoundError:
+        # Note that this continues to allow the deletion of directory marker files
+        if await isdir(path):
+            raise IsADirectoryError(path) from None
+        raise
     return path
 
 
@@ -46,7 +52,13 @@ async def _google_remove(path: GooglePath) -> GooglePath:
             failure_exceptions={404: FileNotFoundError(path)},
         )
     )
-    await request.execute_reponseless()
+    try:
+        await request.execute_reponseless()
+    except FileNotFoundError:
+        # Note that this continues to allow the deletion of directory marker files
+        if await isdir(path):
+            raise IsADirectoryError(path) from None
+        raise
     return path
 
 
