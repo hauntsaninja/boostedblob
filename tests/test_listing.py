@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 import boostedblob as bbb
@@ -67,6 +69,34 @@ async def test_google_list_buckets():
     with helpers.tmp_google_dir() as google_dir:
         bucket = GooglePath("", "")
         assert google_dir.bucket in [p.name async for p in bbb.listdir(bucket)]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_glob_scandir(any_dir):
+    assert [p async for p in bbb.listdir(any_dir)] == []
+
+    await asyncio.wait(
+        [
+            helpers.unsafe_create_file(any_dir / "A.X"),
+            helpers.unsafe_create_file(any_dir / "A.Y"),
+            helpers.unsafe_create_file(any_dir / "B.X"),
+            helpers.unsafe_create_file(any_dir / "B.Y"),
+        ]
+    )
+
+    async def glob(pattern):
+        return sorted([p.path.name async for p in bbb.listing.glob_scandir(pattern)])
+
+    assert await glob(any_dir / "*X") == ["A.X", "B.X"]
+    assert await glob(any_dir / "A*") == ["A.X", "A.Y"]
+    assert await glob(any_dir / "A*X") == ["A.X"]
+    assert await glob(any_dir) == ["A.X", "A.Y", "B.X", "B.Y"]
+
+    if isinstance(any_dir, AzurePath):
+        assert any_dir.container in (await glob(AzurePath(any_dir.account, "*", "")))
+    if isinstance(any_dir, GooglePath):
+        assert any_dir.bucket in (await glob(GooglePath("*", "")))
 
 
 # TODO: test scandir
