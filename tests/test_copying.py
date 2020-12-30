@@ -66,3 +66,23 @@ async def test_copytree(any_dir, other_any_dir):
         return sorted([p.relative_to(base) async for p in bbb.listtree(d)])
 
     assert await _listtree(any_dir, any_dir) == await _listtree(other_any_dir, other_any_dir)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_copyglob():
+    with helpers.tmp_azure_dir() as dir1:
+        with helpers.tmp_azure_dir() as dir2:
+            await asyncio.wait(
+                [
+                    helpers.unsafe_create_file(dir1 / "f1"),
+                    helpers.unsafe_create_file(dir1 / "f2"),
+                    helpers.unsafe_create_file(dir1 / "g3"),
+                ]
+            )
+
+            async with bbb.BoostExecutor(100) as e:
+                copied = [p async for p in bbb.copying.copyglob_iterator(dir1 / "f*", dir2, e)]
+                assert sorted([p.relative_to(dir1) for p in copied]) == ["f1", "f2"]
+                contents = sorted([p.relative_to(dir2) async for p in bbb.listtree(dir2)])
+                assert contents == ["f1", "f2"]
