@@ -115,14 +115,14 @@ def test_complete():
         az_path_str = str(azure_dir.ensure_directory_like().to_az_str())
 
         # test a normal completion
-        expected_output = [f"{azure_dir}/", f"{azure_dir}/somefile"]
+        expected_output = [f"{azure_dir}/somefile"]
         output = run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", path_str])
         assert output.splitlines() == expected_output
         output = run_bbb(["complete", "command", "bash", 7 + len(path_str), f"bbb ls {path_str}"])
         assert [f"https:{p}" for p in output.splitlines()] == expected_output
 
         # test a completion with an az:// url
-        expected_output = [az_path_str, f"{az_path_str}somefile"]
+        expected_output = [f"{az_path_str}somefile"]
         output = run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", az_path_str])
         assert output.splitlines() == expected_output
         output = run_bbb(

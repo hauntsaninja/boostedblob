@@ -312,7 +312,7 @@ async def _azure_glob_scandir(path: AzurePath) -> AsyncIterator[DirEntry]:
         raise ValueError("Cannot use wildcard in storage account")
     if "*" in path.container:
         if path.blob:
-            raise ValueError("Cannot use wildcard in container")
+            raise ValueError("Currently only supports wildcards inside the filename")
         pattern = _glob_to_regex(path.container)
         async for entry in _azure_list_containers(path.account):
             assert isinstance(entry.path, type(path))
@@ -329,6 +329,9 @@ async def _azure_glob_scandir(path: AzurePath) -> AsyncIterator[DirEntry]:
     prefix = AzurePath(account=path.account, container=path.container, blob=blob_prefix)
     async for entry in list_blobs(prefix, delimiter="/", allow_prefix=True):
         assert isinstance(entry.path, type(path))
+        if entry.path == path.parent.ensure_directory_like():
+            # skip directory file marker of the parent, if present
+            continue
         if re.match(pattern, entry.path.name):
             yield entry
 
@@ -337,7 +340,7 @@ async def _azure_glob_scandir(path: AzurePath) -> AsyncIterator[DirEntry]:
 async def _google_glob_scandir(path: GooglePath) -> AsyncIterator[DirEntry]:
     if "*" in path.bucket:
         if path.blob:
-            raise ValueError("Cannot use wildcard in bucket")
+            raise ValueError("Currently only supports wildcards inside the filename")
         pattern = _glob_to_regex(path.bucket)
         async for entry in _google_list_buckets():
             assert isinstance(entry.path, type(path))
@@ -354,6 +357,9 @@ async def _google_glob_scandir(path: GooglePath) -> AsyncIterator[DirEntry]:
     prefix = GooglePath(bucket=path.bucket, blob=blob_prefix)
     async for entry in list_blobs(prefix, delimiter="/", allow_prefix=True):
         assert isinstance(entry.path, type(path))
+        if entry.path == path.parent.ensure_directory_like():
+            # skip directory file marker of the parent, if present
+            continue
         if re.match(pattern, entry.path.name):
             yield entry
 
