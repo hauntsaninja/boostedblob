@@ -131,14 +131,14 @@ class BoostExecutor:
 
             while self.boostables:
                 # We round robin the boostables until they're either all exhausted or not ready
-                try:
-                    self.boostables[0].provide_boost()
-                except NotReady:
+                task = self.boostables[0].provide_boost()
+                if isinstance(task, NotReady):
                     not_ready_boostables.append(self.boostables.popleft())
                     continue
-                except Exhausted:
+                if isinstance(task, Exhausted):
                     exhausted_boostables.append(self.boostables.popleft())
                     continue
+                assert isinstance(task, asyncio.Task)
 
                 await asyncio.sleep(0)
                 self.boostables.rotate(-1)
@@ -181,11 +181,11 @@ class BoostExecutor:
         await asyncio.sleep(0)
 
 
-class Exhausted(Exception):
+class Exhausted:
     pass
 
 
-class NotReady(Exception):
+class NotReady:
     pass
 
 
@@ -235,7 +235,7 @@ class Boostable(Generic[T, R]):
         self.iterable = iterable
         self.semaphore = semaphore
 
-    def provide_boost(self) -> asyncio.Task[Any]:
+    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
         """Start an asyncio task to help speed up this boostable.
 
         Raises NotReady if we can't make use of a boost currently.
@@ -243,20 +243,25 @@ class Boostable(Generic[T, R]):
         provide boosts to this Boostable.
 
         """
+        arg: T
+        result: Union[NotReady, Exhausted, T]
         if isinstance(self.iterable, Boostable):
-            try:
-                arg = self.iterable.dequeue()
-            except NotReady:
+            result = self.iterable.dequeue()
+            if isinstance(result, NotReady):
                 # the underlying boostable doesn't have anything ready for us
                 # so forward the boost to the underlying boostable
                 return self.iterable.provide_boost()
+            arg = result
         elif isinstance(self.iterable, EagerAsyncIterator):
-            arg = self.iterable.dequeue()
+            result = self.iterable.dequeue()
+            if isinstance(result, (NotReady, Exhausted)):
+                return result
+            arg = result
         elif isinstance(self.iterable, Iterator):
             try:
                 arg = next(self.iterable)
             except StopIteration:
-                raise Exhausted
+                return Exhausted()
         else:
             raise AssertionError
 
@@ -270,10 +275,10 @@ class Boostable(Generic[T, R]):
         """Start and return an asyncio task based on an element from the underlying."""
         raise NotImplementedError
 
-    def dequeue(self) -> R:
+    def dequeue(self) -> Union[NotReady, R]:
         """Non-blockingly dequeue a result we have ready.
 
-        Raises NotReady if it's not ready to dequeue.
+        Returns NotReady if it's not ready to dequeue.
 
         """
         raise NotImplementedError
@@ -315,19 +320,22 @@ class OrderedBoostable(Boostable[T, R]):
         self.buffer.append(task)
         return task
 
-    def dequeue(self) -> R:
-        if not self.buffer:
-            raise NotReady
-        if not self.buffer[0].done():
-            raise NotReady
+    def dequeue(self) -> Union[NotReady, R]:
+        if not self.buffer or not self.buffer[0].done():
+            return NotReady()
         task = self.buffer.popleft()
         return task.result()
 
     async def blocking_dequeue(self) -> R:
-        while not self.buffer:
-            arg = await next_underlying(self.iterable)
-            await self.enqueue(arg)
-        return await self.buffer.popleft()
+        while True:
+            if not self.buffer:
+                arg = await next_underlying(self.iterable)
+                self.enqueue(arg)
+            ret = self.dequeue()
+            if not isinstance(ret, NotReady):
+                return ret
+            # note that dequeues are racy, so we can't return the result of self.buffer[0]
+            await self.buffer[0]
 
 
 class UnorderedBoostable(Boostable[T, R]):
@@ -355,7 +363,7 @@ class UnorderedBoostable(Boostable[T, R]):
         task.add_done_callback(self.done_callback)
         return task
 
-    def dequeue(self, hint: Optional[asyncio.Task[R]] = None) -> R:
+    def dequeue(self, hint: Optional[asyncio.Task[R]] = None) -> Union[NotReady, R]:
         # hint is a task that we suspect is dequeuable, which allows us to skip the linear check
         # against all outstanding tasks in the happy case.
         if hint is not None and hint in self.buffer and hint.done():
@@ -364,22 +372,20 @@ class UnorderedBoostable(Boostable[T, R]):
             try:
                 task = next(t for t in self.buffer if t.done())
             except StopIteration:
-                raise NotReady
+                return NotReady()
         self.buffer.remove(task)
         return task.result()
 
     async def blocking_dequeue(self) -> R:
-        if not self.buffer:
-            arg = await next_underlying(self.iterable)
-            self.enqueue(arg)
-
-        loop = asyncio.get_event_loop()
         task = None
+        loop = asyncio.get_event_loop()
         while True:
-            try:
-                return self.dequeue(hint=task)
-            except NotReady:
-                pass
+            if not self.buffer:
+                arg = await next_underlying(self.iterable)
+                task = self.enqueue(arg)
+            ret = self.dequeue(hint=task)
+            if not isinstance(ret, NotReady):
+                return ret
             # note that dequeues are racy, so the task we get from self.waiter may already have been
             # dequeued. in the happy case, however, it's probably the task we want to return, so we
             # use it as the hint for the next dequeue.
@@ -406,20 +412,23 @@ class EagerAsyncIterator(Generic[T]):
 
         self.next_task = asyncio.create_task(eagerify(iterable))
 
-    def dequeue(self) -> T:
+    def dequeue(self) -> Union[NotReady, Exhausted, T]:
         if not self.next_task.done():
-            raise NotReady
+            return NotReady()
         try:
             ret, self.next_task = self.next_task.result()
             return ret
         except StopAsyncIteration:
-            raise Exhausted
+            return Exhausted()
 
     def __aiter__(self) -> AsyncIterator[T]:
         return self
 
     async def __anext__(self) -> T:
-        ret, self.next_task = await self.next_task
+        while not self.next_task.done():
+            # note that dequeues are racy, so we can't just return the result of self.next_task
+            await self.next_task
+        ret, self.next_task = self.next_task.result()
         return ret
 
 
