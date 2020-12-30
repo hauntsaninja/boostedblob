@@ -3,15 +3,21 @@
 ## [Unreleased]
 
 - Support container level auth for Azure
-- Use Azure CLI's cached tokens, if present
+- Improved support for globs in copy and remove operations
+- `bbb rm` and `bbb cp` now print files they operate on
+- Better error for attempting to remove a blob directory
+- Use Azure CLI's cached tokens, if present. This often speeds up tab complete
 - Improve error message for when we require an OAuth token on Azure
+- Workaround edge case for shared key authorisation on Azure due to aiohttp over-cleverness
 - Increase default connection timeouts to better support slow connections
 - Set BBB_DEBUG=1 env var to get debug level logging and tracebacks
-- Fix for edge case of stat failures while long listing
+- Fix for edge case of stat failures while long listing (affects long listing of `/` on macOS)
 - Fix for deadlock issue with low concurrency and boostables that spawn boostables
+- Improve racy dequeue logic in BoostExecutor
 - Fix for more reliably providing boosts to boostables after they declare themselves not ready
 - Reduce BoostExecutor memory usage
-- More tests for BoostExecutor
+- More tests, in particular for BoostExecutor
+- Globbing works better in the presence of directory file markers
 - Improved documentation
 
 ## [v0.4.0]
