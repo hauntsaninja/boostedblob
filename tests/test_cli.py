@@ -1,6 +1,7 @@
 import contextlib
 import datetime
 import io
+import subprocess
 from typing import Any, List, Tuple
 from unittest.mock import MagicMock
 
@@ -53,17 +54,17 @@ def test_cli():
                     if not line.startswith("Listed")
                 )
 
-            f3_contents = b"f3_contents"
+            g3_contents = b"g3_contents"
 
             helpers.create_file(local_dir / "f1")
             helpers.create_file(local_dir / "f2")
-            helpers.create_file(local_dir / "f3", f3_contents)
-            helpers.create_file(local_dir / "d1" / "f4", f3_contents)
+            helpers.create_file(local_dir / "g3", g3_contents)
+            helpers.create_file(local_dir / "d1" / "f4", g3_contents)
 
             assert run_bbb(["share", local_dir / "f1"]).startswith("file://")
 
             assert run_bbb(["ls", remote_dir]) == ""
-            with pytest.raises(ValueError):
+            with pytest.raises(NotADirectoryError):
                 run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir / "missing"])
             run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir])
             assert normalise(run_bbb(["ls", remote_dir])) == ["f1", "f2"]
@@ -77,17 +78,27 @@ def test_cli():
                 run_bbb(["ls", remote_dir / "f999"])
 
             run_bbb(["rm", remote_dir / "f1", remote_dir / "f2"])
-            assert run_bbb(["ls", remote_dir]) == ""
+            assert run_bbb(["ls", remote_dir / "*"]) == ""
 
-            run_bbb(["cp", local_dir / "f3", remote_dir / "file3"])
-            assert run_bbb(["cat", remote_dir / "file3"]) == f3_contents.decode("utf-8")
-            run_bbb(["rm", remote_dir / "file3"])
+            run_bbb(["cp", local_dir / "g3", remote_dir / "file3"])
+            assert run_bbb(["cat", remote_dir / "file3"]) == g3_contents.decode("utf-8")
+            run_bbb(["rm", remote_dir / "*3"])
+
+            run_bbb(["cp", local_dir / "f*", remote_dir])
+            assert normalise_long(run_bbb(["ls", "-l", remote_dir / "f*"])) == [
+                ("4.0 B", "mtime", "f1"),
+                ("4.0 B", "mtime", "f2"),
+            ]
+            run_bbb(["rmtree", remote_dir / "f*"])
+            assert (
+                run_bbb(["ls", "-l", remote_dir]) == "Listed 0 files summing to 0 bytes (0.0 B)\n"
+            )
 
             run_bbb(["cptree", local_dir, remote_dir])
-            assert normalise(run_bbb(["ls", remote_dir])) == ["d1/", "f1", "f2", "f3"]
+            assert normalise(run_bbb(["ls", remote_dir])) == ["d1/", "f1", "f2", "g3"]
             assert normalise_long(run_bbb(["ls", "-l", remote_dir])) == [
                 ("", "", "d1/"),
-                ("11.0 B", "mtime", "f3"),
+                ("11.0 B", "mtime", "g3"),
                 ("4.0 B", "mtime", "f1"),
                 ("4.0 B", "mtime", "f2"),
             ]
@@ -96,12 +107,15 @@ def test_cli():
             helpers.create_file(remote_dir / "f5")
             run_bbb(["sync", "--delete", local_dir, remote_dir])
 
-            assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "f3"]
+            assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "g3"]
             assert normalise_long(run_bbb(["lstree", "-l", "--machine", remote_dir])) == [
                 ("11", "mtime", "d1/f4"),
-                ("11", "mtime", "f3"),
+                ("11", "mtime", "g3"),
                 ("4", "mtime", "f1"),
                 ("4", "mtime", "f2"),
+            ]
+            assert normalise_long(run_bbb(["lstree", "-l", "--machine", remote_dir / "f1"])) == [
+                ("4", "mtime", "f1"),
             ]
 
             run_bbb(["rmtree", remote_dir])
@@ -129,3 +143,8 @@ def test_complete():
             ["complete", "command", "bash", 7 + len(az_path_str), f"bbb ls {az_path_str}"]
         )
         assert [f"az:{p}" for p in output.splitlines()] == expected_output
+
+        assert run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", "az://"]) == ""
+
+    subprocess.check_call(["bash", "-c", run_bbb(["complete", "init", "bash"])])
+    subprocess.check_call(["zsh", "-ic", run_bbb(["complete", "init", "zsh"])])

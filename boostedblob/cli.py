@@ -113,13 +113,13 @@ async def cp(
 
     async with bbb.BoostExecutor(concurrency) as executor:
         if len(srcs) > 1 and not dst_is_dirlike:
-            raise ValueError(f"{dst_obj} is not a directory")
+            raise NotADirectoryError(dst_obj)
 
         async def copy_wrapper(src: str) -> None:
             src_obj = bbb.BasePath.from_str(src)
             if is_glob(src):
                 if not dst_is_dirlike:
-                    raise ValueError(f"{dst_obj} is not a directory")
+                    raise NotADirectoryError(dst_obj)
                 async for path in bbb.copying.copyglob_iterator(src_obj, dst_obj, executor):
                     if not quiet:
                         print(path)
