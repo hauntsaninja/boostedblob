@@ -363,6 +363,30 @@ async def test_map_eager_async_iterator():
     assert results == list(range(N))
 
 
+@pytest.mark.asyncio
+async def test_map_eager_async_iterator_slow():
+    N = 30
+
+    loop = asyncio.get_event_loop()
+    futures = [loop.create_future() for _ in range(N)]
+
+    async def iterator() -> AsyncIterator[int]:
+        for i in range(N):
+            await futures[i]
+            yield i
+
+    results = []
+    async with bbb.BoostExecutor(N) as e:
+        it = e.map_ordered(identity, bbb.boost.EagerAsyncIterator(iterator()))
+        asyncio.create_task(collect(it, results))
+        await pause()
+
+        for i in range(N):
+            futures[i].set_result(None)
+            await pause()
+    assert results == list(range(N))
+
+
 # ==============================
 # composition
 # ==============================
