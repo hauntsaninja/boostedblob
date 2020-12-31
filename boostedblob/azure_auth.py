@@ -371,7 +371,11 @@ async def get_storage_account_key(
 
 def sign_request_with_shared_key(request: Request, key: str) -> str:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/authorize-with-shared-key
-    parsed_url = urllib.parse.urlparse(request.url)
+    from yarl import URL
+
+    # Figuring out that shared key authorisation sometimes breaks because aiohttp is a little over
+    # clever about canonicalising URLs was not fun; preemptively canonicalise
+    parsed_url = urllib.parse.urlparse(str(URL(request.url)))
     storage_account = parsed_url.netloc.split(".")[0]
     blob = parsed_url.path[1:]
 
