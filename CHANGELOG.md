@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.5.0]
 
 - Support container level auth for Azure
 - Improved support for globs in copy and remove operations
