@@ -3,6 +3,8 @@ from __future__ import annotations
 import itertools
 from typing import Any, Iterator, Optional, Tuple, Union
 
+import aiohttp
+
 from .boost import BoostExecutor, BoostUnderlying, OrderedBoostable, UnorderedBoostable
 from .globals import config
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, getsize, pathdispatch
@@ -41,8 +43,7 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
             success_codes=success_codes,
         )
     )
-    async with request.execute() as resp:
-        return await resp.read()
+    return await _execute_read_retrying_payload_error(request)
 
 
 @read_byte_range.register  # type: ignore
@@ -59,8 +60,7 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
             success_codes=success_codes,
         )
     )
-    async with request.execute() as resp:
-        return await resp.read()
+    return await _execute_read_retrying_payload_error(request)
 
 
 # ==============================
@@ -192,3 +192,17 @@ def _byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
         # This form is not supported by Azure
         return f"bytes=-{-int(end)}"
     return None
+
+
+async def _execute_read_retrying_payload_error(request: Request) -> bytes:
+    # work around https://github.com/aio-libs/aiohttp/issues/4581 /
+    # https://github.com/aio-libs/aiohttp/issues/3904#issuecomment-737094416
+    RETRIES = 3
+    for i in range(RETRIES):
+        try:
+            async with request.execute() as resp:
+                return await resp.read()
+        except aiohttp.ClientPayloadError:
+            if i >= RETRIES - 1:
+                raise
+    raise AssertionError
