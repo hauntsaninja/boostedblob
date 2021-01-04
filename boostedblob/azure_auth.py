@@ -134,13 +134,6 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             f"Found storage account key, but it was unable to access storage account: '{account}'"
         )
 
-    if "accessToken" in creds and creds.get("tokenType") == "Bearer" and "expiresOn" in creds:
-        expiration_time = datetime.datetime.fromisoformat(creds["expiresOn"]).timestamp()
-        if expiration_time > now:
-            auth = (OAUTH_TOKEN, creds["accessToken"])
-            if await can_access_account(account, container, auth):
-                return (auth, expiration_time)
-
     if "refreshToken" in creds:
         # we have a refresh token, convert it into an access token for this account
         req = create_access_token_request(

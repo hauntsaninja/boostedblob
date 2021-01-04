@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.5.1]
+- Revert use of Azure CLI's cached tokens
+
 ## [v0.5.0]
 
 - Support container level auth for Azure
