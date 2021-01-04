@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.5.2]
+- Retry reads that raise aiohttp.ClientPayloadError
+
 ## [v0.5.1]
 - Revert use of Azure CLI's cached tokens
 
