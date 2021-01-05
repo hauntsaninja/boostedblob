@@ -418,7 +418,7 @@ def sign_request_with_shared_key(request: Request, key: str) -> str:
 
 async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
     from .globals import config
-    from .request import azurify_request
+    from .request import Request, azurify_request
 
     auth = await config.azure_access_token_manager.get_token(key=cache_key)
     account, container = cache_key
@@ -435,30 +435,32 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
             f"`{cmd}` to confirm that the missing role is the issue."
         )
 
-    req = create_user_delegation_sas_request(account=account)
-    req = await azurify_request(req, auth=auth)
-
-    async with req.execute() as resp:
-        data = await resp.read()
-
-    out = xmltodict.parse(data)
-    return out["UserDelegationKey"], time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
-
-
-def create_user_delegation_sas_request(account: str) -> Request:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
-    from .request import Request
-
     now = datetime.datetime.utcnow()
     start = (now + datetime.timedelta(hours=-1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     expiration = now + datetime.timedelta(days=6)
     expiry = expiration.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return Request(
-        url=f"https://{account}.blob.core.windows.net/",
-        method="POST",
-        params=dict(restype="service", comp="userdelegationkey"),
-        data={"KeyInfo": {"Start": start, "Expiry": expiry}},
+    req = await azurify_request(
+        Request(
+            url=f"https://{account}.blob.core.windows.net/",
+            method="POST",
+            params=dict(restype="service", comp="userdelegationkey"),
+            data={"KeyInfo": {"Start": start, "Expiry": expiry}},
+            success_codes=(200, 403),
+        ),
+        auth=auth,
     )
+    async with req.execute() as resp:
+        if resp.status == 403:
+            raise RuntimeError(
+                f"You do not have permission to generate an SAS token for account {account}. "
+                "Try setting the Storage Blob Delegator or Storage Blob Data Contributor IAM role "
+                "at the account level."
+            )
+        data = await resp.read()
+
+    out = xmltodict.parse(data)
+    return out["UserDelegationKey"], time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
 
 
 async def generate_signed_url(path: AzurePath) -> Tuple[str, datetime.datetime]:
