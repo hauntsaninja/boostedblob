@@ -124,8 +124,8 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
         if "account" in creds:
             if creds["account"] != account:
                 raise RuntimeError(
-                    f"Found credentials for account '{creds['account']}' but needed credentials "
-                    f"for account '{account}'"
+                    f"Provided storage account key for account '{creds['account']}' via "
+                    f"environment variables, but needed credentials for account '{account}'"
                 )
         auth = (SHARED_KEY, creds["storageAccountKey"])
         if await can_access_account(account, container, auth):
