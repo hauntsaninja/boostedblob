@@ -99,7 +99,7 @@ class BoostExecutor:
     def map_ordered(
         self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]
     ) -> OrderedBoostable[T, R]:
-        ret = OrderedBoostable(func, iterable, self.semaphore)
+        ret = OrderedBoostable(func, iterable, self)
         self.boostables.appendleft(ret)
         self.notify_runner()
         return ret
@@ -107,7 +107,7 @@ class BoostExecutor:
     def map_unordered(
         self, func: Callable[[T], Awaitable[R]], iterable: BoostUnderlying[T]
     ) -> UnorderedBoostable[T, R]:
-        ret = UnorderedBoostable(func, iterable, self.semaphore)
+        ret = UnorderedBoostable(func, iterable, self)
         self.boostables.appendleft(ret)
         self.notify_runner()
         return ret
@@ -223,7 +223,7 @@ class Boostable(Generic[T, R]):
         self,
         func: Callable[[T], Awaitable[R]],
         iterable: BoostUnderlying[T],
-        semaphore: asyncio.Semaphore,
+        executor: BoostExecutor,
     ) -> None:
         if not isinstance(iterable, (Iterator, Boostable, EagerAsyncIterator)):
             raise ValueError(
@@ -231,12 +231,12 @@ class Boostable(Generic[T, R]):
             )
 
         async def wrapper(arg: T) -> R:
-            async with semaphore:
+            async with self.executor.semaphore:
                 return await func(arg)
 
         self.func = wrapper
         self.iterable = iterable
-        self.semaphore = semaphore
+        self.executor = executor
 
     def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
         """Start an asyncio task to help speed up this boostable.
@@ -293,13 +293,13 @@ class Boostable(Generic[T, R]):
     def __aiter__(self) -> AsyncIterator[R]:
         async def iterator() -> AsyncIterator[R]:
             try:
-                self.semaphore.release()
+                self.executor.semaphore.release()
                 while True:
                     yield await self.blocking_dequeue()
             except StopAsyncIteration:
                 pass
             finally:
-                await self.semaphore.acquire()
+                await self.executor.semaphore.acquire()
 
         return iterator()
 
@@ -309,9 +309,9 @@ class OrderedBoostable(Boostable[T, R]):
         self,
         func: Callable[[T], Awaitable[R]],
         iterable: BoostUnderlying[T],
-        semaphore: asyncio.Semaphore,
+        executor: BoostExecutor,
     ) -> None:
-        super().__init__(func, iterable, semaphore)
+        super().__init__(func, iterable, executor)
         self.buffer: Deque[asyncio.Task[R]] = Deque()
 
     async def wait(self) -> None:
@@ -346,9 +346,9 @@ class UnorderedBoostable(Boostable[T, R]):
         self,
         func: Callable[[T], Awaitable[R]],
         iterable: BoostUnderlying[T],
-        semaphore: asyncio.Semaphore,
+        executor: BoostExecutor,
     ) -> None:
-        super().__init__(func, iterable, semaphore)
+        super().__init__(func, iterable, executor)
         self.buffer: Set[asyncio.Task[R]] = set()
         self.waiter: Optional[asyncio.Future[asyncio.Task[R]]] = None
 
