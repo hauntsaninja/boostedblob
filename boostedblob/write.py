@@ -131,26 +131,28 @@ async def _azure_write_stream(
             raise FileExistsError(path)
 
     upload_id = random.randint(0, 2 ** 47 - 1)
-    block_index = 0
     md5 = hashlib.md5()
+    max_block_index = 0
 
-    async def upload_chunk(chunk: bytes) -> None:
-        # mutating an index in the outer scope is a little sketchy, but it works out if we do it
-        # before we await
-        nonlocal block_index
-        block_id = _get_block_id(upload_id, block_index)
-        block_index += 1
+    async def upload_chunk(index_chunk: Tuple[int, bytes]) -> None:
+        block_index, chunk = index_chunk
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
         assert block_index < AZURE_BLOCK_COUNT_LIMIT
+
+        nonlocal max_block_index
+        max_block_index = max(max_block_index, block_index)
+
+        block_id = _get_block_id(upload_id, block_index)
         md5.update(chunk)
+
         await _azure_put_block(path, block_id, chunk)
 
-    await consume(executor.map_ordered(upload_chunk, stream))
+    await consume(executor.map_ordered(upload_chunk, executor.enumerate(stream)))
 
     # azure does not calculate md5s for us, we have to do that manually
     # https://blogs.msdn.microsoft.com/windowsazurestorage/2011/02/17/windows-azure-blob-md5-overview/
     headers = {"x-ms-blob-content-md5": base64.b64encode(md5.digest()).decode("utf8")}
-    blocklist = [_get_block_id(upload_id, i) for i in range(block_index)]
+    blocklist = [_get_block_id(upload_id, i) for i in range(max_block_index + 1)]
     await _azure_put_block_list(path, blocklist, headers=headers)
 
 
@@ -274,24 +276,19 @@ async def _azure_write_stream_unordered(
             raise FileExistsError(path)
 
     upload_id = random.randint(0, 2 ** 47 - 1)
-    iter_index = 0
     block_list = []
 
-    async def upload_chunk(chunk_byte_range: Tuple[bytes, ByteRange]) -> None:
-        # mutating an index in the outer scope is a little sketchy, but it works out if we do it
-        # before we await
-        nonlocal iter_index
-        block_id = _get_block_id(upload_id, iter_index)
-        chunk, byte_range = chunk_byte_range
-        block_list.append((byte_range[0], iter_index))
-
-        iter_index += 1
+    async def upload_chunk(index_chunk_byte_range: Tuple[int, Tuple[bytes, ByteRange]]) -> None:
+        unordered_index, (chunk, byte_range) = index_chunk_byte_range
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
-        assert iter_index < AZURE_BLOCK_COUNT_LIMIT
+        assert unordered_index < AZURE_BLOCK_COUNT_LIMIT
+
+        block_id = _get_block_id(upload_id, unordered_index)
+        block_list.append((byte_range[0], unordered_index))
 
         await _azure_put_block(path, block_id, chunk)
 
-    await consume(executor.map_unordered(upload_chunk, stream))
+    await consume(executor.map_unordered(upload_chunk, executor.enumerate(stream)))
 
     # sort by start byte so the blocklist is ordered correctly
     block_list.sort()
