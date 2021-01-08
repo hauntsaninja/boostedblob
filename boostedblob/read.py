@@ -5,7 +5,12 @@ from typing import Any, Iterator, Optional, Tuple, Union
 
 import aiohttp
 
-from .boost import BoostExecutor, BoostUnderlying, OrderedBoostable, UnorderedBoostable
+from .boost import (
+    BoostExecutor,
+    BoostUnderlying,
+    OrderedMappingBoostable,
+    UnorderedMappingBoostable,
+)
 from .globals import config
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, getsize, pathdispatch
 from .request import Request, azurify_request, googlify_request
@@ -112,7 +117,7 @@ async def read_stream(
 @read_stream.register  # type: ignore
 async def _cloud_read_stream(
     path: CloudPath, executor: BoostExecutor, size: Optional[int] = None
-) -> OrderedBoostable[Any, bytes]:
+) -> OrderedMappingBoostable[Any, bytes]:
     if size is None:
         size = await getsize(path)
 
@@ -152,7 +157,7 @@ async def _local_read_stream(
 @pathdispatch
 async def read_stream_unordered(
     path: Union[CloudPath, str], executor: BoostExecutor, size: Optional[int] = None
-) -> UnorderedBoostable[Any, Tuple[bytes, ByteRange]]:
+) -> UnorderedMappingBoostable[Any, Tuple[bytes, ByteRange]]:
     assert isinstance(path, CloudPath)
 
     if size is None:
