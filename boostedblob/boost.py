@@ -55,6 +55,7 @@ class BoostExecutor:
 
     def __init__(self, concurrency: int) -> None:
         assert concurrency > 0
+        self.concurrency = concurrency
         # Okay, so this is a little tricky. We take away one unit of concurrency now, and give it
         # back when you iterate over a boostable. You can think of concurrency - 1 as the number of
         # units of "background" concurrency. When our "foreground" starts iterating over a
@@ -246,6 +247,11 @@ class Boostable(Generic[T, R]):
         provide boosts to this Boostable.
 
         """
+        if self.should_apply_backpressure():
+            # if we have a lot of stuff ready to go, apply backpressure
+            # the main effect of this is to reduce memory usage
+            return NotReady()
+
         arg: T
         result: Union[NotReady, Exhausted, T]
         if isinstance(self.iterable, Boostable):
@@ -269,6 +275,10 @@ class Boostable(Generic[T, R]):
             raise AssertionError
 
         return self.enqueue(arg)
+
+    def should_apply_backpressure(self) -> bool:
+        """Whether we should apply backpressure and refuse a boost."""
+        raise NotImplementedError
 
     async def wait(self) -> None:
         """Wait for all tasks in this boostable to finish."""
@@ -318,6 +328,9 @@ class OrderedBoostable(Boostable[T, R]):
         if self.buffer:
             await asyncio.wait(self.buffer)
 
+    def should_apply_backpressure(self) -> bool:
+        return len(self.buffer) > 2 * self.executor.concurrency
+
     def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
         self.buffer.append(task)
@@ -352,13 +365,16 @@ class UnorderedBoostable(Boostable[T, R]):
         self.buffer: Set[asyncio.Task[R]] = set()
         self.waiter: Optional[asyncio.Future[asyncio.Task[R]]] = None
 
-    def done_callback(self, task: asyncio.Task[R]) -> None:
-        if self.waiter and not self.waiter.done():
-            self.waiter.set_result(task)
-
     async def wait(self) -> None:
         if self.buffer:
             await asyncio.wait(self.buffer)
+
+    def should_apply_backpressure(self) -> bool:
+        return len(self.buffer) > 2 * self.executor.concurrency
+
+    def done_callback(self, task: asyncio.Task[R]) -> None:
+        if self.waiter and not self.waiter.done():
+            self.waiter.set_result(task)
 
     def enqueue(self, arg: T) -> asyncio.Task[R]:
         task = asyncio.create_task(self.func(arg))
