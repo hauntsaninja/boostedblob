@@ -15,7 +15,6 @@ from .path import (
     GooglePath,
     LocalPath,
     exists,
-    isfile,
     pathdispatch,
     url_format,
 )
@@ -256,12 +255,7 @@ async def copytree_iterator(
     if isinstance(src, LocalPath):
         src = LocalPath(os.path.abspath(src.path))
 
-    subpath_exists = False
-
     async def copy_wrapper(entry: DirEntry) -> BasePath:
-        nonlocal subpath_exists
-        subpath_exists = True
-
         assert isinstance(dst, BasePath)
         if entry.is_dir:
             # Filter out directory marker files
@@ -274,13 +268,6 @@ async def copytree_iterator(
 
     async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(scantree(src))):
         yield path
-
-    # If we find nothing, then run some checks so we throw the appropriate error.
-    # Doing this means we avoid extra requests in the happy path.
-    if not subpath_exists:
-        if not await isfile(src):
-            raise FileNotFoundError(src)
-        raise NotADirectoryError(src)
 
 
 @pathdispatch
