@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.5.3]
+- Improved error message for SAS token permission errors
+- Improved error message for incorrect storage account keys
+- Use blocking writes to avoid memory issues with extremely large files
+- Fix for `--concurrency 1`
+
 ## [v0.5.2]
 - Retry reads that raise aiohttp.ClientPayloadError
 
