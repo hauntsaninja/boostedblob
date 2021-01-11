@@ -5,7 +5,7 @@ import sys
 from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
 
 from . import azure_auth
-from .boost import BoostExecutor, EagerAsyncIterator, consume
+from .boost import BoostExecutor, consume
 from .globals import config
 from .listing import DirEntry, glob_scandir, scantree
 from .path import (
@@ -279,7 +279,7 @@ async def copytree_iterator(
         )
         return entry.path
 
-    async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(scantree(src))):
+    async for path in executor.map_unordered(copy_wrapper, executor.eagerise(scantree(src))):
         yield path
 
 
@@ -347,6 +347,6 @@ async def copyglob_iterator(
         await copyfile(entry.path, dst / entry.path.name, executor, size=size, overwrite=True)
         return entry.path
 
-    async for path in executor.map_unordered(copy_wrapper, EagerAsyncIterator(glob_scandir(src))):
+    async for path in executor.map_unordered(copy_wrapper, executor.eagerise(glob_scandir(src))):
         if path:
             yield path

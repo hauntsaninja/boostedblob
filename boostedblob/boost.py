@@ -99,6 +99,12 @@ class BoostExecutor:
         assert self.runner is not None
         await self.runner
 
+    def eagerise(self, iterator: AsyncIterator[T]) -> EageriseBoostable[T]:
+        ret = EageriseBoostable(iterator, self)
+        self.boostables.appendleft(ret)
+        self.notify_runner()
+        return ret
+
     def map_ordered(
         self, func: Callable[[A], Awaitable[T]], iterable: BoostUnderlying[A]
     ) -> OrderedMappingBoostable[A, T]:
@@ -265,10 +271,13 @@ class Boostable(Generic[T]):
     def __aiter__(self) -> AsyncIterator[T]:
         async def iterator() -> AsyncIterator[T]:
             try:
+                self.executor.semaphore.release()
                 while True:
                     yield await self.blocking_dequeue()
             except StopAsyncIteration:
                 pass
+            finally:
+                await self.executor.semaphore.acquire()
 
         return iterator()
 
@@ -305,10 +314,8 @@ class MappingBoostable(Boostable[T], Generic[A, T]):
     ) -> None:
         super().__init__(executor)
 
-        if not isinstance(iterable, (Iterator, Boostable, EagerAsyncIterator)):
-            raise ValueError(
-                "Underlying iterable must be an Iterator, Boostable or EagerAsyncIterator"
-            )
+        if not isinstance(iterable, (Iterator, Boostable)):
+            raise ValueError("Underlying iterable must be an Iterator or Boostable")
 
         async def wrapper(arg: A) -> T:
             async with self.executor.semaphore:
@@ -343,19 +350,6 @@ class MappingBoostable(Boostable[T], Generic[A, T]):
     def enqueue(self, arg: A) -> asyncio.Task[T]:
         """Start and return an asyncio task based on an element from the underlying."""
         raise NotImplementedError
-
-    def __aiter__(self) -> AsyncIterator[T]:
-        async def iterator() -> AsyncIterator[T]:
-            try:
-                self.executor.semaphore.release()
-                while True:
-                    yield await self.blocking_dequeue()
-            except StopAsyncIteration:
-                pass
-            finally:
-                await self.executor.semaphore.acquire()
-
-        return iterator()
 
 
 class OrderedMappingBoostable(MappingBoostable[A, T]):
@@ -496,53 +490,89 @@ class EnumerateBoostable(Boostable[Tuple[int, T]]):
         return ret
 
 
-class EagerAsyncIterator(Generic[T]):
-    """Like an AsyncIterator, but eager.
+class EageriseBoostable(Boostable[T]):
+    def __init__(self, iterable: AsyncIterator[T], executor: BoostExecutor) -> None:
+        super().__init__(executor)
+        self.iterable = iterable
+        self.buffer: Deque[asyncio.Task[T]] = Deque()
+        self.done: bool = False
 
-    AsyncIterators will only start computing their next element when awaited on.
-    This allows an AsyncIterator to serve as the underlying iterable for a Boostable.
-    Note a) this takes away the natural backpressure, b) instantiating one of these will use
-    one unit of concurrency until it's exhausted which is not accounted for by a BoostExecutor.
+        self.waiter_buffer: Optional[asyncio.Future[None]] = None
+        self.waiter_backpressure: Optional[asyncio.Future[None]] = None
 
-    """
+        self.buffer_task = asyncio.create_task(self.eagerly_buffer())
 
-    def __init__(self, iterable: AsyncIterator[T]):
-        async def eagerify(it: AsyncIterator[T]) -> Tuple[T, asyncio.Task[Any]]:
-            val = await it.__anext__()
-            next_task = asyncio.create_task(eagerify(it))
-            return val, next_task
+    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+        # If we always returned Exhausted, that would cause MappingBoostable to in turn return
+        # Exhausted, if it couldn't currently make use of a boost.
+        return Exhausted() if self.done else NotReady()
 
-        self.next_task = asyncio.create_task(eagerify(iterable))
+    async def wait(self) -> None:
+        await self.buffer_task
 
     def dequeue(self) -> Union[NotReady, Exhausted, T]:
-        if not self.next_task.done():
-            return NotReady()
-        try:
-            ret, self.next_task = self.next_task.result()
-            return ret
-        except StopAsyncIteration:
-            return Exhausted()
+        if not self.buffer:
+            return Exhausted() if self.done else NotReady()
 
-    def __aiter__(self) -> AsyncIterator[T]:
-        return self
+        task = self.buffer.popleft()
 
-    async def __anext__(self) -> T:
-        while not self.next_task.done():
-            # note that dequeues are racy, so we can't just return the result of self.next_task
-            await self.next_task
-        ret, self.next_task = self.next_task.result()
-        return ret
+        if self.waiter_backpressure:
+            self.waiter_backpressure.set_result(None)
+            self.waiter_backpressure = None
+
+        return task.result()
+
+    async def blocking_dequeue(self) -> T:
+        loop = asyncio.get_event_loop()
+        while True:
+            ret = self.dequeue()
+            if isinstance(ret, Exhausted):
+                raise StopAsyncIteration
+            if not isinstance(ret, NotReady):
+                return ret
+
+            self.waiter_buffer = loop.create_future()
+            await self.waiter_buffer
+
+    async def eagerly_buffer(self) -> None:
+        loop = asyncio.get_event_loop()
+        async with self.executor.semaphore:
+            # We can't use async for because we need to preserve exceptions
+            it = self.iterable.__aiter__()
+            while True:
+                task = asyncio.create_task(it.__anext__())
+                try:
+                    await task
+                except StopAsyncIteration:
+                    break
+                except Exception:
+                    pass
+                self.buffer.append(task)
+
+                if self.waiter_buffer:
+                    self.waiter_buffer.set_result(None)
+                    self.waiter_buffer = None
+
+                # apply backpressure
+                if not self.executor.shutdown and len(self.buffer) > 10 * self.executor.concurrency:
+                    self.executor.semaphore.release()
+                    self.waiter_backpressure = loop.create_future()
+                    await self.waiter_backpressure
+                    await self.executor.semaphore.acquire()
+
+            self.done = True
+            if self.waiter_buffer:
+                self.waiter_buffer.set_result(None)
+                self.waiter_buffer = None
 
 
 # see docstring of Boostable
-BoostUnderlying = Union[Iterator[T], Boostable[T], EagerAsyncIterator[T]]
+BoostUnderlying = Union[Iterator[T], Boostable[T]]
 
 
 def dequeue_underlying(iterable: BoostUnderlying[T]) -> Union[NotReady, Exhausted, T]:
     """Like ``dequeue``, but abstracts over a BoostUnderlying."""
     if isinstance(iterable, Boostable):
-        return iterable.dequeue()
-    if isinstance(iterable, EagerAsyncIterator):
         return iterable.dequeue()
     if isinstance(iterable, Iterator):
         try:
@@ -556,8 +586,6 @@ async def blocking_dequeue_underlying(iterable: BoostUnderlying[T]) -> T:
     """Like ``blocking_dequeue``, but abstracts over a BoostUnderlying."""
     if isinstance(iterable, Boostable):
         return await iterable.blocking_dequeue()
-    if isinstance(iterable, EagerAsyncIterator):
-        return await iterable.__anext__()
     if isinstance(iterable, Iterator):
         try:
             return next(iterable)
@@ -568,7 +596,7 @@ async def blocking_dequeue_underlying(iterable: BoostUnderlying[T]) -> T:
 
 async def iter_underlying(iterable: BoostUnderlying[T]) -> AsyncIterator[T]:
     """Like ``iter``, but abstracts over a BoostUnderlying."""
-    if isinstance(iterable, (Boostable, EagerAsyncIterator)):
+    if isinstance(iterable, Boostable):
         async for x in iterable:
             yield x
     elif isinstance(iterable, Iterator):

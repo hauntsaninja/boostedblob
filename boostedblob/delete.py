@@ -3,7 +3,7 @@ import os
 import shutil
 from typing import AsyncIterator, Optional, Union
 
-from .boost import BoostExecutor, EagerAsyncIterator, consume
+from .boost import BoostExecutor, consume
 from .listing import glob_scandir, listtree
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isdir, isfile, pathdispatch
 from .request import Request, azurify_request, googlify_request
@@ -84,7 +84,7 @@ async def glob_remove(
 
     """
     async for subpath in executor.map_unordered(
-        lambda x: remove(x.path), EagerAsyncIterator(glob_scandir(path))
+        lambda x: remove(x.path), executor.eagerise(glob_scandir(path))
     ):
         yield subpath
 
@@ -119,7 +119,7 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
     marker_task = asyncio.create_task(remove_directory_marker())
 
     try:
-        async for subpath in executor.map_unordered(remove, EagerAsyncIterator(listtree(dirpath))):
+        async for subpath in executor.map_unordered(remove, executor.eagerise(listtree(dirpath))):
             yield subpath
     except FileNotFoundError:
         if await isfile(path):
