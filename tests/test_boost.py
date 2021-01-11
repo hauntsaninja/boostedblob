@@ -62,7 +62,10 @@ async def test_map_ordered_single():
         futures[0].set_result(None)
         assert not next_task.done()
         await pause()
-        assert set(futures) == {1}
+        # one might expect a task to be scheduled here, since we have one unused concurrency and
+        # boostedblob is generally eager. however, in the single concurrency case, the executor
+        # doesn't run to avoid deadlock. TODO(shantanu): consider changing this
+        assert set(futures) == set()
         assert next_task.done()
         assert (await next_task) == 0
 
@@ -496,6 +499,9 @@ def get_coro(t: asyncio.Task[Any]) -> Any:
 
 @pytest.mark.asyncio
 async def test_boost_executor_shutdown():
+    async with bbb.BoostExecutor(1) as e:
+        e.map_ordered(asyncio.sleep, iter([0]))
+
     async with bbb.BoostExecutor(4) as e:
         e.map_ordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
     assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {

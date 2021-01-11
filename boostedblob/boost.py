@@ -125,6 +125,9 @@ class BoostExecutor:
         MAX_TIMEOUT = 0.1
         timeout = MIN_TIMEOUT
 
+        if self.semaphore.locked():
+            return
+
         while True:
             await self.semaphore.acquire()
             self.semaphore.release()
