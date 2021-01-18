@@ -80,6 +80,8 @@ async def _azure_list_blobs(
         _delimiter = delimiter or "/"
         assert not prefix.blob or prefix.blob.endswith(_delimiter)
     if not path.container:
+        if path.blob:
+            raise ValueError("Path is missing container; do you have an extra slash?")
         if delimiter != "/":
             raise ValueError("Cannot list blobs in storage account; must specify container")
         async for entry in _azure_list_containers(prefix.account):
