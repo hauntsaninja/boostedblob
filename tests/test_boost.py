@@ -508,16 +508,14 @@ async def test_boost_executor_shutdown():
     async with bbb.BoostExecutor(1) as e:
         e.map_ordered(asyncio.sleep, iter([0]))
 
-    # note that if sequences are long enough to trigger backpressure, these tests will hang
-    # TODO: fix
     async with bbb.BoostExecutor(4) as e:
-        e.map_ordered(asyncio.sleep, (random.random() * 0.1 for _ in range(6)))
+        e.map_ordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
     assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
         "test_boost_executor_shutdown"
     }
 
     async with bbb.BoostExecutor(4) as e:
-        e.map_unordered(asyncio.sleep, (random.random() * 0.1 for _ in range(6)))
+        e.map_unordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
     assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
         "test_boost_executor_shutdown"
     }

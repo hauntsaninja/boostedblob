@@ -322,9 +322,10 @@ class MappingBoostable(Boostable[T], Generic[A, T]):
             await asyncio.wait(self.buffer)
 
     def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
-        if len(self.buffer) > 2 * self.executor.concurrency:
+        if not self.executor.shutdown and len(self.buffer) > 2 * self.executor.concurrency:
             # if we have a lot of stuff ready to go, apply backpressure by not accepting the boost
             # the main effect of this is to reduce memory usage
+            # always accept boosts if the executor is shutting down to prevent hangs on misuse
             return NotReady()
 
         result = dequeue_underlying(self.iterable)
