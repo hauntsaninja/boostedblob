@@ -15,9 +15,11 @@ def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
-            import uvloop
+            if sys.version_info < (3, 9):
+                # waiting for https://github.com/MagicStack/uvloop/issues/349
+                import uvloop
 
-            uvloop.install()
+                uvloop.install()
         except ImportError:
             pass
         return asyncio.run(fn(*args, **kwargs))

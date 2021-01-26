@@ -13,9 +13,6 @@ environment.
 
 Just run `pip install boostedblob`. boostedblob requires Python 3.7 or better.
 
-<sup>(For Python 3.9 support, you'll need to run `pip uninstall uvloop`)</sup>
-
-
 ## Usage
 
 For an overview and list of commands:
