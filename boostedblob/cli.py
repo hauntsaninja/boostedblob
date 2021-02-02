@@ -33,7 +33,7 @@ def sync_with_session(fn: F) -> F:
     return syncify(bbb.ensure_session(fn))  # type: ignore
 
 
-DEFAULT_CONCURRENCY = 100
+DEFAULT_CONCURRENCY = int(os.environ.get("BBB_DEFAULT_CONCURRENCY", 100))
 
 
 def is_glob(path: str) -> bool:
