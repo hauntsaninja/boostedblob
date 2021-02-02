@@ -2,7 +2,9 @@ import argparse
 import asyncio
 import functools
 import os
+import subprocess
 import sys
+import tempfile
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, TypeVar
 
 import boostedblob as bbb
@@ -211,6 +213,18 @@ async def sync(
                 print(p)
 
 
+@sync_with_session
+async def edit(path: str) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path_obj = bbb.BasePath.from_str(path)
+        local = bbb.LocalPath(tmpdir) / path_obj.name
+        async with bbb.BoostExecutor(DEFAULT_CONCURRENCY) as executor:
+            await bbb.copyfile(path_obj, local, executor)
+            subprocess.check_call([os.environ.get("EDITOR", "vi"), local])
+            await bbb.copyfile(local, path_obj, executor, overwrite=True)
+            print(f"Updated {path_obj}")
+
+
 def complete_init(shell: str) -> None:
     if shell == "zsh":
         # zsh uses index-1 based arrays, so adjust CURRENT
@@ -363,6 +377,14 @@ $ bbb cptree boostedblob gs://tmp/boostedblob
 Aliases:
 bbb cpr == bbb cptree
 """
+    edit_desc = """\
+`bbb edit` lets you edit a file in a text editor. It makes a local copy of the
+file, opens it in an editor (determined by the $EDITOR environment variable),
+then overwrites the original file with the edited local copy.
+
+Example:
+$ bbb edit gs://bucket/frogs.txt
+"""
     rm_desc = """\
 `bbb rm` deletes the given files.
 
@@ -497,6 +519,15 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("dst", help="Directory to copy to")
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
+
+    subparser = subparsers.add_parser(
+        "edit",
+        help="Edit a file in a local editor",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=edit_desc,
+    )
+    subparser.set_defaults(command=edit)
+    subparser.add_argument("path")
 
     subparser = subparsers.add_parser(
         "rm",
