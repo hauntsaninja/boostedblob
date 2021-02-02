@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.6.0]
+- Add `bbb edit` command
+- Set BBB_DEFAULT_CONCURRENCY env var to provide a default concurrency for CLI usage
+- Apply backpressure in BoostExecutor, preventing high memory usage in some situations
+- Refactored logic in boost.py, added new combinators
+- Warn about unfinished asynchronous Azure copy operations, provide command to cancel
+- Error in edge case with listing invalid Azure URLs without a container
+- Avoid using uvloop on Python 3.9
+- Print failed request bodies in debug mode
+- Really fix `--concurrency 1`
+
 ## [v0.5.3]
 - Improved error message for SAS token permission errors
 - Improved error message for incorrect storage account keys
