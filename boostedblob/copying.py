@@ -169,26 +169,39 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
         copy_id = resp.headers["x-ms-copy-id"]
         copy_status = resp.headers["x-ms-copy-status"]
 
-    # wait for potentially async copy operation to finish
-    # https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob
-    # pending, success, aborted, failed
-    sleep = exponential_sleep_generator(
-        initial=config.backoff_initial,
-        maximum=config.backoff_max,
-        jitter_fraction=config.backoff_jitter_fraction,
-    )
-    while copy_status == "pending":
-        await asyncio.sleep(next(sleep))
-        request = await azurify_request(
-            Request(
-                method="GET",
-                url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            )
+    try:
+        # wait for potentially async copy operation to finish
+        # https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob
+        # pending, success, aborted, failed
+        sleep = exponential_sleep_generator(
+            initial=config.backoff_initial,
+            maximum=config.backoff_max,
+            jitter_fraction=config.backoff_jitter_fraction,
         )
-        async with request.execute() as resp:
-            if resp.headers["x-ms-copy-id"] != copy_id:
-                raise RuntimeError("Copy id mismatch")
-            copy_status = resp.headers["x-ms-copy-status"]
+        while copy_status == "pending":
+            await asyncio.sleep(next(sleep))
+            request = await azurify_request(
+                Request(
+                    method="GET",
+                    url=dst.format_url(
+                        "https://{account}.blob.core.windows.net/{container}/{blob}"
+                    ),
+                )
+            )
+            async with request.execute() as resp:
+                if resp.headers["x-ms-copy-id"] != copy_id:
+                    raise RuntimeError("Copy id mismatch")
+                copy_status = resp.headers["x-ms-copy-status"]
+    except BaseException:
+        print(
+            "[boostedblob] Asynchronous cloud copy operation is still pending. You can cancel "
+            f"the copy manually with `az storage blob copy cancel --copy-id {copy_id} "
+            f"--destination-blob {dst.blob} --destination-container {dst.container} "
+            f"--account-name {dst.account}`. Note if successfully cancelled, this will produce "
+            "an empty blob at the destination.",
+            file=sys.stderr,
+        )
+        raise
     if copy_status != "success":
         raise RuntimeError(f"Invalid copy status: '{copy_status}'")
 
