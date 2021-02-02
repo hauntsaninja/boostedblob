@@ -142,7 +142,7 @@ class BoostExecutor:
         MAX_TIMEOUT = 0.1
         timeout = MIN_TIMEOUT
 
-        if self.semaphore.locked():
+        if self.concurrency == 1:
             return
 
         while True:
