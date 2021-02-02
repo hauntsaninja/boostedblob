@@ -1,6 +1,7 @@
 import contextlib
 import datetime
 import io
+import os
 import subprocess
 from typing import Any, List, Tuple
 from unittest.mock import MagicMock
@@ -144,7 +145,9 @@ def test_complete():
         )
         assert [f"az:{p}" for p in output.splitlines()] == expected_output
 
-        assert run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", "az://"]) == ""
+        # if BBB_DEBUG is on then we print a stacktrace, so just skip this test in that case
+        if not os.environ.get("BBB_DEBUG"):
+            assert run_bbb(["complete", "command", "zsh", 2, "bbb", "ls", "az://"]) == ""
 
     subprocess.check_call(["bash", "-c", run_bbb(["complete", "init", "bash"])])
     subprocess.check_call(["zsh", "-ic", run_bbb(["complete", "init", "zsh"])])
