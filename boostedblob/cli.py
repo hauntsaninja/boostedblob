@@ -220,9 +220,14 @@ async def edit(path: str) -> None:
         local = bbb.LocalPath(tmpdir) / path_obj.name
         async with bbb.BoostExecutor(DEFAULT_CONCURRENCY) as executor:
             await bbb.copyfile(path_obj, local, executor)
+            pre_stat = await bbb.stat(local)
             subprocess.check_call([os.environ.get("EDITOR", "vi"), local])
-            await bbb.copyfile(local, path_obj, executor, overwrite=True)
-            print(f"Updated {path_obj}")
+            post_stat = await bbb.stat(local)
+            if pre_stat != post_stat:
+                await bbb.copyfile(local, path_obj, executor, overwrite=True)
+                print(f"Updated {path_obj}")
+            else:
+                print("File unmodified, skipping reupload...")
 
 
 def complete_init(shell: str) -> None:
