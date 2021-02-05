@@ -132,7 +132,7 @@ async def _azure_write_stream(
 
     upload_id = random.randint(0, 2 ** 47 - 1)
     md5 = hashlib.md5()
-    max_block_index = 0
+    max_block_index = -1
 
     async def upload_chunk(index_chunk: Tuple[int, bytes]) -> None:
         block_index, chunk = index_chunk
