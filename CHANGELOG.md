@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.1]
+- `bbb edit` will skip re-uploading if the file hasn't changed
+- Fix upload of empty files on Azure
+
 ## [v0.6.0]
 - Add `bbb edit` command
 - Set BBB_DEFAULT_CONCURRENCY env var to provide a default concurrency for CLI usage
