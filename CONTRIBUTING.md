@@ -21,6 +21,20 @@ for testing. Ask me for access / feel free to swap them out.
 
 Set the environment variable `BBB_DEBUG=1` to get full tracebacks on error and debug logs.
 
+## Codebase tips
+
+Here are some tips that should help navigating the codebase:
+- [cli.py](https://github.com/hauntsaninja/boostedblob/blob/master/boostedblob/cli.py) is a good way
+  to get to know how to use boostedblob as a library
+- boostedblob leans quite heavily on the [single
+  dispatch](https://docs.python.org/3/library/functools.html#functools.singledispatch) idiom. See
+  pathdispatch in
+  [path.py](https://github.com/hauntsaninja/boostedblob/blob/master/boostedblob/path.py) for details
+- boost.py contains the relatively complex code that deals with regulating concurrency. Look at
+  `read_stream` in
+  [read.py](https://github.com/hauntsaninja/boostedblob/blob/master/boostedblob/read.py) as a simple
+  example of how we use this abstraction
+
 ## Releasing
 
 To make a new release for `boostedblob`:
