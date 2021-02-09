@@ -58,8 +58,8 @@ class Config:
 
     chunk_size: int = 16 * MB
 
-    connect_timeout: float = 30.0
-    read_timeout: float = 300.0
+    connect_timeout: float = 20.0
+    read_timeout: float = 60.0
     backoff_initial: float = 0.1
     backoff_max: float = 60.0
     backoff_jitter_fraction: float = 0.9
