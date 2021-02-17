@@ -54,8 +54,21 @@ class Request:
                 jitter_fraction=config.backoff_jitter_fraction,
             )
         ):
+            stack = contextlib.AsyncExitStack()
             try:
-                async with self._raw_execute() as resp:
+                resp = await stack.enter_async_context(self._raw_execute())
+            except aiohttp.ClientConnectionError as e:
+                if isinstance(e, aiohttp.ClientConnectorError):
+                    # azure accounts have unique urls and it's hard to tell apart
+                    # an invalid hostname from a network error
+                    url = urllib.parse.urlparse(self.url)
+                    hostname = url.hostname
+                    if hostname and hostname.endswith(".blob.core.windows.net"):
+                        if await _bad_hostname_check(hostname):
+                            raise FileNotFoundError(hostname) from None
+                error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
+            else:
+                async with stack:
                     if resp.status in self.success_codes:
                         yield resp
                         return
@@ -67,17 +80,6 @@ class Request:
                     error = RequestFailure(reason=reason, request=self, status=resp.status)
                     if resp.status not in self.retry_codes:
                         raise self.failure_exceptions.get(resp.status, error)
-
-            except aiohttp.ClientConnectionError as e:
-                if isinstance(e, aiohttp.ClientConnectorError):
-                    # azure accounts have unique urls and it's hard to tell apart
-                    # an invalid hostname from a network error
-                    url = urllib.parse.urlparse(self.url)
-                    hostname = url.hostname
-                    if hostname and hostname.endswith(".blob.core.windows.net"):
-                        if await _bad_hostname_check(hostname):
-                            raise FileNotFoundError(hostname) from None
-                error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
 
             if attempt >= config.retry_limit:
                 raise error
