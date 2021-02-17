@@ -54,21 +54,20 @@ class Request:
                 jitter_fraction=config.backoff_jitter_fraction,
             )
         ):
-            stack = contextlib.AsyncExitStack()
-            try:
-                resp = await stack.enter_async_context(self._raw_execute())
-            except aiohttp.ClientConnectionError as e:
-                if isinstance(e, aiohttp.ClientConnectorError):
-                    # azure accounts have unique urls and it's hard to tell apart
-                    # an invalid hostname from a network error
-                    url = urllib.parse.urlparse(self.url)
-                    hostname = url.hostname
-                    if hostname and hostname.endswith(".blob.core.windows.net"):
-                        if await _bad_hostname_check(hostname):
-                            raise FileNotFoundError(hostname) from None
-                error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
-            else:
-                async with stack:
+            async with contextlib.AsyncExitStack() as stack:
+                try:
+                    resp = await stack.enter_async_context(self._raw_execute())
+                except aiohttp.ClientConnectionError as e:
+                    if isinstance(e, aiohttp.ClientConnectorError):
+                        # azure accounts have unique urls and it's hard to tell apart
+                        # an invalid hostname from a network error
+                        url = urllib.parse.urlparse(self.url)
+                        hostname = url.hostname
+                        if hostname and hostname.endswith(".blob.core.windows.net"):
+                            if await _bad_hostname_check(hostname):
+                                raise FileNotFoundError(hostname) from None
+                    error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
+                else:
                     if resp.status in self.success_codes:
                         yield resp
                         return
