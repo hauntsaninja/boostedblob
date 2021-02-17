@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.2]
+- Fix handling of ClientConnectionError in some cases (e.g. during reads)
+- Tweak default connection timeouts
+
 ## [v0.6.1]
 - `bbb edit` will skip re-uploading if the file hasn't changed
 - Fix upload of empty files on Azure
