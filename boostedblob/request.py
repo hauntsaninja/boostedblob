@@ -289,35 +289,47 @@ def exponential_sleep_generator(
             base = maximum
 
 
+_hostname_check_cache: Dict[str, Tuple[float, bool]] = {}
+
+
 async def _bad_hostname_check(hostname: str) -> bool:
     """Return True if the hostname likely does not exist.
 
     If the hostname exists, or there is uncertainty, return False.
 
     """
-    loop = asyncio.get_event_loop()
-    try:
-        await loop.getaddrinfo(hostname, None, family=socket.AF_INET)
-        # no errors encountered, the hostname exists
-        return False
-    except socket.gaierror as e:
-        if e.errno != socket.EAI_NONAME:
-            # we got some sort of other socket error, so it's unclear if the host exists or not
-            return False
-        if sys.platform == "linux":
-            # on linux we appear to get EAI_NONAME if the host does not exist and EAI_AGAIN if
-            # there is a temporary failure in resolution
-            return True
-        # it's not clear on other platforms how to differentiate a temporary name resolution
-        # failure from a permanent one, EAI_NONAME seems to be returned for either case if we
-        # cannot look up the hostname, but we can look up google, then it's likely the hostname
-        # does not exist
+
+    async def inner(hostname: str) -> bool:
+        loop = asyncio.get_event_loop()
         try:
-            await loop.getaddrinfo("www.google.com", None, family=socket.AF_INET)
-        except socket.gaierror:
-            # if we can't resolve google, then the network is likely down and we don't know if
-            # the hostname exists or not
+            await loop.getaddrinfo(hostname, None, family=socket.AF_INET)
+            # no errors encountered, the hostname exists
             return False
-        # in this case, we could resolve google, but not the original hostname likely the
-        # hostname does not exist (though this is definitely not a foolproof check)
-        return True
+        except socket.gaierror as e:
+            if e.errno != socket.EAI_NONAME:
+                # we got some sort of other socket error, so it's unclear if the host exists or not
+                return False
+            if sys.platform == "linux":
+                # on linux we appear to get EAI_NONAME if the host does not exist and EAI_AGAIN if
+                # there is a temporary failure in resolution
+                return True
+            # it's not clear on other platforms how to differentiate a temporary name resolution
+            # failure from a permanent one, EAI_NONAME seems to be returned for either case if we
+            # cannot look up the hostname, but we can look up google, then it's likely the hostname
+            # does not exist
+            try:
+                await loop.getaddrinfo("www.google.com", None, family=socket.AF_INET)
+            except socket.gaierror:
+                # if we can't resolve google, then the network is likely down and we don't know if
+                # the hostname exists or not
+                return False
+            # in this case, we could resolve google, but not the original hostname likely the
+            # hostname does not exist (though this is definitely not a foolproof check)
+            return True
+
+    now = time.time()
+    if hostname in _hostname_check_cache and _hostname_check_cache[hostname][0] >= now:
+        return _hostname_check_cache[hostname][1]
+    ret = await inner(hostname)
+    _hostname_check_cache[hostname] = (now + 10, ret)
+    return ret
