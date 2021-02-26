@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.6.3]
+- Temporarily cache bad hostname checks
+
 ## [v0.6.2]
 - Fix handling of ClientConnectionError in some cases (e.g. during reads)
 - Tweak default connection timeouts
