@@ -305,7 +305,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
             await loop.getaddrinfo(hostname, None, family=socket.AF_INET)
             # no errors encountered, the hostname exists
             return False
-        except socket.gaierror as e:
+        except OSError as e:
             if e.errno != socket.EAI_NONAME:
                 # we got some sort of other socket error, so it's unclear if the host exists or not
                 return False
@@ -319,7 +319,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
             # does not exist
             try:
                 await loop.getaddrinfo("www.google.com", None, family=socket.AF_INET)
-            except socket.gaierror:
+            except OSError:
                 # if we can't resolve google, then the network is likely down and we don't know if
                 # the hostname exists or not
                 return False
