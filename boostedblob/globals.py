@@ -31,6 +31,20 @@ T = TypeVar("T")
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+class cached_property:
+    # Simplified version of Python 3.8's cached_property
+
+    def __init__(self, func: Callable[..., Any]) -> None:
+        self.func = func
+
+    def __get__(self, obj: Any, cls: Any) -> Any:
+        if obj is None:
+            return self
+        ret = self.func(obj)
+        obj.__dict__[self.func.__name__] = ret
+        return ret
+
+
 class TokenManager(Generic[T]):
     """Automatically refresh a token when it expires."""
 
@@ -39,12 +53,19 @@ class TokenManager(Generic[T]):
         self._tokens: Dict[T, Any] = {}
         self._expirations: Dict[T, float] = {}
 
+    @cached_property
+    def _lock(self) -> asyncio.Lock:
+        return asyncio.Lock()
+
     async def get_token(self, key: T) -> Any:
         now = time.time()
         expiration = self._expirations.get(key)
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
-            self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
-            assert self._expirations[key] is not None
+            async with self._lock:
+                refresh_expiration = self._expirations.get(key)
+                if refresh_expiration == expiration:
+                    self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
+                    assert self._expirations[key] is not None
 
         assert key in self._tokens
         return self._tokens[key]
