@@ -99,8 +99,6 @@ class Request:
     @contextlib.asynccontextmanager
     async def _raw_execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
         """Actually execute the request, with no extra fluff."""
-        # TODO: investigate asyncio unclosed transport warnings from
-        # -X dev -X tracemalloc=20
         if config.session is None:
             raise MissingSession(
                 "No session available, use `async with session_context()` or `@ensure_session`"
@@ -327,6 +325,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
             # hostname does not exist (though this is definitely not a foolproof check)
             return True
 
+    # maybe this cache is a little bit overkill...
     now = time.time()
     if hostname in _hostname_check_cache and _hostname_check_cache[hostname][0] >= now:
         return _hostname_check_cache[hostname][1]
