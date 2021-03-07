@@ -1,6 +1,7 @@
+import asyncio
 import os
 import shutil
-from typing import AsyncIterator, Union
+from typing import AsyncIterator, Optional, Union
 
 from .boost import BoostExecutor, EagerAsyncIterator, consume
 from .listing import glob_scandir, listtree
@@ -93,7 +94,7 @@ async def glob_remove(
 # ==============================
 
 
-async def rmtree_iterator(path: BasePath, executor: BoostExecutor) -> AsyncIterator[BasePath]:
+async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIterator[BasePath]:
     """Delete the directory ``path``.
 
     Yields the deleted paths as they are deleted.
@@ -102,7 +103,20 @@ async def rmtree_iterator(path: BasePath, executor: BoostExecutor) -> AsyncItera
     :param executor: An executor.
 
     """
+    # Note that this function almost works for LocalPath, except that we wouldn't remove empty
+    # directories. To get this to work, we'd need a variant of scantree that also yields
+    # directories, ensuring they're in the right order. This would also allow us to get rid of the
+    # current directory file marker special casing.
     dirpath = path.ensure_directory_like()
+
+    # listtree will not list the directory itself, so we need to remove the marker file if present
+    async def remove_directory_marker() -> Optional[BasePath]:
+        try:
+            return await remove(dirpath)
+        except (FileNotFoundError, IsADirectoryError, PermissionError):
+            return None
+
+    marker_task = asyncio.create_task(remove_directory_marker())
 
     try:
         async for subpath in executor.map_unordered(remove, EagerAsyncIterator(listtree(dirpath))):
@@ -111,6 +125,10 @@ async def rmtree_iterator(path: BasePath, executor: BoostExecutor) -> AsyncItera
         if await isfile(path):
             raise NotADirectoryError(path)
         raise
+
+    marker = await marker_task
+    if marker:
+        yield marker
 
 
 @pathdispatch

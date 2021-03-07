@@ -120,7 +120,8 @@ def test_cli():
             ]
 
             run_bbb(["rmtree", remote_dir])
-            assert run_bbb(["lstree", remote_dir]) == ""
+            with pytest.raises(FileNotFoundError):
+                run_bbb(["lstree", remote_dir])
 
 
 def test_complete():
