@@ -48,6 +48,8 @@ def test_path_methods():
         assert subsubpath.parent.name == "subblob"
         assert subsubpath.parent.parent.name == "blob"
 
+        assert path.ensure_directory_like().parent == path.parent
+
         assert subsubpath.relative_to(path) == "subblob/subsubsub"
         assert subsubpath.relative_to(path.parent) == "blob/subblob/subsubsub"
         assert subpath.relative_to(path) == "subblob"

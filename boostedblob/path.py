@@ -78,7 +78,10 @@ class LocalPath(BasePath):
 
     @property
     def parent(self) -> LocalPath:
-        return LocalPath(os.path.dirname(self.path) or ".")
+        parent = os.path.dirname(_strip_slash(self.path))
+        if not parent:
+            parent = "/" if os.path.isabs(self.path) else "."
+        return LocalPath(parent)
 
     def relative_to(self, other: LocalPath) -> str:
         if not isinstance(other, LocalPath):
@@ -141,7 +144,7 @@ class AzurePath(CloudPath):
 
     @property
     def parent(self) -> AzurePath:
-        return AzurePath(self.account, self.container, os.path.dirname(self.blob))
+        return AzurePath(self.account, self.container, os.path.dirname(_strip_slash(self.blob)))
 
     def relative_to(self, other: AzurePath) -> str:
         if not isinstance(other, AzurePath):
@@ -197,7 +200,7 @@ class GooglePath(CloudPath):
 
     @property
     def parent(self) -> GooglePath:
-        return GooglePath(self.bucket, os.path.dirname(self.blob))
+        return GooglePath(self.bucket, os.path.dirname(_strip_slash(self.blob)))
 
     def relative_to(self, other: GooglePath) -> str:
         if not isinstance(other, GooglePath):
