@@ -6,11 +6,13 @@ import os
 import random
 from typing import List, Mapping, Optional, Tuple, Union
 
+import xmltodict
+
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, exists, pathdispatch
 from .read import ByteRange
-from .request import Request, azurify_request, googlify_request
+from .request import Request, RequestFailure, azurify_request, googlify_request
 
 AZURE_BLOCK_COUNT_LIMIT = 50000
 
@@ -111,21 +113,7 @@ async def _azure_write_stream(
     overwrite: bool = False,
 ) -> None:
     if overwrite:
-        # if the existing blob type is not compatible with the block blob we are about to write we
-        # have to delete the file before writing our block blob or else we will get a 409 error when
-        # putting the first block
-        # if the existing blob is compatible, then in the event of multiple concurrent writers we
-        # run the risk of ending up with uncommitted blocks, which could hit the uncommitted block
-        # limit. rather than deal with that, just remove the file before writing which will clear
-        # all uncommitted blocks
-        # we could have a more elaborate upload system that does a write, then a copy, then a delete
-        # but it's not obvious how to ensure that the temporary file is deleted without creating a
-        # lifecycle rule on each container
-        # TODO: blobfile has made some changes here, consider pulling them in
-        try:
-            await remove(path)
-        except FileNotFoundError:
-            pass
+        await _prepare_block_blob_write(path)
     else:
         if await exists(path):
             raise FileExistsError(path)
@@ -317,6 +305,80 @@ def _get_block_id(upload_id: int, index: int) -> str:
     return base64.b64encode(id_plus_index.to_bytes(8, byteorder="big")).decode("utf8")
 
 
+async def _prepare_block_blob_write(path: AzurePath, _always_clear: bool = False) -> None:
+    request = await azurify_request(
+        Request(
+            method="GET",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            params=dict(comp="blocklist"),
+            success_codes=(200, 404, 400),
+        )
+    )
+    async with request.execute() as resp:
+        # If the block doesn't exist, we're good to go.
+        if resp.status == 404:
+            return
+        # Get Block List will return 400 if the blob is not a block blob.
+        # In this case, we need to remove the blob to prevent errors when we Put Block
+        if resp.status == 400:
+            await remove(path)
+            return
+        data = await resp.read()
+
+    result = xmltodict.parse(data)
+    if result["BlockList"]["CommittedBlocks"] is None:
+        return
+
+    blocks = result["BlockList"]["CommittedBlocks"]["Block"]
+    if isinstance(blocks, dict):
+        blocks = [blocks]
+
+    if not _always_clear and len(blocks) < 10000:
+        # Don't bother clearing uncommitted blocks if we have less than 10,000 committed blocks,
+        # since seems unlikely we'd run into the 100,000 block limit in this case.
+        return
+
+    # In the event of multiple concurrent writers, we run the risk of ending up with uncommitted
+    # blocks which could hit the uncommited block limit. Clear uncommitted blocks by performing a
+    # Put Block List with all the existing blocks. This will change the last-modified timestamp and
+    # the etag.
+
+    # Make sure to preserve metadata for the file
+    request = await azurify_request(
+        Request(
+            method="HEAD",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            failure_exceptions={404: FileNotFoundError(path)},
+        )
+    )
+    async with request.execute() as resp:
+        metadata = resp.headers
+    headers = {k: v for k, v in metadata.items() if k.startswith("x-ms-meta-")}
+    RESPONSE_HEADER_TO_REQUEST_HEADER = {
+        "Cache-Control": "x-ms-blob-cache-control",
+        "Content-Type": "x-ms-blob-content-type",
+        "Content-MD5": "x-ms-blob-content-md5",
+        "Content-Encoding": "x-ms-blob-content-encoding",
+        "Content-Language": "x-ms-blob-content-language",
+        "Content-Disposition": "x-ms-blob-content-disposition",
+    }
+    for src, dst in RESPONSE_HEADER_TO_REQUEST_HEADER.items():
+        if src in metadata:
+            headers[dst] = metadata[src]
+
+    request = await azurify_request(
+        Request(
+            method="PUT",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            headers={**headers, "If-Match": metadata["etag"]},
+            params=dict(comp="blocklist"),
+            data={"BlockList": {"Latest": [b["Name"] for b in blocks]}},
+            success_codes=(201, 404, 412),
+        )
+    )
+    await request.execute_reponseless()
+
+
 async def _azure_put_block(path: AzurePath, block_id: str, chunk: bytes) -> None:
     request = await azurify_request(
         Request(
@@ -342,10 +404,18 @@ async def _azure_put_block_list(
             headers=headers,
             params=dict(comp="blocklist"),
             data={"BlockList": {"Latest": block_list}},
-            success_codes=(201,),
+            success_codes=(201, 400),
         )
     )
-    await request.execute_reponseless()
+    async with request.execute() as resp:
+        if resp.status == 400:
+            data = await resp.read()
+            result = xmltodict.parse(data)
+            if result["Error"]["Code"] == "InvalidBlockList":
+                raise RuntimeError(
+                    f"Invalid block list, most likely due to concurrent writes to {path}"
+                )
+            raise RequestFailure(reason=str(resp.reason), request=request, status=resp.status)
 
 
 async def _google_start_resumable_upload(path: GooglePath) -> str:
