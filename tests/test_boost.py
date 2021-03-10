@@ -48,11 +48,11 @@ async def collect(it: AsyncIterable[int], results: List[int]) -> None:
 async def test_map_ordered_single():
     futures = {}
     async with bbb.BoostExecutor(1) as e:
-        assert e.semaphore._value == 0  # type: ignore
+        assert e.semaphore._value == 0
         it = e.map_ordered(get_futures_fn(futures), iter([0, 1])).__aiter__()
         assert not futures
         await pause()
-        assert e.semaphore._value == 0  # type: ignore
+        assert e.semaphore._value == 0
         assert set(futures) == set()
 
         next_task = asyncio.create_task(it.__anext__())
@@ -83,11 +83,11 @@ async def test_map_ordered():
     futures = {}
     results = []
     async with bbb.BoostExecutor(2) as e:
-        assert e.semaphore._value == 1  # type: ignore
+        assert e.semaphore._value == 1
         it = e.map_ordered(get_futures_fn(futures), iter(range(4)))
         asyncio.create_task(collect(it, results))
         await pause()
-        assert e.semaphore._value == 0  # type: ignore
+        assert e.semaphore._value == 0
         assert set(futures) == {0, 1}
 
         futures[1].set_result(None)
@@ -193,11 +193,11 @@ async def test_map_unordered():
     futures = {}
     results = []
     async with bbb.BoostExecutor(3) as e:
-        assert e.semaphore._value == 2  # type: ignore
+        assert e.semaphore._value == 2
         it = e.map_unordered(get_futures_fn(futures), iter(range(5)))
         asyncio.create_task(collect(it, results))
         await pause()
-        assert e.semaphore._value == 0  # type: ignore
+        assert e.semaphore._value == 0
         assert set(futures) == {0, 1, 2}
 
         futures[1].set_result(None)
