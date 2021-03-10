@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import json
 import os
 import sys
 import time
@@ -40,14 +41,70 @@ class TokenManager(Generic[T]):
         self._expirations: Dict[T, float] = {}
 
     async def get_token(self, key: T) -> Any:
+        if not self._tokens:
+            self.load_state()
+
         now = time.time()
         expiration = self._expirations.get(key)
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
             self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
             assert self._expirations[key] is not None
+            self.dump_state()
 
         assert key in self._tokens
         return self._tokens[key]
+
+    def get_cache_file(self) -> str:
+        qn = self._get_token_fn.__module__ + "." + self._get_token_fn.__qualname__
+        return os.path.expanduser(f"~/.config/bbb/{qn}.json")
+
+    def load_state(self) -> None:
+        if os.environ.get("BBB_DISABLE_CACHE"):
+            return
+        try:
+            cache_file = self.get_cache_file()
+            with open(cache_file, "r") as f:
+                state = json.load(f)
+            if state.get("__version__") != 1:
+                os.remove(cache_file)
+                raise RuntimeError("Outdated format")
+        except Exception as e:
+            if config.debug_mode:
+                print(f"[boostedblob] Error while loading token cache: {e}", file=sys.stderr)
+            return
+
+        for t in state["tokens"]:
+            key: Any = t["key"]
+            key = tuple(key) if isinstance(key, list) else key
+            self._tokens[key] = t["token"]
+            self._expirations[key] = t["expiration"]
+
+    def dump_state(self) -> None:
+        if os.environ.get("BBB_DISABLE_CACHE"):
+            return
+        now = time.time()
+        state = {
+            "__version__": 1,
+            "tokens": [
+                {
+                    "key": k,
+                    "token": self._tokens[k],
+                    # lie about token expiry, so there's a limit on how long bbb will used a
+                    # cached token
+                    "expiration": min(exp, now + config.token_early_expiration_seconds * 2),
+                }
+                for k, exp in self._expirations.items()
+                if exp > now  # only save tokens that have not expired
+            ],
+        }
+        try:
+            cache_file = self.get_cache_file()
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump(state, f)
+        except Exception as e:
+            if config.debug_mode:
+                print(f"[boostedblob] Error while dumping token cache: {e}", file=sys.stderr)
 
 
 @dataclass
