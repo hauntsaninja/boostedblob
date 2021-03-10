@@ -6,7 +6,7 @@ import functools
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
     AsyncIterator,
@@ -66,11 +66,16 @@ class Config:
     retry_limit: int = 15
 
     token_early_expiration_seconds: int = 300
-    azure_access_token_manager = TokenManager[Tuple[str, Optional[str]]](
-        azure_auth.get_access_token
+
+    azure_access_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
+        default_factory=lambda: TokenManager(azure_auth.get_access_token)
     )
-    azure_sas_token_manager = TokenManager[Tuple[str, Optional[str]]](azure_auth.get_sas_token)
-    google_access_token_manager = TokenManager[str](google_auth.get_access_token)
+    azure_sas_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
+        default_factory=lambda: TokenManager(azure_auth.get_sas_token)
+    )
+    google_access_token_manager: TokenManager[str] = field(
+        default_factory=lambda: TokenManager(google_auth.get_access_token)
+    )
 
 
 config: Config = Config()
