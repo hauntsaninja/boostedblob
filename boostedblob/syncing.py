@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 from dataclasses import dataclass
 from typing import AsyncIterator, Iterator, List, Optional, Tuple, Union
 
@@ -107,11 +108,19 @@ async def sync(
     if src_obj.is_relative_to(dst_obj) or dst_obj.is_relative_to(src_obj):
         raise ValueError("Cannot sync overlapping directories")
 
-    async def copy_wrapper(relpath: str, size: Optional[int]) -> BasePath:
+    async def copy_wrapper(relpath: str, size: Optional[int]) -> Optional[BasePath]:
         src_file = src_obj / relpath
         dst_file = dst_obj / relpath
-        await copyfile(src_file, dst_file, executor, size=size, overwrite=True)
-        return src_file
+        try:
+            await copyfile(src_file, dst_file, executor, size=size, overwrite=True)
+            return src_file
+        except FileNotFoundError as e:
+            print(
+                "[boostedblob] File disappeared while syncing, ignoring. Likely due to "
+                f"concurrent deletion: {e}",
+                file=sys.stderr,
+            )
+        return None
 
     async def delete_wrapper(relpath: str) -> BasePath:
         dst_file = dst_obj / relpath
