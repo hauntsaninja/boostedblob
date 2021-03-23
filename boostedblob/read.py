@@ -46,6 +46,7 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
             headers=range_header,
             success_codes=success_codes,
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     return await _execute_read_retrying_payload_error(request)
@@ -63,6 +64,7 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
             params=dict(alt="media"),
             headers=range_header,
             success_codes=success_codes,
+            failure_exceptions={404: FileNotFoundError(path)},
         )
     )
     return await _execute_read_retrying_payload_error(request)
