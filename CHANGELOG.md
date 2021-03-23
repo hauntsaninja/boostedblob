@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.7.0]
+- Added disk caching of auth tokens. This speeds up autocomplete (and other quick commands) significantly
+- Improved handling of concurrent file deletion; ignore during syncing, raise FileNotFoundErrors during partial reads
+- Avoid (transient) deletion when overwriting large files on Azure
+- Make `bbb rmtree` remove directory marker files as well
+- Make `BasePath.parent` more pathlib like in how it treats trailing slashes
+- Improved combinators in `boost.py`, in particular, added `eagerise`
+- Make reads more resilient to ServerTimeoutErrors
+- Document aiohttp's tendency to leak file descriptors
+- Catch OSError during bad hostname checks, for better behaviour with too many open files
+- Improve TokenManager initialisation
+
 ## [v0.6.3]
 - Temporarily cache bad hostname checks
 
