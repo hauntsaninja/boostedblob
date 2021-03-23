@@ -451,6 +451,8 @@ class FilterBoostable(Boostable[T]):
         self.inner = inner
 
     def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+        if isinstance(self.inner, Boostable):
+            return self.inner.provide_boost()
         return Exhausted()
 
     def dequeue(self) -> Union[NotReady, Exhausted, T]:
@@ -473,6 +475,8 @@ class EnumerateBoostable(Boostable[Tuple[int, T]]):
         self.index = 0
 
     def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+        if isinstance(self.inner, Boostable):
+            return self.inner.provide_boost()
         return Exhausted()
 
     def dequeue(self) -> Union[NotReady, Exhausted, Tuple[int, T]]:
