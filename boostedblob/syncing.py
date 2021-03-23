@@ -8,6 +8,7 @@ from .copying import copyfile
 from .delete import remove
 from .listing import DirEntry, scantree
 from .path import BasePath, LocalPath, Stat
+from .request import RequestFailure
 
 
 @dataclass
@@ -88,10 +89,13 @@ async def sync(
     dst: Union[str, BasePath],
     executor: BoostExecutor,
     delete: bool = False,
-) -> AsyncIterator[BasePath]:
+) -> AsyncIterator[Union[BasePath, RequestFailure]]:
     """Syncs the tree rooted at ``src`` to ``dst``.
 
-    Yields the paths as they are copied or deleted.
+    Is robust to request failures, in the sense that remaining files will continue to be synced
+    before the exception is raised.
+
+    Yields the paths or request failures as they are attempted to be copied or deleted.
 
     :param src: The root of the tree to sync from.
     :param dst: The root of the tree to sync to.
@@ -103,6 +107,7 @@ async def sync(
     src_obj = src_obj.ensure_directory_like()
     dst_obj = dst if isinstance(dst, BasePath) else BasePath.from_str(dst)
     dst_obj = dst_obj.ensure_directory_like()
+    failures = []
 
     if src_obj.is_relative_to(dst_obj) or dst_obj.is_relative_to(src_obj):
         raise ValueError("Cannot sync overlapping directories")
@@ -110,8 +115,12 @@ async def sync(
     async def copy_wrapper(relpath: str, size: Optional[int]) -> BasePath:
         src_file = src_obj / relpath
         dst_file = dst_obj / relpath
-        await copyfile(src_file, dst_file, executor, size=size, overwrite=True)
-        return src_file
+        try:
+            await copyfile(src_file, dst_file, executor, size=size, overwrite=True)
+            return src_file
+        except RequestFailure as e:
+            failures.append(e)
+            return e
 
     async def delete_wrapper(relpath: str) -> BasePath:
         dst_file = dst_obj / relpath
@@ -130,6 +139,8 @@ async def sync(
     async for path in actions:
         if path is not None:
             yield path
+    if failures:
+        raise failures[0]
 
 
 def _should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
