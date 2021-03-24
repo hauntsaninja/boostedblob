@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import itertools
 from typing import Any, Iterator, Optional, Tuple, Union
 
@@ -13,7 +14,7 @@ from .boost import (
 )
 from .globals import config
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, getsize, pathdispatch
-from .request import Request, azurify_request, googlify_request
+from .request import Request, azurify_request, exponential_sleep_generator, googlify_request
 
 ByteRange = Tuple[int, int]
 OptByteRange = Tuple[Optional[int], Optional[int]]
@@ -49,7 +50,7 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
             failure_exceptions={404: FileNotFoundError(path)},
         )
     )
-    return await _execute_read_retrying_payload_error(request)
+    return await _execute_retrying_read(request)
 
 
 @read_byte_range.register  # type: ignore
@@ -67,7 +68,7 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
             failure_exceptions={404: FileNotFoundError(path)},
         )
     )
-    return await _execute_read_retrying_payload_error(request)
+    return await _execute_retrying_read(request)
 
 
 # ==============================
@@ -201,15 +202,24 @@ def _byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
     return None
 
 
-async def _execute_read_retrying_payload_error(request: Request) -> bytes:
-    # work around https://github.com/aio-libs/aiohttp/issues/4581 /
+async def _execute_retrying_read(request: Request) -> bytes:
+    # Retrying aiohttp.ServerTimeoutError is pretty straightforward
+    # ClientPayloadError might be an aiohttp bug, see:
+    # https://github.com/aio-libs/aiohttp/issues/4581
     # https://github.com/aio-libs/aiohttp/issues/3904#issuecomment-737094416
     RETRIES = 3
-    for i in range(RETRIES):
+    for attempt, backoff in enumerate(
+        exponential_sleep_generator(
+            initial=config.backoff_initial,
+            maximum=config.backoff_max,
+            jitter_fraction=config.backoff_jitter_fraction,
+        )
+    ):
         try:
             async with request.execute() as resp:
                 return await resp.read()
-        except aiohttp.ClientPayloadError:
-            if i >= RETRIES - 1:
+        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
+            if attempt >= RETRIES - 1:
                 raise
+            await asyncio.sleep(backoff)
     raise AssertionError
