@@ -281,6 +281,7 @@ async def test_map_unordered_many_low_concurrency():
         for i in range(1, N):
             futures[i].set_result(None)
             await pause()
+            await pause()
             assert len(results) == i
         futures[0].set_result(None)
         await pause()
@@ -352,6 +353,7 @@ async def test_eagerise_backpressure():
     async with bbb.BoostExecutor(2) as e:
         eager_it = e.eagerise(iterator())
         assert results == []
+        await pause()
         await pause()
         await pause()
         assert results == list(range(2 * 10 + 1))
