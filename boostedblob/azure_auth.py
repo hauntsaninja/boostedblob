@@ -109,7 +109,7 @@ def load_stored_subscription_ids() -> List[str]:
         # this file has a UTF-8 BOM
         profile = json.loads(f.read().decode("utf-8-sig"))
 
-    subscriptions = profile["subscriptions"]
+    subscriptions = profile.get("subscriptions", [])
     subscriptions.sort(key=lambda x: x["isDefault"], reverse=True)
     return [sub["id"] for sub in subscriptions]
 
