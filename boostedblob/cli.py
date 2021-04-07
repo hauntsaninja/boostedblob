@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Tuple, TypeVar
 
 import boostedblob as bbb
 
@@ -97,6 +97,25 @@ async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
             print(entry.format(human_readable=not machine))
         else:
             print(path_obj)
+
+
+@sync_with_session
+async def _dud1(path: str) -> None:
+    async def _dud0(entry: bbb.listing.DirEntry) -> Tuple[bbb.BasePath, int]:
+        if entry.is_file:
+            return (entry.path, entry.stat.size if entry.stat else 0)
+        size = 0
+        async for e in bbb.scantree(entry.path):
+            if e.stat:
+                size += e.stat.size
+        return (entry.path, size)
+
+    async with bbb.BoostExecutor(100) as executor:
+        sizes = [x async for x in executor.map_ordered(_dud0, executor.eagerise(bbb.scandir(path)))]
+
+    sizes.sort(key=lambda x: x[1])
+    for subpath, size in sizes:
+        print(f"{bbb.listing.format_size(size).strip():>12}  {subpath}")
 
 
 @sync_with_session
@@ -223,7 +242,7 @@ async def edit(path: str) -> None:
                 await bbb.copyfile(path_obj, local, executor)
             except FileNotFoundError:
                 print("File not found, creating new file...")
-                with open(local, "w") as f:
+                with open(local, "w"):
                     pass
             pre_stat = await bbb.stat(local)
             subprocess.check_call([os.environ.get("EDITOR", "vi"), local])
@@ -494,6 +513,10 @@ eval "$(bbb complete init zsh)"
         action="store_true",
         help="Make output more easily machine readable",
     )
+
+    subparser = subparsers.add_parser("_dud1")
+    subparser.set_defaults(command=_dud1)
+    subparser.add_argument("path", help="Path of directory to list")
 
     subparser = subparsers.add_parser(
         "cat",
