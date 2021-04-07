@@ -219,7 +219,12 @@ async def edit(path: str) -> None:
         path_obj = bbb.BasePath.from_str(path)
         local = bbb.LocalPath(tmpdir) / path_obj.name
         async with bbb.BoostExecutor(DEFAULT_CONCURRENCY) as executor:
-            await bbb.copyfile(path_obj, local, executor)
+            try:
+                await bbb.copyfile(path_obj, local, executor)
+            except FileNotFoundError:
+                print("File not found, creating new file...")
+                with open(local, "w") as f:
+                    pass
             pre_stat = await bbb.stat(local)
             subprocess.check_call([os.environ.get("EDITOR", "vi"), local])
             post_stat = await bbb.stat(local)
