@@ -289,18 +289,18 @@ async def get_storage_account_id_with_subscription(
             if resp.status in (401, 403):
                 # we aren't allowed to query this for this subscription, skip it
                 return None
-            out = await resp.json()
+            result = await resp.json()
 
         # search for the storage account
-        account_id = next((obj["id"] for obj in out["value"] if obj["name"] == account), None)
+        account_id = next((obj["id"] for obj in result["value"] if obj["name"] == account), None)
         if account_id is not None:
             return account_id
 
-        if "nextLink" not in out:
+        if "nextLink" not in result:
             break
         req = Request(
             method="GET",
-            url=out["nextLink"],
+            url=result["nextLink"],
             success_codes=(200, 401, 403),
         )
     return None
@@ -322,17 +322,26 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
         url="https://management.azure.com/subscriptions",
         params={"api-version": "2020-01-01"},
     )
-    req = await azurify_request(req, auth=auth)
-    async with req.execute() as resp:
-        result = await resp.json()
-    subscription_ids = {item["subscriptionId"] for item in result["value"]}
 
-    for subscription_id in subscription_ids - set(stored_subscription_ids):
-        storage_account_id = await get_storage_account_id_with_subscription(
-            subscription_id, account, auth
+    while True:
+        req = await azurify_request(req, auth=auth)
+        async with req.execute() as resp:
+            result = await resp.json()
+        subscription_ids = {item["subscriptionId"] for item in result["value"]}
+
+        for subscription_id in subscription_ids - set(stored_subscription_ids):
+            storage_account_id = await get_storage_account_id_with_subscription(
+                subscription_id, account, auth
+            )
+            if storage_account_id:
+                return storage_account_id
+
+        if "nextLink" not in result:
+            break
+        req = Request(
+            method="GET",
+            url=result["nextLink"],
         )
-        if storage_account_id:
-            return storage_account_id
     return None
 
 
