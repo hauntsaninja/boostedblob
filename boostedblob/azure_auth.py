@@ -282,16 +282,28 @@ async def get_storage_account_id_with_subscription(
         params={"api-version": "2019-04-01"},
         success_codes=(200, 401, 403),
     )
-    req = await azurify_request(req, auth=auth)
 
-    async with req.execute() as resp:
-        if resp.status in (401, 403):
-            # we aren't allowed to query this for this subscription, skip it
-            return None
-        out = await resp.json()
+    while True:
+        req = await azurify_request(req, auth=auth)
+        async with req.execute() as resp:
+            if resp.status in (401, 403):
+                # we aren't allowed to query this for this subscription, skip it
+                return None
+            out = await resp.json()
 
-    # search for the storage account
-    return next((obj["id"] for obj in out["value"] if obj["name"] == account), None)
+        # search for the storage account
+        account_id = next((obj["id"] for obj in out["value"] if obj["name"] == account), None)
+        if account_id is not None:
+            return account_id
+
+        if "nextLink" not in out:
+            break
+        req = Request(
+            method="GET",
+            url=out["nextLink"],
+            success_codes=(200, 401, 403),
+        )
+    return None
 
 
 async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optional[str]:
