@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, TypeVar
 
 import boostedblob as bbb
 
@@ -101,21 +101,66 @@ async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
 
 @sync_with_session
 async def _dud1(path: str) -> None:
-    async def _dud0(entry: bbb.listing.DirEntry) -> Tuple[bbb.BasePath, int]:
+    sizes: Dict[bbb.BasePath, int] = {}
+
+    total_count = 0
+
+    async def _dud0(entry: bbb.listing.DirEntry) -> None:
+        nonlocal total_count
         if entry.is_file:
-            return (entry.path, entry.stat.size if entry.stat else 0)
-        size = 0
+            sizes[entry.path] = entry.stat.size if entry.stat else 0
+            total_count += 1
+            return
+        sizes[entry.path] = 0
         async for e in bbb.scantree(entry.path):
             if e.stat:
-                size += e.stat.size
-        return (entry.path, size)
+                sizes[entry.path] += e.stat.size
+                total_count += 1
+
+    def print_sizes() -> int:
+        sorted_sizes = sorted(sizes.items(), key=lambda x: x[1])
+        for subpath, size in sorted_sizes:
+            print(f"{bbb.listing.format_size(size).strip():>12}  {subpath}")
+        return len(sorted_sizes)
+
+    def clear_lines(num_lines: int) -> None:
+        erase_in_line = "\x1b[2K"
+        cursor_up = "\x1b[1A"
+        print("\r" + f"{cursor_up}{erase_in_line}" * num_lines, end="")
+
+    def print_spinner(message: str, _pos: Any = [0]) -> None:
+        clocks = ["🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"]
+        print(f"{clocks[_pos[0]]} {message}")
+        _pos[0] = (_pos[0] + 1) % len(clocks)
+
+    loop = asyncio.get_event_loop()
+    finished = loop.create_future()
+
+    async def live_update() -> None:
+        last_printed_len = 0
+        while True:
+            clear_lines(last_printed_len)
+            last_printed_len = print_sizes()
+            print_spinner(f"Summed {total_count} files so far...")
+            last_printed_len += 1
+            try:
+                await asyncio.wait_for(asyncio.shield(finished), 0.25)
+                break
+            except asyncio.TimeoutError:
+                pass
+        clear_lines(last_printed_len)
+
+    printer = asyncio.create_task(live_update())
 
     async with bbb.BoostExecutor(100) as executor:
-        sizes = [x async for x in executor.map_ordered(_dud0, executor.eagerise(bbb.scandir(path)))]
+        await bbb.boost.consume(executor.map_unordered(_dud0, executor.eagerise(bbb.scandir(path))))
 
-    sizes.sort(key=lambda x: x[1])
-    for subpath, size in sizes:
-        print(f"{bbb.listing.format_size(size).strip():>12}  {subpath}")
+    finished.set_result(None)
+    await printer
+
+    print_sizes()
+    total_size = bbb.listing.format_size(sum(sizes.values())).strip()
+    print(f"Listed {total_count} files summing to {total_size}")
 
 
 @sync_with_session
