@@ -455,11 +455,11 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
 async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[DirEntry]:
     if project is None:
         try:
-            config = configparser.ConfigParser()
-            config.read(
+            gconfig = configparser.ConfigParser()
+            gconfig.read(
                 os.path.join(google_auth.default_gcloud_path(), "configurations/config_default")
             )
-            project = config["core"]["project"]
+            project = gconfig["core"]["project"]
         except (KeyError, FileNotFoundError):
             raise ValueError(
                 "Could not determine project in which to list buckets; try setting it "
