@@ -120,7 +120,7 @@ class Config:
     backoff_initial: float = 0.1
     backoff_max: float = 60.0
     backoff_jitter_fraction: float = 0.9
-    retry_limit: int = 15
+    retry_limit: int = 25
 
     token_early_expiration_seconds: int = 300
 
