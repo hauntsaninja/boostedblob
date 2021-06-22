@@ -2,10 +2,11 @@ import argparse
 import asyncio
 import functools
 import os
+import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Tuple, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import boostedblob as bbb
 
@@ -217,17 +218,21 @@ async def sync(
     src: str,
     dst: str,
     delete: bool = False,
+    exclude: Optional[str] = None,
     quiet: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:
     src_obj = bbb.BasePath.from_str(src)
     dst_obj = bbb.BasePath.from_str(dst)
+    exclude_pattern = re.compile(exclude) if exclude is not None else None
 
     src_is_dirlike = src_obj.is_directory_like() or await bbb.isdir(src_obj)
     if not src_is_dirlike:
         raise ValueError(f"{src_obj} is not a directory")
     async with bbb.BoostExecutor(concurrency) as executor:
-        async for p in bbb.sync(src_obj, dst_obj, executor, delete=delete):
+        async for p in bbb.sync(
+            src_obj, dst_obj, executor, delete=delete, exclude_pattern=exclude_pattern
+        ):
             if not quiet:
                 print(p)
 
@@ -605,6 +610,11 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("dst", help="Directory to sync to")
     subparser.add_argument(
         "--delete", action="store_true", help="Delete destination files that don't exist in source"
+    )
+    subparser.add_argument(
+        "-x",
+        "--exclude",
+        help="Do not copy or delete files that don't match this Python regular expression",
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
