@@ -614,7 +614,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "-x",
         "--exclude",
-        help="Do not copy or delete files that don't match this Python regular expression",
+        help="Only copy or delete files that don't match this Python regular expression",
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
