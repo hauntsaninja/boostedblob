@@ -438,7 +438,11 @@ $ bbb share gs://bucket/frogs.txt
 bbb will change the destination so that it better mirrors the source.
 Specifically, bbb will copy over or replace files in the destination that are
 missing or have changed in the source. If --delete is specified, bbb will delete
-files in the destination that are not present in the source.
+files in the destination that are not present in the source. If --exclude (-x)
+is specified, bbb will not copy or delete any files whose relative path matches
+the given regex at any position (i.e. using the semantics of Python's
+re.search). Consider using regex anchors (^$) to ensure you're excluding exactly
+what you intend.
 
 Example:
 $ bbb sync gs://tmp/boostedblob boostedblob
@@ -446,6 +450,9 @@ $ bbb sync gs://tmp/boostedblob boostedblob
 Using --delete and re-syncing will delete spurious_file.txt:
 $ touch boostedblob/spurious_file.txt
 $ bbb sync --delete gs://tmp/boostedblob boostedblob
+
+Sync all files except those with .txt extension
+$ bbb sync gs://tmp/boostedblob boostedblob -x '\\.txt$'
 """
     complete_desc = """\
 To enable tab completion for bash, add the following to your bashrc:
@@ -610,7 +617,10 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "-x",
         "--exclude",
-        help="Only copy or delete files that don't match this Python regular expression",
+        help=(
+            "Only copy or delete files whose relative path don't match this Python regular "
+            "expression at any position"
+        ),
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
