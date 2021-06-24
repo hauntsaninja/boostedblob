@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+- Add an `--exclude` (or `-x`) option to `bbb sync`
+- `bbb edit` can create new files
+- Increase number of request retry attempts
+- Fail storage account key fallback in case of 429s due to Azure's really low rate limits
+- Paginate Azure requests against subscriptions, in case you have a lot of subscriptions
+- Add a private command to do the equivalent of `du -d 1`, live updates in the terminal
+- Add some private code for undeleting Azure blobs
+- Allow Azure profile to be missing subscriptions
+- Make test locations customisable
+
 ## [v0.7.0]
 - Added disk caching of auth tokens. This speeds up autocomplete (and other quick commands) significantly
 - Improved handling of concurrent file deletion; ignore during syncing, raise FileNotFoundErrors during partial reads
