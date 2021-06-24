@@ -157,8 +157,8 @@ async def _local_rmtree(path: LocalPath, executor: BoostExecutor) -> None:
 # ==============================
 
 
-async def _azure_undelete_blobs(path: Union[str, AzurePath]) -> None:
-    """This is currently unused and has only been informally tested."""
+async def _azure_undelete_tree(path: Union[str, AzurePath], executor: BoostExecutor) -> None:
+    """Experimental code to undelete blobs. It should work, but e.g. doesn't have tests."""
     if isinstance(path, str):
         path = AzurePath.from_str(path)
 
@@ -189,20 +189,20 @@ async def _azure_undelete_blobs(path: Union[str, AzurePath]) -> None:
     # Not sure if this is true, especially in the presence of versioning / overwrites
     assert len(deleted_blobs) == len(set(deleted_blobs))
 
-    # Should make ths a top-level helper
-    async def undelete(blob: AzurePath) -> AzurePath:
-        request = await azurify_request(
-            Request(
-                method="PUT",
-                url=blob.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-                params=dict(comp="undelete"),
-                success_codes=(200,),
-            )
-        )
-        await request.execute_reponseless()
-        return blob
+    # We might want to eagerise deleted_blobs
+    async for blob in executor.map_unordered(_azure_undelete, iter(deleted_blobs)):
+        # And turn this into an async iterator, instead of printing
+        print(f"Undeleted {blob}")
 
-    # Should pass the executor in and ideally map over the eagerised iterated deleted blobs
-    async with BoostExecutor(100) as executor:
-        async for blob in executor.map_unordered(undelete, iter(deleted_blobs)):
-            print(f"Undeleted {blob}")
+
+async def _azure_undelete(path: AzurePath) -> AzurePath:
+    request = await azurify_request(
+        Request(
+            method="PUT",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            params=dict(comp="undelete"),
+            success_codes=(200,),
+        )
+    )
+    await request.execute_reponseless()
+    return path
