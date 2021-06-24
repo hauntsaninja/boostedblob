@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import functools
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -224,21 +223,12 @@ async def sync(
 ) -> None:
     src_obj = bbb.BasePath.from_str(src)
     dst_obj = bbb.BasePath.from_str(dst)
-    try:
-        exclude_pattern = re.compile(exclude) if exclude is not None else None
-    except re.error as e:
-        raise ValueError(
-            f"Failed to compile exclude pattern {repr(exclude)}: {e}\n"
-            "Hint: exclude patterns should be Python regular expressions, not globs."
-        )
 
     src_is_dirlike = src_obj.is_directory_like() or await bbb.isdir(src_obj)
     if not src_is_dirlike:
         raise ValueError(f"{src_obj} is not a directory")
     async with bbb.BoostExecutor(concurrency) as executor:
-        async for p in bbb.sync(
-            src_obj, dst_obj, executor, delete=delete, exclude_pattern=exclude_pattern
-        ):
+        async for p in bbb.sync(src_obj, dst_obj, executor, delete=delete, exclude=exclude):
             if not quiet:
                 print(p)
 

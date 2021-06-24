@@ -28,7 +28,7 @@ class DeleteAction(Action):
 
 
 async def sync_action_iterator(
-    src: BasePath, dst: BasePath, exclude_pattern: Optional[re.Pattern] = None
+    src: BasePath, dst: BasePath, exclude: Optional[str] = None
 ) -> Iterator[Action]:
     """Yields the actions to take to sync the tree rooted at ``src`` to ``dst``.
 
@@ -40,6 +40,14 @@ async def sync_action_iterator(
         src = LocalPath(os.path.abspath(src.path))
     if isinstance(dst, LocalPath):
         dst = LocalPath(os.path.abspath(dst.path))
+
+    try:
+        exclude_pattern = re.compile(exclude) if exclude else None
+    except re.error as e:
+        raise ValueError(
+            f"Failed to compile exclude pattern {repr(exclude)}: {e}\n"
+            "Hint: exclude patterns should be Python regular expressions, not globs."
+        )
 
     async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
         try:
@@ -93,7 +101,7 @@ async def sync(
     dst: Union[str, BasePath],
     executor: BoostExecutor,
     delete: bool = False,
-    exclude_pattern: Optional[re.Pattern] = None,
+    exclude: Optional[str] = None,
 ) -> AsyncIterator[BasePath]:
     """Syncs the tree rooted at ``src`` to ``dst``.
 
@@ -142,7 +150,7 @@ async def sync(
 
     actions = executor.map_unordered(
         action_wrapper,
-        await sync_action_iterator(src_obj, dst_obj, exclude_pattern=exclude_pattern),
+        await sync_action_iterator(src_obj, dst_obj, exclude=exclude),
     )
     async for path in actions:
         if path is not None:
