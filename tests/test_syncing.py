@@ -52,6 +52,22 @@ async def test_sync(any_dir, other_any_dir):
             bbb.syncing.CopyAction("f1", 8),
             bbb.syncing.DeleteAction("f2"),
         ]
+        actions = sorted(
+            await bbb.syncing.sync_action_iterator(any_dir, other_any_dir, exclude="delta"),
+            key=lambda x: x.relpath,
+        )
+        assert actions == [
+            bbb.syncing.CopyAction("f1", 8),
+            bbb.syncing.DeleteAction("f2"),
+        ]
+        actions = sorted(
+            await bbb.syncing.sync_action_iterator(any_dir, other_any_dir, exclude="^f"),
+            key=lambda x: x.relpath,
+        )
+        assert actions == [
+            bbb.syncing.CopyAction("delta/f9", 13),
+        ]
+
         await bbb.boost.consume(bbb.sync(any_dir, other_any_dir, e, delete=True))
         assert await _listtree(any_dir, any_dir) == await _listtree(other_any_dir, other_any_dir)
 

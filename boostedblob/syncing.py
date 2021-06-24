@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import AsyncIterator, Iterator, List, Optional, Tuple, Union
@@ -26,7 +27,9 @@ class DeleteAction(Action):
     pass
 
 
-async def sync_action_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]:
+async def sync_action_iterator(
+    src: BasePath, dst: BasePath, exclude: Optional[str] = None
+) -> Iterator[Action]:
     """Yields the actions to take to sync the tree rooted at ``src`` to ``dst``.
 
     :param src: The root of the tree to copy from.
@@ -38,11 +41,20 @@ async def sync_action_iterator(src: BasePath, dst: BasePath) -> Iterator[Action]
     if isinstance(dst, LocalPath):
         dst = LocalPath(os.path.abspath(dst.path))
 
+    try:
+        exclude_pattern = re.compile(exclude) if exclude else None
+    except re.error as e:
+        raise ValueError(
+            f"Failed to compile exclude pattern {repr(exclude)}: {e}\n"
+            "Hint: exclude patterns should be Python regular expressions, not globs."
+        )
+
     async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
         try:
             # Note that if you create marker files to mark directories, scantree will return
             # those. Filter by is_file to avoid syncing these files that represent directories.
-            return [(p.path.relative_to(tree), p) async for p in scantree(tree) if p.is_file]
+            files = [(p.path.relative_to(tree), p) async for p in scantree(tree) if p.is_file]
+            return [p for p in files if exclude_pattern is None or not exclude_pattern.search(p[0])]
         except FileNotFoundError:
             return []
 
@@ -89,6 +101,7 @@ async def sync(
     dst: Union[str, BasePath],
     executor: BoostExecutor,
     delete: bool = False,
+    exclude: Optional[str] = None,
 ) -> AsyncIterator[BasePath]:
     """Syncs the tree rooted at ``src`` to ``dst``.
 
@@ -135,7 +148,10 @@ async def sync(
                 return await delete_wrapper(action.relpath)
         return None
 
-    actions = executor.map_unordered(action_wrapper, await sync_action_iterator(src_obj, dst_obj))
+    actions = executor.map_unordered(
+        action_wrapper,
+        await sync_action_iterator(src_obj, dst_obj, exclude=exclude),
+    )
     async for path in actions:
         if path is not None:
             yield path
