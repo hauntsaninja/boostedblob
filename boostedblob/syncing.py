@@ -54,7 +54,7 @@ async def sync_action_iterator(
             # Note that if you create marker files to mark directories, scantree will return
             # those. Filter by is_file to avoid syncing these files that represent directories.
             files = [(p.path.relative_to(tree), p) async for p in scantree(tree) if p.is_file]
-            return [p for p in files if exclude_pattern is None or not exclude_pattern.match(p[0])]
+            return [p for p in files if exclude_pattern is None or not exclude_pattern.search(p[0])]
         except FileNotFoundError:
             return []
 

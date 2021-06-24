@@ -61,7 +61,7 @@ async def test_sync(any_dir, other_any_dir):
             bbb.syncing.DeleteAction("f2"),
         ]
         actions = sorted(
-            await bbb.syncing.sync_action_iterator(any_dir, other_any_dir, exclude="f"),
+            await bbb.syncing.sync_action_iterator(any_dir, other_any_dir, exclude="^f"),
             key=lambda x: x.relpath,
         )
         assert actions == [
