@@ -11,7 +11,7 @@ async def test_get_storage_account_key():
     from boostedblob import azure_auth
 
     creds = azure_auth.load_credentials()
-    await azure_auth.get_storage_account_key(helpers.AZURE_TEST_BASE.account, creds)
+    await azure_auth.get_storage_account_key(helpers.azure_test_base().account, creds)
 
 
 def test_format_size():

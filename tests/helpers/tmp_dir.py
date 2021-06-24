@@ -1,4 +1,5 @@
 import contextlib
+import os
 import random
 import string
 import tempfile
@@ -6,10 +7,31 @@ import tempfile
 import blobfile
 import pytest
 
-from boostedblob import AzurePath, GooglePath, LocalPath
+from boostedblob import AzurePath, BasePath, GooglePath, LocalPath
 
-GOOGLE_TEST_BASE = GooglePath("shantanutest", "")
-AZURE_TEST_BASE = AzurePath("shantanutest", "container", "")
+
+def google_test_base() -> GooglePath:
+    locations = (
+        BasePath.from_str(loc)
+        for loc in os.environ.get("BBB_TEST_LOCATIONS", "gs://shantanutest").split(",")
+    )
+    test_base = next((loc for loc in locations if isinstance(loc, GooglePath)), None)
+    if test_base is None:
+        pytest.skip("No test location found for GooglePath. Set BBB_TEST_LOCATIONS to include one.")
+    assert test_base is not None
+    return test_base
+
+
+def azure_test_base() -> AzurePath:
+    locations = (
+        BasePath.from_str(loc)
+        for loc in os.environ.get("BBB_TEST_LOCATIONS", "az://shantanutest/container").split(",")
+    )
+    test_base = next((loc for loc in locations if isinstance(loc, AzurePath)), None)
+    if test_base is None:
+        pytest.skip("No test location found for AzurePath. Set BBB_TEST_LOCATIONS to include one.")
+    assert test_base is not None
+    return test_base
 
 
 @contextlib.contextmanager
@@ -21,8 +43,8 @@ def tmp_local_dir():
 @contextlib.contextmanager
 def tmp_azure_dir():
     random_id = "".join(random.choice(string.ascii_lowercase) for _ in range(16))
+    tmpdir = azure_test_base() / random_id
     try:
-        tmpdir = AZURE_TEST_BASE / random_id
         blobfile.makedirs(str(tmpdir))
         yield tmpdir
     finally:
@@ -35,8 +57,8 @@ def tmp_azure_dir():
 @contextlib.contextmanager
 def tmp_google_dir():
     random_id = "".join(random.choice(string.ascii_lowercase) for _ in range(16))
+    tmpdir = google_test_base() / random_id
     try:
-        tmpdir = GOOGLE_TEST_BASE / random_id
         blobfile.makedirs(str(tmpdir))
         yield tmpdir
     finally:

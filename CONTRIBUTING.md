@@ -13,9 +13,10 @@ To get started developing `boostedblob`:
 
 Run `./test.sh` to run tests.
 
-Note you'll need to have a functional Azure and Google Cloud situation for tests to pass. We use
-[these locations](https://github.com/hauntsaninja/boostedblob/blob/af48ecc4250a0b7652f55a01c7aa7cfb35dc8694/tests/helpers/tmp_dir.py#L11)
-for testing. Ask me for access / feel free to swap them out.
+This will run tests with some hardcoded cloud locations, which you may not have access to. Instead,
+use `BBB_TEST_LOCATIONS` to tell tests what locations to use. E.g.,
+`BBB_TEST_LOCATIONS=az://some/location ./test.sh` will run Azure tests reading and writing to the
+`az://some/location` and skip Google Cloud tests.
 
 ## Debugging tricks
 
