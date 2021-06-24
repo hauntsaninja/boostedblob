@@ -280,7 +280,7 @@ async def get_storage_account_id_with_subscription(
         method="GET",
         url=f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
         params={"api-version": "2019-04-01"},
-        success_codes=(200, 401, 403),
+        success_codes=(200, 401, 403, 429),
     )
 
     while True:
@@ -289,6 +289,21 @@ async def get_storage_account_id_with_subscription(
             if resp.status in (401, 403):
                 # we aren't allowed to query this for this subscription, skip it
                 return None
+            if resp.status == 429:
+                # these API endpoints have really low rate limits
+                # note this error message only makes sense because the only code path that
+                # currently calls get_storage_account_id_with_subscription is the storage
+                # account key fallback
+                raise RuntimeError(
+                    "You do not have the correct IAM roles to access this location. "
+                    "Check that you have Storage Blob Data Reader or Storage Blob Data Contributor "
+                    "roles. You can run "
+                    f"`az storage container list --auth-mode login --account-name {account}` "
+                    "to confirm the missing role.\n"
+                    "In this situation, boostedblob usually falls back to accessing the storage "
+                    "account keys, but Azure has really low rate limits on these queries, which "
+                    "are currently preventing us from doing so."
+                )
             result = await resp.json()
 
         # search for the storage account
