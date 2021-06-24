@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.8.0]
 - Add an `--exclude` (or `-x`) option to `bbb sync`
 - `bbb edit` can create new files
 - Increase number of request retry attempts
