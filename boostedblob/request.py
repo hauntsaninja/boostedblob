@@ -140,6 +140,29 @@ class RequestFailure(Exception):
         return f"{self.reason}, {self.status}, {self.request}"
 
 
+async def execute_retrying_read(request: Request) -> bytes:
+    # Retrying aiohttp.ServerTimeoutError is pretty straightforward
+    # ClientPayloadError might be an aiohttp bug, see:
+    # https://github.com/aio-libs/aiohttp/issues/4581
+    # https://github.com/aio-libs/aiohttp/issues/3904#issuecomment-737094416
+    RETRIES = 3
+    for attempt, backoff in enumerate(
+        exponential_sleep_generator(
+            initial=config.backoff_initial,
+            maximum=config.backoff_max,
+            jitter_fraction=config.backoff_jitter_fraction,
+        )
+    ):
+        try:
+            async with request.execute() as resp:
+                return await resp.read()
+        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
+            if attempt >= RETRIES - 1:
+                raise
+            await asyncio.sleep(backoff)
+    raise AssertionError
+
+
 # ==============================
 # cloud specific utilities
 # ==============================
@@ -223,16 +246,15 @@ async def azure_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]
             params=params,
             data=request.data,
             headers=request.headers,
-            success_codes=(200, 404),
+            success_codes=request.success_codes,
             retry_codes=request.retry_codes,
             failure_exceptions=request.failure_exceptions,
         )
+
         request = await azurify_request(request)
-        async with request.execute() as resp:
-            if resp.status == 404:
-                return
-            body = await resp.read()
-            result = xmltodict.parse(body)["EnumerationResults"]
+        body = await execute_retrying_read(request)
+
+        result = xmltodict.parse(body)["EnumerationResults"]
         yield result
         if result["NextMarker"] is None:
             break
