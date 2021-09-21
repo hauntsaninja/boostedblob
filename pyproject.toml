@@ -34,7 +34,7 @@ aiohttp = "^3.7.2"
 pycryptodomex = "^3.9"
 xmltodict = "^0.12"
 # uvloop is not strictly necessary
-uvloop = "^0.14"
+uvloop = "^0.16.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.1"
@@ -47,7 +47,7 @@ urllib3 = "*"
 filelock = "*"
 # tools
 ipdb = "*"
-black = "^20.8b1"
+black = "^21.9b0"
 isort = "^5.7.0"
 mypy = "^0.910"
 flake8 = "^3.8.3"
