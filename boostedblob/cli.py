@@ -17,10 +17,11 @@ def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
-            if sys.version_info < (3, 9):
-                # waiting for https://github.com/MagicStack/uvloop/issues/349
-                import uvloop
+            import uvloop
 
+            if sys.version_info < (3, 9) or (
+                tuple(map(int, uvloop.__version__.split("."))) >= (0, 15, 0)  # type: ignore
+            ):
                 uvloop.install()
         except ImportError:
             pass
