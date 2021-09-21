@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.8.1]
+- Retry broken reads when listing Azure blobs under load
+- Use uvloop on Python 3.9, if we have a new enough version
+
 ## [v0.8.0]
 - Add an `--exclude` (or `-x`) option to `bbb sync`
 - `bbb edit` can create new files
