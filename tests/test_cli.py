@@ -116,7 +116,7 @@ def test_cli():
                 ("4", "mtime", "f2"),
             ]
             assert normalise_long(run_bbb(["lstree", "-l", "--machine", remote_dir / "f1"])) == [
-                ("4", "mtime", "f1"),
+                ("4", "mtime", "f1")
             ]
 
             run_bbb(["rmtree", remote_dir])

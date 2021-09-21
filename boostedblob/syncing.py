@@ -149,8 +149,7 @@ async def sync(
         return None
 
     actions = executor.map_unordered(
-        action_wrapper,
-        await sync_action_iterator(src_obj, dst_obj, exclude=exclude),
+        action_wrapper, await sync_action_iterator(src_obj, dst_obj, exclude=exclude)
     )
     async for path in actions:
         if path is not None:

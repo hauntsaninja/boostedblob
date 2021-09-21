@@ -313,11 +313,7 @@ async def get_storage_account_id_with_subscription(
 
         if "nextLink" not in result:
             break
-        req = Request(
-            method="GET",
-            url=result["nextLink"],
-            success_codes=(200, 401, 403),
-        )
+        req = Request(method="GET", url=result["nextLink"], success_codes=(200, 401, 403))
     return None
 
 
@@ -353,10 +349,7 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
 
         if "nextLink" not in result:
             break
-        req = Request(
-            method="GET",
-            url=result["nextLink"],
-        )
+        req = Request(method="GET", url=result["nextLink"])
     return None
 
 

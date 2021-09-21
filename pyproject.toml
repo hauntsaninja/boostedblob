@@ -1,5 +1,6 @@
 [tool.black]
 line-length = 100
+skip-magic-trailing-comma = true
 
 [tool.coverage.report]
 exclude_lines = [

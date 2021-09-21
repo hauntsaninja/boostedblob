@@ -520,9 +520,7 @@ eval "$(bbb complete init zsh)"
         "-l", "--long", action="store_true", help="List information about each file"
     )
     subparser.add_argument(
-        "--machine",
-        action="store_true",
-        help="Make output more easily machine readable",
+        "--machine", action="store_true", help="Make output more easily machine readable"
     )
 
     subparser = subparsers.add_parser(
@@ -531,9 +529,7 @@ eval "$(bbb complete init zsh)"
     subparser.set_defaults(command=functools.partial(ls, long=True))
     subparser.add_argument("path", help="Path of directory to list")
     subparser.add_argument(
-        "--machine",
-        action="store_true",
-        help="Make output more easily machine readable",
+        "--machine", action="store_true", help="Make output more easily machine readable"
     )
 
     subparser = subparsers.add_parser(
@@ -549,9 +545,7 @@ eval "$(bbb complete init zsh)"
         "-l", "--long", action="store_true", help="List information about each file"
     )
     subparser.add_argument(
-        "--machine",
-        action="store_true",
-        help="Make output more easily machine readable",
+        "--machine", action="store_true", help="Make output more easily machine readable"
     )
 
     subparser = subparsers.add_parser(
@@ -563,9 +557,7 @@ eval "$(bbb complete init zsh)"
     subparser.set_defaults(command=functools.partial(lstree, long=True))
     subparser.add_argument("path", help="Root of directory tree to list")
     subparser.add_argument(
-        "--machine",
-        action="store_true",
-        help="Make output more easily machine readable",
+        "--machine", action="store_true", help="Make output more easily machine readable"
     )
 
     subparser = subparsers.add_parser("_dud1")
