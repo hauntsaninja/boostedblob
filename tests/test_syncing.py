@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any, cast
 
 import pytest
 
@@ -37,11 +36,11 @@ async def test_sync(any_dir, other_any_dir):
         assert await _listtree(any_dir, any_dir) == await _listtree(other_any_dir, other_any_dir)
 
         await asyncio.wait(
-            [
-                cast(Any, bbb.remove(any_dir / "f2")),
+            (
+                asyncio.create_task(bbb.remove(any_dir / "f2")),
                 helpers.unsafe_create_file(any_dir / "f1", b"sizesame"),
                 helpers.unsafe_create_file(any_dir / "delta" / "f9", b"differentsize"),
-            ]
+            )
         )
 
         actions = sorted(
@@ -90,11 +89,11 @@ async def test_sync_single_concurrency():
             assert await _listtree(dir1, dir1) == await _listtree(dir2, dir2)
 
             await asyncio.wait(
-                [
-                    cast(Any, bbb.remove(dir1 / "f2")),
+                (
+                    asyncio.create_task(bbb.remove(dir1 / "f2")),
                     helpers.unsafe_create_file(dir1 / "f1", b"sizesame"),
                     helpers.unsafe_create_file(dir1 / "delta" / "f9", b"differentsize"),
-                ]
+                )
             )
             assert len([x async for x in bbb.sync(dir1, dir2, e, delete=True)]) == 3
             assert await _listtree(dir1, dir1) == await _listtree(dir2, dir2)
