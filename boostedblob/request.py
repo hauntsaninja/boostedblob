@@ -85,8 +85,8 @@ class Request:
 
             if config.debug_mode or attempt + 1 >= 3:
                 print(
-                    f"[boostedblob] Error when executing request on attempt {attempt + 1}, sleeping for "
-                    f"{backoff:.1f}s before retrying. Details: {error}",
+                    f"[boostedblob] Error when executing request on attempt {attempt + 1}, "
+                    f"sleeping for {backoff:.1f}s before retrying. Details: {error}",
                     file=sys.stderr,
                 )
             await asyncio.sleep(backoff)
@@ -145,7 +145,6 @@ async def execute_retrying_read(request: Request) -> bytes:
     # ClientPayloadError might be an aiohttp bug, see:
     # https://github.com/aio-libs/aiohttp/issues/4581
     # https://github.com/aio-libs/aiohttp/issues/3904#issuecomment-737094416
-    RETRIES = 3
     for attempt, backoff in enumerate(
         exponential_sleep_generator(
             initial=config.backoff_initial,
@@ -156,10 +155,16 @@ async def execute_retrying_read(request: Request) -> bytes:
         try:
             async with request.execute() as resp:
                 return await resp.read()
-        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError):
-            if attempt >= RETRIES - 1:
+        except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError) as error:
+            if attempt >= config.retry_limit:
                 raise
-            await asyncio.sleep(backoff)
+
+            if config.debug_mode or attempt + 1 >= 3:
+                print(
+                    f"[boostedblob] Error when executing request on attempt {attempt + 1}, "
+                    f"sleeping for {backoff:.1f}s before retrying. Details: {error}",
+                    file=sys.stderr,
+                )
     raise AssertionError
 
 
