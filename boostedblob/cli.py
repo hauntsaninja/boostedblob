@@ -127,7 +127,9 @@ async def _dud1(path: str) -> None:
     def clear_lines(num_lines: int) -> None:
         erase_in_line = "\x1b[2K"
         cursor_up = "\x1b[1A"
+        clear_scrollback = "\x1b[3J"
         print("\r" + f"{cursor_up}{erase_in_line}" * num_lines, end="")
+        print(clear_scrollback, end="")
 
     def print_spinner(message: str, _pos: Any = [0]) -> None:
         clocks = ["🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"]
