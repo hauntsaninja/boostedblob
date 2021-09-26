@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.8.2]
+- Fix scrollback for private command `_dud1`
+- Make retry logic more consistent
+
 ## [v0.8.1]
 - Retry broken reads when listing Azure blobs under load
 - Use uvloop on Python 3.9, if we have a new enough version
