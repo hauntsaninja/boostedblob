@@ -12,17 +12,17 @@ from .listing import DirEntry, scantree
 from .path import BasePath, LocalPath, Stat
 
 
-@dataclass
+@dataclass(frozen=True)
 class Action:
     relpath: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class CopyAction(Action):
     size: Optional[int]
 
 
-@dataclass
+@dataclass(frozen=True)
 class DeleteAction(Action):
     pass
 

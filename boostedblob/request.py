@@ -20,7 +20,7 @@ class MissingSession(Exception):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class Request:
     method: str
     url: str

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import dataclasses
 import datetime
 import hashlib
 import json
@@ -76,7 +77,7 @@ async def get_access_token(_: str) -> Tuple[Any, float]:
     req = create_access_token_request(
         creds, scopes=["https://www.googleapis.com/auth/devstorage.full_control"]
     )
-    req.success_codes = (200, 400)
+    req = dataclasses.replace(req, success_codes=(200, 400))
 
     async with req.execute() as resp:
         result = await resp.json()
