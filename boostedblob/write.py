@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import os
@@ -10,9 +11,16 @@ import xmltodict
 
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
+from .globals import config
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, exists, pathdispatch
 from .read import ByteRange
-from .request import Request, RequestFailure, azurify_request, googlify_request
+from .request import (
+    Request,
+    RequestFailure,
+    azurify_request,
+    exponential_sleep_generator,
+    googlify_request,
+)
 
 AZURE_BLOCK_COUNT_LIMIT = 50000
 
@@ -407,14 +415,33 @@ async def _azure_put_block_list(
             success_codes=(201, 400),
         )
     )
-    async with request.execute() as resp:
-        if resp.status == 400:
+
+    for attempt, backoff in enumerate(
+        exponential_sleep_generator(
+            initial=config.backoff_initial,
+            maximum=config.backoff_max,
+            jitter_fraction=config.backoff_jitter_fraction,
+        )
+    ):
+        async with request.execute() as resp:
+            if resp.status == 201:
+                return
+
+            assert resp.status == 400
             data = await resp.read()
             result = xmltodict.parse(data)
             if result["Error"]["Code"] == "InvalidBlockList":
-                raise RuntimeError(
-                    f"Invalid block list, most likely due to concurrent writes to {path}"
-                )
+                if attempt >= 3:
+                    raise RuntimeError(
+                        f"Invalid block list, most likely due to concurrent writes to {path}"
+                    )
+                else:
+                    # It turns out these can actually succeed on retry.
+                    # We run into this when using unordered upload, maybe it means we're just
+                    # going too fast...
+                    await asyncio.sleep(backoff)
+                    continue
+
             raise RequestFailure(reason=str(resp.reason), request=request, status=resp.status)
 
 
