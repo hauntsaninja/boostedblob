@@ -58,37 +58,40 @@ async def sync_action_iterator(
         except FileNotFoundError:
             return []
 
-    # We currently don't attempt to stream these actions, for fear that the list operations might
-    # start to reflect our changes, causing weird things to happen.
+    # We block on tree collection, rather than streaming actions, for fear that the list
+    # operations might start to reflect our changes, causing weird things to happen.
     src_files, dst_files = await asyncio.gather(collect_tree(src), collect_tree(dst))
+    return sync_files_action_iterator(src_files, dst_files)
+
+
+def sync_files_action_iterator(
+    src_files: List[Tuple[str, DirEntry]], dst_files: List[Tuple[str, DirEntry]]
+) -> Iterator[Action]:
     src_files.sort(key=lambda p: p[0])
     dst_files.sort(key=lambda p: p[0])
 
-    def action_iterator() -> Iterator[Action]:
-        i = 0
-        j = 0
-        while i < len(src_files) or j < len(dst_files):
-            if i < len(src_files) and (j == len(dst_files) or src_files[i][0] < dst_files[j][0]):
+    i = 0
+    j = 0
+    while i < len(src_files) or j < len(dst_files):
+        if i < len(src_files) and (j == len(dst_files) or src_files[i][0] < dst_files[j][0]):
+            src_stat = src_files[i][1].stat
+            size = src_stat.size if src_stat else None
+            yield CopyAction(src_files[i][0], size)
+            i += 1
+            continue
+        if j < len(dst_files) and (i == len(src_files) or src_files[i][0] > dst_files[j][0]):
+            yield DeleteAction(dst_files[j][0])
+            j += 1
+            continue
+        if src_files[i][0] == dst_files[j][0]:
+            if should_copy(src_files[i][1].stat, dst_files[j][1].stat):
                 src_stat = src_files[i][1].stat
                 size = src_stat.size if src_stat else None
                 yield CopyAction(src_files[i][0], size)
-                i += 1
-                continue
-            if j < len(dst_files) and (i == len(src_files) or src_files[i][0] > dst_files[j][0]):
-                yield DeleteAction(dst_files[j][0])
-                j += 1
-                continue
-            if src_files[i][0] == dst_files[j][0]:
-                if _should_copy(src_files[i][1].stat, dst_files[j][1].stat):
-                    src_stat = src_files[i][1].stat
-                    size = src_stat.size if src_stat else None
-                    yield CopyAction(src_files[i][0], size)
-                i += 1
-                j += 1
-                continue
-            raise AssertionError
-
-    return action_iterator()
+            i += 1
+            j += 1
+            continue
+        raise AssertionError
 
 
 # ==============================
@@ -156,7 +159,7 @@ async def sync(
             yield path
 
 
-def _should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
+def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
     if src_stat is None and dst_stat is None:
         return False
     if src_stat is None or dst_stat is None:
