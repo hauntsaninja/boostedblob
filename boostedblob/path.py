@@ -172,6 +172,9 @@ class AzurePath(CloudPath):
         return AzurePath(self.account, self.container, os.path.join(self.blob, relative_path))
 
     def __str__(self) -> str:
+        return self.to_az_str()
+
+    def to_https_str(self) -> str:
         return f"https://{self.account}.blob.core.windows.net/{self.container}/{self.blob}"
 
     def to_az_str(self) -> str:

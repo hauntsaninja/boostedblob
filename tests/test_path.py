@@ -12,7 +12,7 @@ PATHS: Dict[Type[BasePath], Any] = {
 
 
 def test_path_str():
-    assert str(PATHS[AzurePath]) == "https://shantanutest.blob.core.windows.net/container/blob"
+    assert str(PATHS[AzurePath]) == "az://shantanutest/container/blob"
     assert str(PATHS[GooglePath]) == "gs://shantanutest/blob"
     assert str(PATHS[LocalPath]) == "blob"
 
