@@ -327,6 +327,7 @@ async def test_eagerise():
         eager_it = e.eagerise(iterator())
         assert results == []
         await pause()
+        await pause()
         assert results == list(range(N))
 
         assert [i async for i in eager_it] == list(range(N))
@@ -381,6 +382,7 @@ async def test_eagerise_backpressure():
         assert await ait.__anext__() == 1
         assert await ait.__anext__() == 2
 
+        await pause()
         await pause()
         assert results == list(range(10 + 4))
 
