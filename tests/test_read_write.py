@@ -38,6 +38,7 @@ async def test_concurrent_write(any_dir):
 
         if isinstance(any_dir, bbb.AzurePath):
             with pytest.raises(RuntimeError):
+                # This might be flaky now, due to retrying put block list
                 await asyncio.gather(t1, t2)
         else:
             await asyncio.gather(t1, t2)
