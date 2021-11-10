@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.9.0]
+- Default to `az://` output for Azure blobs, instead of `https://`
+- Retry "put block list" requests on InvalidBlockList response, because they can actually be
+  valid and Azure is just slow to recognise that
+- Add missing sleep during read backoff
+- Refactoring, in particular, some internal dataclasses are now frozen
+
 ## [v0.8.2]
 - Fix scrollback for private command `_dud1`
 - Make retry logic more consistent
@@ -20,8 +27,10 @@
 - Make test locations customisable
 
 ## [v0.7.0]
-- Added disk caching of auth tokens. This speeds up autocomplete (and other quick commands) significantly
-- Improved handling of concurrent file deletion; ignore during syncing, raise FileNotFoundErrors during partial reads
+- Added disk caching of auth tokens. This speeds up autocomplete (and other quick commands)
+  significantly
+- Improved handling of concurrent file deletion; ignore during syncing, raise FileNotFoundErrors
+  during partial reads
 - Avoid (transient) deletion when overwriting large files on Azure
 - Make `bbb rmtree` remove directory marker files as well
 - Make `BasePath.parent` more pathlib like in how it treats trailing slashes
