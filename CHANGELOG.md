@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.9.1]
+## [v0.9.2]
 - Support reading tokens from Azure's MSAL token cache, as created by azure-cli >= 2.30
 
 ## [v0.9.0]
