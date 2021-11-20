@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.9.1]
+- Support reading tokens from Azure's MSAL token cache, as created by azure-cli >= 2.30
+
 ## [v0.9.0]
 - Default to `az://` output for Azure blobs, instead of `https://`
 - Retry "put block list" requests on InvalidBlockList response, because they can actually be
