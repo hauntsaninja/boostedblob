@@ -73,9 +73,11 @@ class Request:
                         return
 
                     assert resp.reason is not None
-                    reason = str(resp.reason)
+                    reason = repr(resp.reason)
                     if config.debug_mode:
-                        reason += ", Body: " + (await resp.text())
+                        reason += (
+                            "\nBody:\n" + (await resp.text()) + "\nHeaders:\n" + str(resp.headers)
+                        )
                     error = RequestFailure(reason=reason, request=self, status=resp.status)
                     if resp.status not in self.retry_codes:
                         raise self.failure_exceptions.get(resp.status, error)
@@ -86,7 +88,7 @@ class Request:
             if config.debug_mode or attempt + 1 >= 3:
                 print(
                     f"[boostedblob] Error when executing request on attempt {attempt + 1}, "
-                    f"sleeping for {backoff:.1f}s before retrying. Details: {error}",
+                    f"sleeping for {backoff:.1f}s before retrying. Details:\n{error}",
                     file=sys.stderr,
                 )
             await asyncio.sleep(backoff)
@@ -137,7 +139,7 @@ class RequestFailure(Exception):
         self.status = status
 
     def __str__(self) -> str:
-        return f"{self.reason}, {self.status}, {self.request}"
+        return f"Reason: {self.reason}\nRequest: {self.request}\nStatus: {self.status}"
 
 
 async def execute_retrying_read(request: Request) -> bytes:
@@ -162,7 +164,7 @@ async def execute_retrying_read(request: Request) -> bytes:
             if config.debug_mode or attempt + 1 >= 3:
                 print(
                     f"[boostedblob] Error when executing request on attempt {attempt + 1}, "
-                    f"sleeping for {backoff:.1f}s before retrying. Details: {error}",
+                    f"sleeping for {backoff:.1f}s before retrying. Details:\n{error}",
                     file=sys.stderr,
                 )
             await asyncio.sleep(backoff)
