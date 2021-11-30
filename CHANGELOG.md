@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.9.3]
+- Fix parsing for paths with special characters
+- Allow listing of empty Azure containers
+- Log more information in debug mode
+
 ## [v0.9.2]
 - Support reading tokens from Azure's MSAL token cache, as created by azure-cli >= 2.30
 
