@@ -163,6 +163,10 @@ async def _cloud_scandir(path: CloudPath) -> AsyncIterator[DirEntry]:
     # If we find nothing, then run some checks so we throw the appropriate error.
     # Doing this means we avoid extra requests in the happy path.
     if not subpath_exists:
+        if isinstance(path, AzurePath) and not path.blob:
+            # Special case empty containers (at this point we're guaranteed the container exists)
+            # TODO: double check this when anonymous containers work
+            return
         if not await isfile(path):
             raise FileNotFoundError(path)
         raise NotADirectoryError(path)
