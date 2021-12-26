@@ -50,7 +50,7 @@ filelock = "*"
 ipdb = "*"
 black = "^21.9b0"
 isort = "^5.7.0"
-mypy = "^0.910"
+mypy = "^0.931"
 flake8 = "^3.8.3"
 
 [tool.poetry.scripts]
