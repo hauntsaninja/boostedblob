@@ -126,17 +126,17 @@ class AzurePath(CloudPath):
         if parsed_url.scheme == "https":
             account, host = parsed_url.netloc.split(".", maxsplit=1)
             if host != "blob.core.windows.net":
-                raise ValueError(f"Invalid URL '{url}'")
+                raise ValueError(f"Invalid URL '{url}'; unexpected host '{host}'")
         elif parsed_url.scheme == "az":
             account = parsed_url.netloc
         else:
-            raise ValueError(f"Invalid URL '{url}'")
+            raise ValueError(f"Invalid URL '{url}'; expected 'https' or 'az' scheme")
 
-        parts = parsed_url.path.split("/", maxsplit=2)
-        if parts[0]:
-            raise ValueError(f"Invalid URL '{url}'")
-        container = parts[1] if len(parts) >= 2 else ""
-        return AzurePath(account=account, container=container, blob="/".join(parts[2:]))
+        # split the unparsed URL
+        parts = url.split("/", maxsplit=4)
+        container = parts[3] if len(parts) >= 4 else ""
+        blob = parts[4] if len(parts) >= 5 else ""
+        return AzurePath(account=account, container=container, blob=blob)
 
     @property
     def name(self) -> str:
@@ -193,9 +193,12 @@ class GooglePath(CloudPath):
     def from_str(url: str) -> GooglePath:
         parsed_url = urllib.parse.urlparse(url)
         if parsed_url.scheme != "gs":
-            raise ValueError(f"Invalid URL '{url}'")
+            raise ValueError(f"Invalid URL '{url}'; expected 'gs' scheme")
 
-        return GooglePath(bucket=parsed_url.netloc, blob=parsed_url.path[1:])
+        # split the unparsed URL
+        parts = url.split("/", maxsplit=3)
+        blob = parts[3] if len(parts) >= 4 else ""
+        return GooglePath(bucket=parsed_url.netloc, blob=blob)
 
     @property
     def name(self) -> str:
