@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, TypeVar, cast
 
 import boostedblob as bbb
 
@@ -20,7 +20,7 @@ def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
             import uvloop
 
             if sys.version_info < (3, 9) or (
-                tuple(map(int, uvloop.__version__.split("."))) >= (0, 15, 0)  # type: ignore
+                tuple(map(int, cast(Any, uvloop).__version__.split("."))) >= (0, 15, 0)
             ):
                 uvloop.install()
         except ImportError:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 import sys
-from typing import Any, AsyncIterable, AsyncIterator, Awaitable, Callable, Dict, List
+from typing import Any, AsyncIterable, AsyncIterator, Awaitable, Callable, Dict, List, cast
 
 import pytest
 
@@ -552,7 +552,7 @@ async def test_composition_nested_unordered():
 def get_coro(t: asyncio.Task[Any]) -> Any:
     if sys.version_info >= (3, 8):
         return t.get_coro()
-    return t._coro
+    return cast(Any, t)._coro
 
 
 @pytest.mark.asyncio
