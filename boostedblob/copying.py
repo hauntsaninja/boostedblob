@@ -347,6 +347,10 @@ async def copyglob_iterator(
         await copyfile(entry.path, dst / entry.path.name, executor, size=size, overwrite=True)
         return entry.path
 
+    subpath_exists = False
     async for path in executor.map_unordered(copy_wrapper, executor.eagerise(glob_scandir(src))):
         if path:
             yield path
+            subpath_exists = True
+    if not subpath_exists:
+        raise FileNotFoundError(src)
