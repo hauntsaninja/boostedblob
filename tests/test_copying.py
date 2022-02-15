@@ -82,6 +82,9 @@ async def test_copyglob():
             )
 
             async with bbb.BoostExecutor(100) as e:
+                with pytest.raises(FileNotFoundError):
+                    [p async for p in bbb.copying.copyglob_iterator(dir1 / "nope*", dir2, e)]
+
                 copied = [p async for p in bbb.copying.copyglob_iterator(dir1 / "f*", dir2, e)]
                 assert sorted([p.relative_to(dir1) for p in copied]) == ["f1", "f2"]
                 contents = sorted([p.relative_to(dir2) async for p in bbb.listtree(dir2)])
