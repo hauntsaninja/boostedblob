@@ -6,7 +6,7 @@ from typing import AsyncIterator, Optional, Union
 from .boost import BoostExecutor, consume
 from .listing import glob_scandir, listtree
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isdir, isfile, pathdispatch
-from .request import Request, azure_page_iterator, azurify_request, googlify_request
+from .request import Request, azurify_request, googlify_request
 
 # ==============================
 # remove
@@ -150,59 +150,3 @@ async def _cloud_rmtree(path: CloudPath, executor: BoostExecutor) -> None:
 @rmtree.register  # type: ignore
 async def _local_rmtree(path: LocalPath, executor: BoostExecutor) -> None:
     shutil.rmtree(path)
-
-
-# ==============================
-# undelete
-# ==============================
-
-
-async def _azure_undelete_tree(path: Union[str, AzurePath], executor: BoostExecutor) -> None:
-    """Experimental code to undelete blobs. It should work, but e.g. doesn't have tests."""
-    if isinstance(path, str):
-        path = AzurePath.from_str(path)
-
-    it = azure_page_iterator(
-        Request(
-            method="GET",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
-            params=dict(comp="list", restype="container", prefix=path.blob, include="deleted"),
-        )
-    )
-
-    deleted_blobs = []
-    async for result in it:
-        blobs = result["Blobs"]
-        if blobs is None:
-            continue
-        if "Blob" in blobs:
-            if isinstance(blobs["Blob"], dict):
-                blobs["Blob"] = [blobs["Blob"]]
-            for b in blobs["Blob"]:
-                if not b.get("Deleted", False):
-                    continue
-                # maybe get DeletedTime, RemainingRetentionDays
-                blob = b["Name"]
-                path = AzurePath(path.account, path.container, blob)
-                deleted_blobs.append(path)
-
-    # Not sure if this is true, especially in the presence of versioning / overwrites
-    assert len(deleted_blobs) == len(set(deleted_blobs))
-
-    # We might want to eagerise deleted_blobs
-    async for blob in executor.map_unordered(_azure_undelete, iter(deleted_blobs)):
-        # And turn this into an async iterator, instead of printing
-        print(f"Undeleted {blob}")
-
-
-async def _azure_undelete(path: AzurePath) -> AzurePath:
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            params=dict(comp="undelete"),
-            success_codes=(200,),
-        )
-    )
-    await request.execute_reponseless()
-    return path

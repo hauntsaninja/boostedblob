@@ -253,6 +253,16 @@ async def rmtree(path: str, quiet: bool = False, concurrency: int = DEFAULT_CONC
 
 
 @sync_with_session
+async def _xxx_recoverprefix(
+    prefix: str, restore_dt: str, dry_run: bool = True, concurrency: int = DEFAULT_CONCURRENCY
+) -> None:
+    from ._recover import _recoverprefix
+
+    async with bbb.BoostExecutor(concurrency) as executor:
+        await _recoverprefix(prefix, restore_dt, executor=executor, dry_run=dry_run)
+
+
+@sync_with_session
 async def share(path: str) -> None:
     url, expiration = await bbb.share.get_url(path)
     print(url)
@@ -667,6 +677,12 @@ eval "$(bbb complete init zsh)"
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
+
+    subparser = subparsers.add_parser("_xrp")
+    subparser.set_defaults(command=_xxx_recoverprefix)
+    subparser.add_argument("prefix", help="Prefix of globs to recover")
+    subparser.add_argument("restore_dt", help="GMT datetime to recover to")
+    subparser.add_argument("--dry-run", type=lambda x: not x or x[0].lower() != "f", default=True)
 
     subparser = subparsers.add_parser(
         "complete",
