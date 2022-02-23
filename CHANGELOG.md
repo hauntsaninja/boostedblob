@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.10.0]
+- Raise error for empty globs when copying
+- Add some experimental code for recovering Azure blobs
+- Improve tests on Python 3.7
+
 ## [v0.9.3]
 - Fix parsing for paths with special characters
 - Allow listing of empty Azure containers
