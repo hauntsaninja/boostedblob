@@ -148,25 +148,29 @@ def configure(**kwargs: Any) -> Iterator[None]:
         config.__dict__.update(**original)
 
 
+def _create_session() -> aiohttp.ClientSession:
+    # NB: We currently seem to leak file descriptors. E.g., if you run with -X dev, you'll see
+    # "ResourceWarning: unclosed resource <TCPTransport ...>"
+    # This can be fixed by changing the following line to:
+    # connector = aiohttp.TCPConnector(limit=0, force_close=True, enable_cleanup_closed=True)
+    # Both additional arguments are apparently necessary. Unfortunately this negates the
+    # benefits of reusing connections. If you only have a single aiohttp.ClientSession, as is
+    # recommended, this isn't really a problem.
+    # Also note:
+    # https://docs.aiohttp.org/en/stable/client_advanced.html#graceful-shutdown
+    # https://github.com/aio-libs/aiohttp/issues/1925#issuecomment-715977247
+    # While the sleep suggested doesn't work, it does indicate that this is a problem for
+    # aiohttp in general.
+    connector = aiohttp.TCPConnector(limit=0)
+    return aiohttp.ClientSession(connector=connector)
+
+
 @contextlib.asynccontextmanager
 async def session_context() -> AsyncIterator[None]:
     if config.session is None:
         set_event_loop_exception_handler()  # there could be a better place for this
-
-        # NB: We currently seem to leak file descriptors. E.g., if you run with -X dev, you'll see
-        # "ResourceWarning: unclosed resource <TCPTransport ...>"
-        # This can be fixed by changing the following line to:
-        # connector = aiohttp.TCPConnector(limit=0, force_close=True, enable_cleanup_closed=True)
-        # Both additional arguments are apparently necessary. Unfortunately this negates the
-        # benefits of reusing connections. If you only have a single aiohttp.ClientSession, as is
-        # recommended, this isn't really a problem.
-        # Also note:
-        # https://docs.aiohttp.org/en/stable/client_advanced.html#graceful-shutdown
-        # https://github.com/aio-libs/aiohttp/issues/1925#issuecomment-715977247
-        # While the sleep suggested doesn't work, it does indicate that this is a problem for
-        # aiohttp in general.
-        connector = aiohttp.TCPConnector(limit=0)
-        async with aiohttp.ClientSession(connector=connector) as session:
+        session = _create_session()
+        async with session:
             with configure(session=session):
                 yield
     else:
