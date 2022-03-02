@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import functools
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -304,7 +305,8 @@ async def edit(path: str) -> None:
                 with open(local, "w"):
                     pass
             pre_stat = await bbb.stat(local)
-            subprocess.check_call([os.environ.get("EDITOR", "vi"), local])
+            editor = shlex.split(os.environ.get("EDITOR", "vi"))
+            subprocess.check_call([*editor, local])
             post_stat = await bbb.stat(local)
             if pre_stat != post_stat:
                 await bbb.copyfile(local, path_obj, executor, overwrite=True)
