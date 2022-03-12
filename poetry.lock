@@ -608,6 +608,14 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
+name = "types-xmltodict"
+version = "0.12.0"
+description = "Typing stubs for xmltodict"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "typing-extensions"
 version = "4.0.1"
 description = "Backported and Experimental Type Hints for Python 3.6+"
@@ -685,7 +693,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "12989b5efc3f4ffea2413c1cbf6fddc64eee370ba6ff520b4956368d9f997006"
+content-hash = "9d9b8ab830dc90652127890302b9fd604b104aac7c861754e85179545e4b5f87"
 
 [metadata.files]
 aiohttp = [
@@ -1198,6 +1206,10 @@ typed-ast = [
     {file = "typed_ast-1.5.1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:a2b8d7007f6280e36fa42652df47087ac7b0a7d7f09f9468f07792ba646aac2d"},
     {file = "typed_ast-1.5.1-cp39-cp39-win_amd64.whl", hash = "sha256:b6d17f37f6edd879141e64a5db17b67488cfeffeedad8c5cec0392305e9bc775"},
     {file = "typed_ast-1.5.1.tar.gz", hash = "sha256:484137cab8ecf47e137260daa20bafbba5f4e3ec7fda1c1e69ab299b75fa81c5"},
+]
+types-xmltodict = [
+    {file = "types-xmltodict-0.12.0.tar.gz", hash = "sha256:93a80b96b5f6ddd4bc9677d3cb12d940746d69bafcc28d0e3273e2cf2af4f015"},
+    {file = "types_xmltodict-0.12.0-py3-none-any.whl", hash = "sha256:0e996b70c10fa4d9119a4b44361f3c039a385fd56c9eb6f8abdd86c4e4e5074a"},
 ]
 typing-extensions = [
     {file = "typing_extensions-4.0.1-py3-none-any.whl", hash = "sha256:7f001e5ac290a0c0401508864c7ec868be4e701886d5b573a9528ed3973d9d3b"},
