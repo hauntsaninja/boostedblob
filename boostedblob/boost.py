@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import (
     Any,
     AsyncIterable,
@@ -18,7 +19,11 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsAnext
 
 A = TypeVar("A")
 T = TypeVar("T")
@@ -494,6 +499,15 @@ class EnumerateBoostable(Boostable[Tuple[int, T]]):
         return ret
 
 
+# version of anext that always returns a Coroutine
+if sys.version_info >= (3, 10):
+    async def anext_cr(v: SupportsAnext[T]) -> T:
+        return await anext(v)
+else:
+    async def anext_cr(v: SupportsAnext[T]) -> T:
+        return await v.__anext__()
+
+
 class EageriseBoostable(Boostable[T]):
     def __init__(self, iterable: AsyncIterator[T], executor: BoostExecutor) -> None:
         super().__init__(executor)
@@ -544,7 +558,7 @@ class EageriseBoostable(Boostable[T]):
             # We can't use async for because we need to preserve exceptions
             it = self.iterable.__aiter__()
             while True:
-                task = asyncio.create_task(it.__anext__())
+                task = asyncio.create_task(anext_cr(it))
                 try:
                     await task
                 except StopAsyncIteration:
