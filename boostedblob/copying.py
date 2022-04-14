@@ -1,8 +1,9 @@
 import asyncio
+import itertools
 import os
 import shutil
 import sys
-from typing import Any, AsyncIterator, Dict, Optional, TypeVar, Union
+from typing import Any, AsyncIterator, Dict, Optional, Tuple, TypeVar, Union
 
 from . import azure_auth
 from .boost import BoostExecutor, consume
@@ -15,12 +16,22 @@ from .path import (
     GooglePath,
     LocalPath,
     exists,
+    getsize,
     pathdispatch,
     url_format,
 )
-from .read import read_single, read_stream, read_stream_unordered
+from .read import ByteRange, byte_range_to_str, read_single, read_stream, read_stream_unordered
 from .request import Request, azurify_request, exponential_sleep_generator, googlify_request
-from .write import write_single, write_stream, write_stream_unordered
+from .write import (
+    AZURE_BLOCK_COUNT_LIMIT,
+    azure_put_block_list,
+    get_block_id,
+    get_upload_id,
+    prepare_block_blob_write,
+    write_single,
+    write_stream,
+    write_stream_unordered,
+)
 
 # ==============================
 # copyfile
@@ -72,7 +83,7 @@ async def _cloudpath_copyfile(
         return
     if isinstance(dst, CloudPath):
         if type(src) is type(dst):
-            await cloudcopyfile(src, dst, overwrite=overwrite)
+            await cloud_copyfile(src, dst, executor, overwrite=overwrite)
             return
 
         if size is not None and size <= config.chunk_size:
@@ -123,14 +134,16 @@ async def _localpath_copyfile(
 
 
 # ==============================
-# cloudcopyfile
+# cloud_copyfile
 # ==============================
 
 CloudPathT = TypeVar("CloudPathT", bound=CloudPath)
 
 
 @pathdispatch
-async def cloudcopyfile(src: CloudPathT, dst: CloudPathT, overwrite: bool = False) -> None:
+async def cloud_copyfile(
+    src: CloudPathT, dst: CloudPathT, executor: BoostExecutor, overwrite: bool = False
+) -> None:
     """Copy a file named ``src` to a file named ``dst`` within the same cloud.
 
     Performs a remote copy operation without downloading the contents locally. Blocks until the
@@ -138,14 +151,73 @@ async def cloudcopyfile(src: CloudPathT, dst: CloudPathT, overwrite: bool = Fals
 
     :param src: The file to copy from.
     :param dst: The file to copy to.
+    :param executor: An executor.
     :param overwrite: If False, raises if the path already exists.
 
     """
     raise ValueError(f"Unsupported path: {src}")
 
 
-@cloudcopyfile.register  # type: ignore
-async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool = False) -> None:
+async def _azure_put_block_from_url(
+    path: AzurePath, block_id: str, copy_source: str, byte_range: ByteRange
+) -> None:
+    range_str = byte_range_to_str(byte_range)
+    assert range_str is not None
+    request = await azurify_request(
+        Request(
+            method="PUT",
+            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+            headers={"x-ms-copy-source": copy_source, "x-ms-source-range": range_str},
+            params=dict(comp="block", blockid=block_id),
+            success_codes=(201,),
+        )
+    )
+    await request.execute_reponseless()
+
+
+async def _azure_cloud_copyfile_via_block_urls(
+    src: AzurePath, dst: AzurePath, executor: BoostExecutor, overwrite: bool = False
+) -> None:
+    if overwrite:
+        await prepare_block_blob_write(dst)
+    else:
+        if await exists(dst):
+            raise FileExistsError(dst)
+
+    copy_source, _ = await azure_auth.generate_signed_url(src)
+    src_size = await getsize(src)
+
+    # TODO: could consider doing a single Put Block from URL for blobs less than 256MB
+
+    byte_ranges = itertools.zip_longest(
+        range(0, src_size, config.chunk_size),
+        range(config.chunk_size, src_size, config.chunk_size),
+        fillvalue=src_size,
+    )
+
+    upload_id = get_upload_id()
+    max_block_index = -1
+
+    async def upload_chunk(index_byte_range: Tuple[int, ByteRange]) -> None:
+        unordered_index, byte_range = index_byte_range
+        # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
+        assert unordered_index < AZURE_BLOCK_COUNT_LIMIT
+
+        nonlocal max_block_index
+        max_block_index = max(max_block_index, unordered_index)
+
+        block_id = get_block_id(upload_id, unordered_index)
+        await _azure_put_block_from_url(dst, block_id, copy_source, byte_range)
+
+    await consume(executor.map_unordered(upload_chunk, enumerate(byte_ranges)))
+
+    blocklist = [get_block_id(upload_id, i) for i in range(max_block_index + 1)]
+    await azure_put_block_list(dst, blocklist)
+
+
+async def _azure_cloud_copyfile_via_copy(
+    src: AzurePath, dst: AzurePath, overwrite: bool = False
+) -> None:
     assert isinstance(dst, AzurePath)
     if not overwrite:
         if await exists(dst):
@@ -206,8 +278,20 @@ async def _azure_cloudcopyfile(src: AzurePath, dst: AzurePath, overwrite: bool =
         raise RuntimeError(f"Invalid copy status: '{copy_status}'")
 
 
-@cloudcopyfile.register  # type: ignore
-async def _google_cloudcopyfile(src: GooglePath, dst: GooglePath, overwrite: bool = False) -> None:
+@cloud_copyfile.register  # type: ignore
+async def _azure_cloud_copyfile(
+    src: AzurePath, dst: AzurePath, executor: BoostExecutor, overwrite: bool = False
+) -> None:
+    if src.account == dst.account:
+        await _azure_cloud_copyfile_via_copy(src, dst, overwrite=overwrite)
+    else:
+        await _azure_cloud_copyfile_via_block_urls(src, dst, executor, overwrite=overwrite)
+
+
+@cloud_copyfile.register  # type: ignore
+async def _google_cloud_copyfile(
+    src: GooglePath, dst: GooglePath, executor: BoostExecutor, overwrite: bool = False
+) -> None:
     assert isinstance(dst, GooglePath)
     if not overwrite:
         if await exists(dst):
