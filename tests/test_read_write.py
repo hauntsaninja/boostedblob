@@ -55,3 +55,20 @@ async def test_prepare_block_blob_write():
             await bbb.write.write_stream(path, iter(contents), e)
             await bbb.write.prepare_block_blob_write(path, _always_clear=True)
             assert b"".join(contents) == await bbb.read.read_single(path)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_write_unordered():
+    with helpers.tmp_azure_dir() as azure_dir:
+        async with bbb.BoostExecutor(10) as e:
+            path = azure_dir / "blob"
+            contents = [b"abc", b"defghi", b"jkl"]
+            stream = []
+            offset = 0
+            for c in contents:
+                stream.append((c, (offset, offset + len(c))))
+                offset += len(c)
+
+            await bbb.write.write_stream_unordered(path, iter(stream), e)
+            assert b"".join(contents) == await bbb.read.read_single(path)
