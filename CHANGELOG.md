@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.11.0]
+- Greatly increase speed of copying Azure blobs between storage accounts
+- Allow `EDITOR` to have args when using `bbb edit`
+- Improve handling of concurrent file deletion when copying from GCS to Azure
+- Support PEP 660 installation
+- Fix potential incorrect decoding of response bodies when debug logging
+- Use a newer Azure API version
+- Several test improvements
+
 ## [v0.10.0]
 - Raise error for empty globs when copying
 - Add some experimental code for recovering Azure blobs
