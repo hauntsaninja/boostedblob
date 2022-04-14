@@ -89,3 +89,23 @@ async def test_copyglob():
                 assert sorted([p.relative_to(dir1) for p in copied]) == ["f1", "f2"]
                 contents = sorted([p.relative_to(dir2) async for p in bbb.listtree(dir2)])
                 assert contents == ["f1", "f2"]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_copyfile_via_block_urls():
+    CHUNK_SIZE = 16
+
+    with open("/dev/random", "rb") as f:
+        contents_medium = f.read(1024 * CHUNK_SIZE)
+
+    with helpers.tmp_azure_dir() as azure_dir:
+        helpers.create_file(azure_dir / "original_medium", contents_medium)
+
+        with bbb.globals.configure(chunk_size=CHUNK_SIZE):
+            async with bbb.BoostExecutor(100) as e:
+                await bbb.copying._azure_cloud_copyfile_via_block_urls(
+                    azure_dir / "original_medium", azure_dir / "copied_medium", e
+                )
+                with blobfile.BlobFile(str(azure_dir / "copied_medium"), "rb") as f:
+                    assert f.read() == contents_medium
