@@ -74,7 +74,7 @@ class Request:
 
                     assert resp.reason is not None
                     reason = repr(resp.reason)
-                    if config.debug_mode:
+                    if True:
                         body = (await resp.read()).decode("utf-8")
                         reason += "\nBody:\n" + body + "\nHeaders:\n" + str(resp.headers)
                     error = RequestFailure(reason=reason, request=self, status=resp.status)
@@ -87,7 +87,7 @@ class Request:
             if config.debug_mode or attempt + 1 >= 3:
                 print(
                     f"[boostedblob] Error when executing request on attempt {attempt + 1}, "
-                    f"sleeping for {backoff:.1f}s before retrying. Details:\n{error}",
+                    f"sleeping for {backoff:.1f}s before retrying. Status: {error.status}",
                     file=sys.stderr,
                 )
             await asyncio.sleep(backoff)

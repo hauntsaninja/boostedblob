@@ -123,7 +123,7 @@ class Config:
     backoff_jitter_fraction: float = 0.9
     retry_limit: int = 25
 
-    token_early_expiration_seconds: int = 300
+    token_early_expiration_seconds: int = 600
 
     azure_access_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
         default_factory=lambda: TokenManager(azure_auth.get_access_token)
