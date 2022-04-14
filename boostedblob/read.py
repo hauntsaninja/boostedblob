@@ -35,7 +35,7 @@ async def read_byte_range(path: Union[CloudPath, str], byte_range: OptByteRange)
 
 @read_byte_range.register  # type: ignore
 async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
-    range_str = _byte_range_to_str(byte_range)
+    range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
     success_codes = (206,) if range_header else (200,)
     request = await azurify_request(
@@ -52,7 +52,7 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
 
 @read_byte_range.register  # type: ignore
 async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) -> bytes:
-    range_str = _byte_range_to_str(byte_range)
+    range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
     success_codes = (206,) if range_header else (200,)
     request = await googlify_request(
@@ -182,7 +182,7 @@ async def read_stream_unordered(
 # ==============================
 
 
-def _byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
+def byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-the-range-header-for-blob-service-operations
     # https://cloud.google.com/storage/docs/xml-api/get-object-download
     # oddly range requests are not mentioned in JSON API, only in the XML API

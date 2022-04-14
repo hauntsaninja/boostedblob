@@ -53,5 +53,5 @@ async def test_prepare_block_blob_write():
             path = azure_dir / "blob"
             contents = [b"abcd", b"efgh"]
             await bbb.write.write_stream(path, iter(contents), e)
-            await bbb.write._prepare_block_blob_write(path, _always_clear=True)
+            await bbb.write.prepare_block_blob_write(path, _always_clear=True)
             assert b"".join(contents) == await bbb.read.read_single(path)

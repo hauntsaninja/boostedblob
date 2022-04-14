@@ -22,7 +22,7 @@ from .request import (
     googlify_request,
 )
 
-AZURE_BLOCK_COUNT_LIMIT = 50000
+AZURE_BLOCK_COUNT_LIMIT = 50_000
 
 # ==============================
 # write_single
@@ -121,12 +121,12 @@ async def _azure_write_stream(
     overwrite: bool = False,
 ) -> None:
     if overwrite:
-        await _prepare_block_blob_write(path)
+        await prepare_block_blob_write(path)
     else:
         if await exists(path):
             raise FileExistsError(path)
 
-    upload_id = random.randint(0, 2 ** 47 - 1)
+    upload_id = get_upload_id()
     md5 = hashlib.md5()
     max_block_index = -1
 
@@ -138,7 +138,7 @@ async def _azure_write_stream(
         nonlocal max_block_index
         max_block_index = max(max_block_index, block_index)
 
-        block_id = _get_block_id(upload_id, block_index)
+        block_id = get_block_id(upload_id, block_index)
         md5.update(chunk)
 
         await _azure_put_block(path, block_id, chunk)
@@ -148,8 +148,8 @@ async def _azure_write_stream(
     # azure does not calculate md5s for us, we have to do that manually
     # https://blogs.msdn.microsoft.com/windowsazurestorage/2011/02/17/windows-azure-blob-md5-overview/
     headers = {"x-ms-blob-content-md5": base64.b64encode(md5.digest()).decode("utf8")}
-    blocklist = [_get_block_id(upload_id, i) for i in range(max_block_index + 1)]
-    await _azure_put_block_list(path, blocklist, headers=headers)
+    blocklist = [get_block_id(upload_id, i) for i in range(max_block_index + 1)]
+    await azure_put_block_list(path, blocklist, headers=headers)
 
 
 @write_stream.register  # type: ignore
@@ -268,7 +268,7 @@ async def _azure_write_stream_unordered(
         if await exists(path):
             raise FileExistsError(path)
 
-    upload_id = random.randint(0, 2 ** 47 - 1)
+    upload_id = get_upload_id()
     block_list = []
 
     async def upload_chunk(index_chunk_byte_range: Tuple[int, Tuple[bytes, ByteRange]]) -> None:
@@ -276,7 +276,7 @@ async def _azure_write_stream_unordered(
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
         assert unordered_index < AZURE_BLOCK_COUNT_LIMIT
 
-        block_id = _get_block_id(upload_id, unordered_index)
+        block_id = get_block_id(upload_id, unordered_index)
         block_list.append((byte_range[0], unordered_index))
 
         await _azure_put_block(path, block_id, chunk)
@@ -285,7 +285,7 @@ async def _azure_write_stream_unordered(
 
     # sort by start byte so the blocklist is ordered correctly
     block_list.sort()
-    await _azure_put_block_list(path, [_get_block_id(upload_id, index) for _, index in block_list])
+    await azure_put_block_list(path, [get_block_id(upload_id, index) for _, index in block_list])
 
 
 @write_stream_unordered.register  # type: ignore
@@ -303,14 +303,18 @@ async def _google_write_stream_unordered(
 # ==============================
 
 
-def _get_block_id(upload_id: int, index: int) -> str:
+def get_upload_id() -> int:
+    return random.randint(0, 2 ** 47 - 1)
+
+
+def get_block_id(upload_id: int, index: int) -> str:
     assert index < 2 ** 17
     id_plus_index = (upload_id << 17) + index
     assert id_plus_index < 2 ** 64
     return base64.b64encode(id_plus_index.to_bytes(8, byteorder="big")).decode("utf8")
 
 
-async def _prepare_block_blob_write(path: AzurePath, _always_clear: bool = False) -> None:
+async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False) -> None:
     request = await azurify_request(
         Request(
             method="GET",
@@ -338,7 +342,7 @@ async def _prepare_block_blob_write(path: AzurePath, _always_clear: bool = False
     if isinstance(blocks, dict):
         blocks = [blocks]
 
-    if not _always_clear and len(blocks) < 10000:
+    if not _always_clear and len(blocks) < 10_000:
         # Don't bother clearing uncommitted blocks if we have less than 10,000 committed blocks,
         # since seems unlikely we'd run into the 100,000 block limit in this case.
         return
@@ -397,7 +401,7 @@ async def _azure_put_block(path: AzurePath, block_id: str, chunk: bytes) -> None
     await request.execute_reponseless()
 
 
-async def _azure_put_block_list(
+async def azure_put_block_list(
     path: AzurePath, block_list: List[str], headers: Optional[Mapping[str, str]] = None
 ) -> None:
     if headers is None:
