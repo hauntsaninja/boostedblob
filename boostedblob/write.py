@@ -263,10 +263,7 @@ async def _azure_write_stream_unordered(
 ) -> None:
     # TODO: this doesn't upload an md5...
     if overwrite:
-        try:
-            await remove(path)
-        except FileNotFoundError:
-            pass
+        await prepare_block_blob_write(path)
     else:
         if await exists(path):
             raise FileExistsError(path)
