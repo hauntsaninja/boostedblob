@@ -188,7 +188,7 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
 
     headers = dict(request.headers)
     # https://docs.microsoft.com/en-us/rest/api/storageservices/previous-azure-storage-service-versions
-    headers["x-ms-version"] = "2019-12-12"
+    headers["x-ms-version"] = "2021-06-08"
     headers["x-ms-date"] = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     from .azure_auth import OAUTH_TOKEN, SHARED_KEY, sign_request_with_shared_key
