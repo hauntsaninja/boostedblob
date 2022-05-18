@@ -31,11 +31,11 @@ include = ["boostedblob/py.typed"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
-aiohttp = "^3.7.2"
-pycryptodomex = "^3.9"
-xmltodict = "^0.12"
+aiohttp = ">=3.7.2"
+pycryptodomex = ">=3.9"
+xmltodict = ">=0.12"
 # uvloop is not strictly necessary
-uvloop = "^0.16.0"
+uvloop = ">=0.16.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.1"
