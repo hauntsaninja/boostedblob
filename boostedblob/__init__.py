@@ -1,5 +1,15 @@
 __version__ = "0.11.0"
 
+import sys
+
+if "pkg_resources" not in sys.modules:
+    # workaround for the following:
+    # https://github.com/benoitc/gunicorn/pull/2539
+    sys.modules["pkg_resources"] = object()  # type: ignore
+    import aiohttp
+
+    del sys.modules["pkg_resources"]
+
 from . import read as read
 from . import share as share
 from . import write as write
