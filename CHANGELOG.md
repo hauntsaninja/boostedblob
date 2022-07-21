@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+- Make `boostedblob` much faster when `gunicorn` is present in the same environment.
+  It's been 1.5 years and `gunicorn` hasn't merged the fix, so add a hacky workaround
+  for the slowness
+- Remove upper bounds on the versions of some dependencies
+- Allow using `tox` for testing, several dev improvements
+
 ## [v0.11.0]
 - Greatly increase speed of copying Azure blobs between storage accounts
 - Allow `EDITOR` to have args when using `bbb edit`
