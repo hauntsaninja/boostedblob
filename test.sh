@@ -1,5 +1,7 @@
 set -ex
 
+# TODO: maybe get rid of this script in favour of tox
+
 black --diff --check --quiet .
 isort --diff --check --quiet .
 flake8

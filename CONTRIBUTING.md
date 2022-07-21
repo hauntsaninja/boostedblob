@@ -12,6 +12,7 @@ To get started developing `boostedblob`:
 ## Running tests
 
 Run `./test.sh` to run tests.
+If you like tox, `tox` should also work.
 
 This will run tests with some hardcoded cloud locations, which you may not have access to. Instead,
 use `BBB_TEST_LOCATIONS` to tell tests what locations to use. E.g.,
