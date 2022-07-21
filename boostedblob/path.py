@@ -46,7 +46,7 @@ class BasePath:
 
     def is_relative_to(self: T, other: T) -> bool:
         try:
-            self.relative_to(other)  # type: ignore
+            self.relative_to(other)  # type: ignore[attr-defined]
             return True
         except ValueError:
             return False
@@ -249,7 +249,7 @@ def pathdispatch(fn: F) -> F:
     causes type checkers to complain about "no attribute register"
 
     """
-    ret: F = functools.singledispatch(fn)  # type: ignore
+    ret: F = functools.singledispatch(fn)  # type: ignore[assignment]
 
     @ret.register  # type: ignore
     def strdispatch(path: str, *args: Any, **kwargs: Any) -> Any:

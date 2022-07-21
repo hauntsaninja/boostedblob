@@ -183,7 +183,7 @@ def ensure_session(fn: F) -> F:
         async with session_context():
             return await fn(*args, **kwargs)
 
-    return wrapper  # type: ignore
+    return wrapper  # type: ignore[return-value]
 
 
 def set_event_loop_exception_handler() -> None:

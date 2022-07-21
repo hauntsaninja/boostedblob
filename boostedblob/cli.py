@@ -32,7 +32,7 @@ def syncify(fn: Callable[..., Coroutine[T, None, None]]) -> Callable[..., T]:
 
 
 def sync_with_session(fn: F) -> F:
-    return syncify(bbb.ensure_session(fn))  # type: ignore
+    return syncify(bbb.ensure_session(fn))  # type: ignore[return-value]
 
 
 DEFAULT_CONCURRENCY = int(os.environ.get("BBB_DEFAULT_CONCURRENCY", 100))

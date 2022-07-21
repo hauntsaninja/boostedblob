@@ -22,6 +22,7 @@ strict = true
 no_warn_return_any = true
 python_version = "3.7"
 show_error_codes = true
+enable_error_code = ["redundant-expr", "truthy-bool"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"
