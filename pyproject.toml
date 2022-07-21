@@ -62,7 +62,7 @@ filelock = "*"
 ipdb = "*"
 black = "^22.6"
 isort = "^5.7.0"
-mypy = "^0.931"
+mypy = "^0.971"
 flake8 = "^3.8.3"
 types-xmltodict = "^0.12.0"
 

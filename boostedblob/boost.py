@@ -544,7 +544,9 @@ class EageriseBoostable(Boostable[T]):
             # We can't use async for because we need to preserve exceptions
             it = self.iterable.__aiter__()
             while True:
-                task = asyncio.create_task(it.__anext__())
+                # I guess in theory, __anext__ isn't guaranteed to be a coroutine
+                # https://github.com/hauntsaninja/boostedblob/pull/12
+                task: asyncio.Task[T] = asyncio.create_task(it.__anext__())  # type: ignore [arg-type]
                 try:
                     await task
                 except StopAsyncIteration:

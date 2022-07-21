@@ -6,7 +6,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional, TypeVar, cast
 
 import boostedblob as bbb
 
@@ -14,7 +14,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 T = TypeVar("T")
 
 
-def syncify(fn: Callable[..., Awaitable[T]]) -> Callable[..., T]:
+def syncify(fn: Callable[..., Coroutine[T, None, None]]) -> Callable[..., T]:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:

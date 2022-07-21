@@ -55,7 +55,7 @@ async def test_map_ordered_single():
         assert e.semaphore._value == 0
         assert set(futures) == set()
 
-        next_task = asyncio.create_task(it.__anext__())
+        next_task = asyncio.create_task(it.__anext__())  # type: ignore[arg-type]
         await pause()
         assert set(futures) == {0}
 
@@ -70,7 +70,7 @@ async def test_map_ordered_single():
         assert next_task.done()
         assert (await next_task) == 0
 
-        next_task = asyncio.create_task(it.__anext__())
+        next_task = asyncio.create_task(it.__anext__())  # type: ignore[arg-type]
         await pause()
         assert not next_task.done()
         futures[1].set_result(None)
