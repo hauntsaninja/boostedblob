@@ -304,13 +304,13 @@ async def _google_write_stream_unordered(
 
 
 def get_upload_id() -> int:
-    return random.randint(0, 2 ** 47 - 1)
+    return random.randint(0, 2**47 - 1)
 
 
 def get_block_id(upload_id: int, index: int) -> str:
-    assert index < 2 ** 17
+    assert index < 2**17
     id_plus_index = (upload_id << 17) + index
-    assert id_plus_index < 2 ** 64
+    assert id_plus_index < 2**64
     return base64.b64encode(id_plus_index.to_bytes(8, byteorder="big")).decode("utf8")
 
 

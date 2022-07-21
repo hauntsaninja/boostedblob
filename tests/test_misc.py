@@ -19,4 +19,4 @@ def test_format_size():
     assert bbb.listing.format_size(1024) == "1.0 KiB"
     assert bbb.listing.format_size(1024 * 1024 + 1) == "1.0 MiB"
     assert bbb.listing.format_size(1024 * 1024 * 1076) == "1.1 GiB"
-    assert bbb.listing.format_size(2 ** 81) == "2.0 YiB"
+    assert bbb.listing.format_size(2**81) == "2.0 YiB"

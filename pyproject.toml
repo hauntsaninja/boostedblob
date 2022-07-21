@@ -48,7 +48,7 @@ urllib3 = "*"
 filelock = "*"
 # tools
 ipdb = "*"
-black = "^21.9b0"
+black = "^22.6"
 isort = "^5.7.0"
 mypy = "^0.931"
 flake8 = "^3.8.3"

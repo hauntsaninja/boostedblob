@@ -25,7 +25,7 @@ import aiohttp
 
 from . import azure_auth, google_auth
 
-MB = 2 ** 20
+MB = 2**20
 
 
 T = TypeVar("T")
