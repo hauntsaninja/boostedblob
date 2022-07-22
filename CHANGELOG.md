@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.11.1]
 - Make `boostedblob` much faster when `gunicorn` is present in the same environment.
   It's been 1.5 years and `gunicorn` hasn't merged the fix, so add a hacky workaround
   for the slowness

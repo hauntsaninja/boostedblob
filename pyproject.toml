@@ -32,7 +32,7 @@ implicit_reexport = true
 
 [tool.poetry]
 name = "boostedblob"
-version = "0.11.0"
+version = "0.11.1"
 description = """
 Command line tool and async library to perform basic file operations on local \
 paths, Google Cloud Storage paths and Azure Blob Storage paths.\
