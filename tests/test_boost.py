@@ -11,7 +11,7 @@ import boostedblob as bbb
 
 
 async def pause():
-    EPSILON = 0.001
+    EPSILON = 0.002
     await asyncio.sleep(EPSILON)
 
 
@@ -354,7 +354,6 @@ async def test_eagerise_backpressure():
     async with bbb.BoostExecutor(2) as e:
         eager_it = e.eagerise(iterator())
         assert results == []
-        await pause()
         await pause()
         await pause()
         assert results == list(range(2 * 10 + 1))
