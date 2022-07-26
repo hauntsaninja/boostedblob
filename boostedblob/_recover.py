@@ -101,59 +101,103 @@ async def _delete_snapshot(path: AzurePath, snapshot: str) -> None:
     await request.execute_reponseless()
 
 
-async def _recover_candidate(
+async def _recover_snapshot(
     path: AzurePath, candidate: Dict[str, Any], alternatives: List[Dict[str, Any]]
 ) -> None:
     # https://docs.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview#restoring-soft-deleted-objects
     await _undelete(path)
-    await _promote_candidate(path, candidate)
     if "Snapshot" in candidate:
-        # undelete will undelete all snapshots, so re-delete all previously deleted snapshots
-        # don't do anything for versions, because we assume someone else will take care of them
-        # yes, yes, awaiting in a loop
-        if candidate.get("Deleted") == "true":
-            await _delete_snapshot(path, candidate["Snapshot"])
-        for b in alternatives:
-            if "Snapshot" in b and b.get("Deleted") == "true":
-                await _delete_snapshot(path, b["Snapshot"])
+        await _promote_candidate(path, candidate)
+    # undelete will undelete all snapshots, so re-delete all previously deleted snapshots
+    # (yes, yes, awaiting in a loop)
+    if "Snapshot" in candidate and candidate.get("Deleted") == "true":
+        await _delete_snapshot(path, candidate["Snapshot"])
+    for b in alternatives:
+        if "Snapshot" in b and b.get("Deleted") == "true":
+            await _delete_snapshot(path, b["Snapshot"])
 
 
 async def _determine_candidate_and_recover(
     path: AzurePath, restore_ts: str, versions_snapshots: List[Dict[str, Any]], dry_run: bool = True
 ) -> str:
-    def _to_ts(b: Dict[str, Any]) -> str:
-        return b.get("Snapshot") or b.get("VersionId") or "9999-99-99"
+    if any("VersionId" in b for b in versions_snapshots):
+        # If using versioning, I think all blobs should have versions
+        assert all("VersionId" in b for b in versions_snapshots)
+        versions = versions_snapshots
 
-    versions_snapshots.sort(key=_to_ts, reverse=True)
-    candidate_index = next(
-        (i for i in range(len(versions_snapshots)) if _to_ts(versions_snapshots[i]) <= restore_ts),
-        None,
-    )
-    should_recover = (
-        candidate_index is not None
-        and versions_snapshots[candidate_index].get("IsCurrentVersion") != "true"
-    )
+        # VersionId marks the time that version of the blob was created
+        versions.sort(key=lambda b: b["VersionId"], reverse=True)
+        candidate_index = next(
+            (i for i in range(len(versions)) if versions[i]["VersionId"] <= restore_ts), None
+        )
+        should_recover = (
+            candidate_index is not None
+            and versions[candidate_index].get("IsCurrentVersion") != "true"
+        )
 
-    def _to_ts_desc(b: Dict[str, Any]) -> str:
-        return repr(b.get("Snapshot") or b.get("VersionId") or "current")
+        if should_recover:
+            assert candidate_index is not None
+            candidate_desc = repr(versions[candidate_index]["VersionId"])
+            desc = f"Recovering {path} to {candidate_desc}."
+        else:
+            desc = f"Not attempting to recover {path}."
 
-    if should_recover:
+        alternatives = [b for i, b in enumerate(versions) if i != candidate_index]
+        alternatives_desc = ", ".join(repr(b["VersionId"]) for b in alternatives)
+        if alternatives:
+            desc += f" Alternatives include {alternatives_desc}."
+
+        if dry_run or not should_recover:
+            return desc
+
         assert candidate_index is not None
-        candidate_desc = _to_ts_desc(versions_snapshots[candidate_index])
-        desc = f"Recovering {path} to {candidate_desc}."
-    else:
-        desc = f"Not attempting to recover {path}."
-
-    alternatives = [b for i, b in enumerate(versions_snapshots) if i != candidate_index]
-    alternatives_desc = ", ".join(map(_to_ts_desc, alternatives))
-    desc += f" Alternatives include {alternatives_desc}."
-
-    if dry_run or not should_recover:
+        await _promote_candidate(path, versions[candidate_index])
         return desc
+    else:
+        # If using snapshotting, all except one of them should be snapshots
+        assert sum(1 for b in versions_snapshots if "Snapshot" not in b) == 1
+        snapshots = versions_snapshots
 
-    assert candidate_index is not None
-    await _recover_candidate(path, versions_snapshots[candidate_index], alternatives)
-    return desc
+        # Snapshot marks the time that version of the blob was obsoleted (I think)
+        # Note the logic and sorting is different from the versioning case
+        snapshots.sort(key=lambda b: b.get("Snapshot", "9999-99-99"))
+
+        candidate_index = next(
+            i
+            for i in range(len(snapshots))
+            if snapshots[i].get("Snapshot", "9999-99-99") >= restore_ts
+        )
+        should_recover = (
+            "Snapshot" in snapshots[candidate_index]
+            or snapshots[candidate_index].get("Deleted") == "true"
+        )
+
+        def _to_ts_desc(b: Dict[str, Any]) -> str:
+            if "Snapshot" in b:
+                return b["Snapshot"]
+            assert candidate_index is not None
+            deleted_time = snapshots[candidate_index]["Properties"]["DeletedTime"]
+            return datetime.datetime.strptime(deleted_time, "%a, %d %b %Y %H:%M:%S GMT").strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+
+        if should_recover:
+            candidate_desc = repr(_to_ts_desc(snapshots[candidate_index]))
+            desc = f"Recovering {path} to {candidate_desc}."
+        else:
+            desc = f"Not attempting to recover {path}."
+
+        alternatives = [b for i, b in enumerate(snapshots) if i != candidate_index]
+        alternatives_desc = ", ".join(repr(_to_ts_desc(b)) for b in alternatives)
+        if alternatives:
+            desc += f" Alternatives include {alternatives_desc}."
+
+        if dry_run or not should_recover:
+            return desc
+
+        assert candidate_index is not None
+        await _recover_snapshot(path, snapshots[candidate_index], alternatives)
+        return desc
 
 
 async def _recoverprefix(
@@ -164,9 +208,10 @@ async def _recoverprefix(
 ) -> None:
     """Attempt to recover blobs with a prefix to prevous snapshots or versions.
 
-    For each blob, attempts to restore to the most recent snapshot or version that is older than or
-    equal to restore_dt. Note that this isn't quite a point-in-time restore, e.g. it won't delete
-    blobs that have since been added.
+    For each blob, attempts to restore to the most recent version or snapshot that is older than or
+    equal to restore_dt. Note that this isn't a point-in-time restore, e.g. it won't delete
+    blobs that were added after restore_dt, or it may restore blobs that were actually only deleted
+    after restore_dt.
 
     Please try to avoid blindly trusting this!
     """
@@ -188,6 +233,7 @@ async def _recoverprefix(
     ):
         print(desc)
 
+    print()
     print("This code is experimental, please verify that it actually does what you want.")
     if dry_run:
         print("Dry run, no actions actually taken.")
