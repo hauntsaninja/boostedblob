@@ -138,6 +138,8 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             f"Found storage account key, but it was unable to access storage account: '{account}'"
         )
 
+    from .globals import config
+
     if creds["_azure_auth"] == "refresh":
         # we have a refresh token, convert it into an access token for this account
         req = create_access_token_request(
@@ -172,11 +174,12 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             return (auth, now + float(result["expires_in"]))
 
         # it didn't work, fall back to getting the storage keys
-        storage_account_key_auth = await get_storage_account_key(
-            account=account, creds=creds, container_hint=container
-        )
-        if storage_account_key_auth is not None:
-            return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
+        if config.storage_account_key_fallback:
+            storage_account_key_auth = await get_storage_account_key(
+                account=account, creds=creds, container_hint=container
+            )
+            if storage_account_key_auth is not None:
+                return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
     if creds["_azure_auth"] == "svcact":
         # we have a service principal, get an oauth token
@@ -189,11 +192,12 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             return (auth, now + float(result["expires_in"]))
 
         # it didn't work, fall back to getting the storage keys
-        storage_account_key_auth = await get_storage_account_key(
-            account=account, creds=creds, container_hint=container
-        )
-        if storage_account_key_auth is not None:
-            return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
+        if config.storage_account_key_fallback:
+            storage_account_key_auth = await get_storage_account_key(
+                account=account, creds=creds, container_hint=container
+            )
+            if storage_account_key_auth is not None:
+                return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
     raise RuntimeError(
         f"Could not find any credentials that grant access to storage account: '{account}'"
@@ -301,9 +305,9 @@ async def get_storage_account_id_with_subscription(
                     "roles. You can run "
                     f"`az storage container list --auth-mode login --account-name {account}` "
                     "to confirm the missing role.\n"
-                    "In this situation, boostedblob usually falls back to accessing the storage "
-                    "account keys, but Azure has really low rate limits on these queries, which "
-                    "are currently preventing us from doing so."
+                    "In this situation, boostedblob is capable of falling back to accessing the "
+                    "storage account keys, but Azure has really low rate limits on these queries, "
+                    "which are currently preventing us from doing so."
                 )
             result = await resp.json()
 

@@ -112,6 +112,7 @@ class Config:
     session: Optional[aiohttp.ClientSession] = None
 
     debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
+    storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
 
     chunk_size: int = 16 * MB
 
