@@ -109,8 +109,6 @@ class TokenManager(Generic[T]):
 
 @dataclass
 class Config:
-    session: Optional[aiohttp.ClientSession] = None
-
     debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
     storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
 
@@ -135,18 +133,61 @@ class Config:
         default_factory=lambda: TokenManager(google_auth.get_access_token)
     )
 
+    _sessions: Dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
+        default_factory=dict, init=False
+    )
+
+    def _get_session(self) -> Optional[aiohttp.ClientSession]:
+        return self._sessions.get(asyncio.get_running_loop())
+
+    def _set_session(self, session: Optional[aiohttp.ClientSession]) -> None:
+        if session is None:
+            self._sessions.pop(asyncio.get_running_loop(), None)
+            return
+        # In case we're doing repeated asyncio.run, clean up old sessions
+        for loop in list(self._sessions):
+            if loop.is_closed():
+                del self._sessions[loop]
+        self._sessions[session._loop] = session
+
+    async def _close_session(self) -> None:
+        session = self._sessions.pop(asyncio.get_running_loop(), None)
+        if session:
+            await session.close()
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        try:
+            return self._sessions[asyncio.get_running_loop()]
+        except KeyError:
+            set_event_loop_exception_handler()  # there could be a better place for this
+            session = _create_session()
+            self._set_session(session)
+            return session
+
+    @session.setter
+    def session(self, session: aiohttp.ClientSession) -> None:
+        # TODO: remove this
+        self._set_session(session)
+
 
 config: Config = Config()
 
 
 @contextlib.contextmanager
 def configure(**kwargs: Any) -> Iterator[None]:
+    old_session = None
+    if "session" in kwargs:
+        old_session = config._get_session()
+        config._set_session(kwargs.pop("session"))
+
     original = {k: getattr(config, k) for k in kwargs}
     config.__dict__.update(**kwargs)
     try:
         yield
     finally:
         config.__dict__.update(**original)
+        config._set_session(old_session)
 
 
 def _create_session() -> aiohttp.ClientSession:
@@ -168,14 +209,12 @@ def _create_session() -> aiohttp.ClientSession:
 
 @contextlib.asynccontextmanager
 async def session_context() -> AsyncIterator[None]:
-    if config.session is None:
-        set_event_loop_exception_handler()  # there could be a better place for this
-        session = _create_session()
-        async with session:
-            with configure(session=session):
-                yield
-    else:
+    preexisting_session = bool(config._get_session())
+    try:
         yield
+    finally:
+        if not preexisting_session:
+            await config._close_session()
 
 
 def ensure_session(fn: F) -> F:
@@ -212,22 +251,7 @@ def set_event_loop_exception_handler() -> None:
             ):
                 return
 
-        # Our main interest here is minimising the other various errors and tracebacks that
-        # drown out the politely formatted errors from cli.py when things go wrong
-        if "exception was never retrieved" in message:
-            from .request import MissingSession
-
-            # While closing down, we remove the global session, causing other requests to fail. This
-            # just causes noise, so ignore if that's the exception.
-            if not isinstance(exception, MissingSession):
-                print(
-                    f"ERROR (while closing down): {type(exception).__name__}: {exception}",
-                    file=sys.stderr,
-                )
-        else:
-            print(
-                f"ERROR (from event loop): {type(exception).__name__}: {message}", file=sys.stderr
-            )
+        print(f"ERROR (from event loop): {type(exception).__name__}: {message}", file=sys.stderr)
         if loop.get_debug():
             loop.default_exception_handler(context)
 
