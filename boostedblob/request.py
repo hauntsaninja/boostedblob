@@ -327,7 +327,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
     """
 
     async def inner(hostname: str) -> bool:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.getaddrinfo(hostname, None, family=socket.AF_INET)
             # no errors encountered, the hostname exists

@@ -17,7 +17,7 @@ async def pause():
 
 def get_futures_fn(futures: Dict[int, asyncio.Future[int]]) -> Callable[[int], Awaitable[int]]:
     """Return a function that we can control the completion of each invocation of."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def fn(i: int) -> int:
         if i not in futures:
@@ -145,7 +145,7 @@ async def test_map_ordered_many_low_concurrency():
     N = 500
     futures = {}
     results = []
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     async with bbb.BoostExecutor(N // 50) as e:
         it = e.map_ordered(get_futures_fn(futures), iter(range(N)))
         asyncio.create_task(collect(it, results))
@@ -396,7 +396,7 @@ async def test_map_eagerise():
         for i in range(N):
             yield i
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future = loop.create_future()
     started = []
 
@@ -427,7 +427,7 @@ async def test_map_eagerise():
 async def test_map_eagerise_slow():
     N = 30
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     futures = [loop.create_future() for _ in range(N)]
 
     async def iterator() -> AsyncIterator[int]:

@@ -137,7 +137,7 @@ async def _dud1(path: str) -> None:
         print(f"{clocks[_pos[0]]} {message}")
         _pos[0] = (_pos[0] + 1) % len(clocks)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     finished = loop.create_future()
 
     async def live_update() -> None:
@@ -169,7 +169,7 @@ async def _dud1(path: str) -> None:
 
 @sync_with_session
 async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     async with bbb.BoostExecutor(concurrency) as executor:
         stream = await bbb.read.read_stream(path, executor)
         async for data in bbb.boost.iter_underlying(stream):

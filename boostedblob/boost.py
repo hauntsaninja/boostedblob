@@ -140,7 +140,7 @@ class BoostExecutor:
             self.waiter.set_result(None)
 
     async def run(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         exhausted_boostables: List[Boostable[Any]] = []
         not_ready_boostables: Deque[Boostable[Any]] = Deque()
 
@@ -423,7 +423,7 @@ class UnorderedMappingBoostable(MappingBoostable[A, T]):
 
     async def blocking_dequeue(self) -> T:
         task = None
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while True:
             if not self.buffer:
                 arg = await blocking_dequeue_underlying(self.iterable)
@@ -527,7 +527,7 @@ class EageriseBoostable(Boostable[T]):
         return task.result()
 
     async def blocking_dequeue(self) -> T:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while True:
             ret = self.dequeue()
             if isinstance(ret, Exhausted):
@@ -539,7 +539,7 @@ class EageriseBoostable(Boostable[T]):
             await self.waiter_buffer
 
     async def eagerly_buffer(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         async with self.executor.semaphore:
             # We can't use async for because we need to preserve exceptions
             it = self.iterable.__aiter__()

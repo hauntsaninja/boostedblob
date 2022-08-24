@@ -188,7 +188,7 @@ def ensure_session(fn: F) -> F:
 
 
 def set_event_loop_exception_handler() -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def handler(
         loop: asyncio.AbstractEventLoop, context: Dict[str, Any]
