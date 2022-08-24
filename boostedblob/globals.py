@@ -162,7 +162,7 @@ def _create_session() -> aiohttp.ClientSession:
     # https://github.com/aio-libs/aiohttp/issues/1925#issuecomment-715977247
     # While the sleep suggested doesn't work, it does indicate that this is a problem for
     # aiohttp in general.
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=0, ttl_dns_cache=60)
     return aiohttp.ClientSession(connector=connector)
 
 
