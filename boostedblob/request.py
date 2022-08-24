@@ -16,10 +16,6 @@ from .globals import config
 from .xml import dict_to_xml, etree
 
 
-class MissingSession(Exception):
-    pass
-
-
 @dataclass(frozen=True)
 class Request:
     method: str
@@ -100,10 +96,6 @@ class Request:
     @contextlib.asynccontextmanager
     async def _raw_execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
         """Actually execute the request, with no extra fluff."""
-        if config.session is None:
-            raise MissingSession(
-                "No session available, use `async with session_context()` or `@ensure_session`"
-            )
         ctx = config.session.request(
             method=self.method,
             url=self.url,
