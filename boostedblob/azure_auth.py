@@ -385,7 +385,8 @@ async def get_storage_account_key(
             if await can_access_account(account, container_hint, storage_key_auth):
                 return storage_key_auth
             raise RuntimeError(
-                f"Found storage account key, but it was unable to access storage account: '{account}'"
+                "Found storage account key, but it was unable to access "
+                f"storage account: '{account}'"
             )
     raise RuntimeError(
         f"Storage account was found, but storage account keys were missing: '{account}'"
@@ -457,7 +458,10 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
         cmd = (
             f"az storage container list --auth-mode login --account-name {account}"
             if container is None
-            else f"az storage blob list --auth-mode login --account-name {account} --container {container}"
+            else (
+                f"az storage blob list --auth-mode login --account-name {account} "
+                f"--container {container}"
+            )
         )
         raise RuntimeError(
             "Only OAuth tokens can be used to get SAS tokens. You should set the "
