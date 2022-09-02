@@ -395,8 +395,9 @@ async def _azure_isdir(path: AzurePath) -> bool:
                 )
             )
             async for result in it:
-                if result["Blobs"] is not None:
-                    return "BlobPrefix" in result["Blobs"] or "Blob" in result["Blobs"]
+                blobs = result.find("Blobs")
+                if blobs is not None:
+                    return blobs.find("Blob") is not None or blobs.find("BlobPrefix") is not None
             return False
         else:
             request = await azurify_request(

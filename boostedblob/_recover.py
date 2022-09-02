@@ -44,14 +44,13 @@ async def _listtree_versions_snapshots(
 
     results = DefaultDict[AzurePath, List[Dict[str, Any]]](list)
     async for result in it:
-        blobs = result["Blobs"]
+        blobs = result.find("Blobs")
         if blobs is None:
             continue
-        if "Blob" in blobs:
-            if isinstance(blobs["Blob"], dict):
-                blobs["Blob"] = [blobs["Blob"]]
-            for b in blobs["Blob"]:
-                results[AzurePath(prefix.account, prefix.container, b["Name"])].append(b)
+        for b in blobs.iterfind("Blob"):
+            name: str = b.findtext("Name")  # type: ignore
+            b_dict = {el.tag: el.text for el in b}
+            results[AzurePath(prefix.account, prefix.container, name)].append(b_dict)
     return results
 
 

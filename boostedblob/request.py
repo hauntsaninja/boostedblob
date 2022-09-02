@@ -8,10 +8,28 @@ import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, Iterator, Mapping, Optional, Sequence, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import aiohttp
-import xmltodict
+
+if TYPE_CHECKING:
+    import xml.etree.ElementTree as etree
+
+    Element = etree.Element
+else:
+    from lxml import etree
+
+    Element = None
 
 from .globals import config
 
@@ -195,6 +213,8 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
 
     data = request.data
     if data is not None and not isinstance(data, (bytes, bytearray)):
+        import xmltodict  # TODO: remove
+
         data = xmltodict.unparse(data).encode("utf8")
 
     result = Request(
@@ -244,7 +264,7 @@ async def googlify_request(request: Request, access_token: Optional[str] = None)
     )
 
 
-async def azure_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]:
+async def azure_page_iterator(request: Request) -> AsyncIterator[Element]:
     params = dict(request.params)
     while True:
         request = Request(
@@ -261,11 +281,13 @@ async def azure_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]
         request = await azurify_request(request)
         body = await execute_retrying_read(request)
 
-        result = xmltodict.parse(body)["EnumerationResults"]
+        result = etree.fromstring(body)
         yield result
-        if result["NextMarker"] is None:
+
+        next_marker = result.findtext("NextMarker")
+        if not next_marker:
             break
-        params["marker"] = result["NextMarker"]
+        params["marker"] = next_marker
 
 
 async def google_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]:

@@ -4,7 +4,12 @@ import configparser
 import datetime
 import os
 import re
-from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
+
+if TYPE_CHECKING:
+    from xml.etree.ElementTree import Element
+else:
+    Element = None
 
 from . import google_auth
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
@@ -388,30 +393,23 @@ async def _local_glob_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
 # ==============================
 
 
-def _azure_get_entries(
-    account: str, container: str, result: Mapping[str, Any]
-) -> Iterator[DirEntry]:
-    blobs = result["Blobs"]
+def _azure_get_entries(account: str, container: str, result: Element) -> Iterator[DirEntry]:
+    blobs = result.find("Blobs")
     if blobs is None:
         return
-    if "BlobPrefix" in blobs:
-        if isinstance(blobs["BlobPrefix"], dict):
-            blobs["BlobPrefix"] = [blobs["BlobPrefix"]]
-        for bp in blobs["BlobPrefix"]:
-            blob = bp["Name"]
-            path = AzurePath(account, container, blob)
+    blob: str
+    for bp in blobs.findall("BlobPrefix"):
+        blob = bp.findtext("Name")  # type: ignore
+        path = AzurePath(account, container, blob)
+        yield DirEntry.from_dirpath(path)
+    for b in blobs.findall("Blob"):
+        blob = b.findtext("Name")  # type: ignore
+        path = AzurePath(account, container, blob)
+        if blob.endswith("/"):
             yield DirEntry.from_dirpath(path)
-    if "Blob" in blobs:
-        if isinstance(blobs["Blob"], dict):
-            blobs["Blob"] = [blobs["Blob"]]
-        for b in blobs["Blob"]:
-            blob = b["Name"]
-            path = AzurePath(account, container, blob)
-            if b["Name"].endswith("/"):
-                yield DirEntry.from_dirpath(path)
-            else:
-                props = b["Properties"]
-                yield DirEntry.from_path_stat(path, Stat.from_azure(props))
+        else:
+            props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore
+            yield DirEntry.from_path_stat(path, Stat.from_azure(props))
 
 
 def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirEntry]:
@@ -439,21 +437,13 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
         )
     )
     async for result in it:
-        result_containers = result["Containers"]
-        if result_containers is None:
+        containers = result.find("Containers")
+        if containers is None:
             raise ValueError(f"No containers found in storage account {account}")
-        result_containers = result_containers["Container"]
-        containers = (
-            [result_containers] if isinstance(result_containers, dict) else result_containers
-        )
-        assert isinstance(containers, list)
-        for container in containers:
-            yield DirEntry(
-                path=AzurePath(account, container["Name"], ""),
-                is_dir=True,
-                is_file=False,
-                stat=None,
-            )
+
+        for container in containers.iterfind("Container"):
+            name: str = container.find("Name").text  # type: ignore
+            yield DirEntry(path=AzurePath(account, name, ""), is_dir=True, is_file=False, stat=None)
 
 
 async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[DirEntry]:
