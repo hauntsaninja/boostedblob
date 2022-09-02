@@ -30,6 +30,10 @@ allow_untyped_defs = true
 allow_untyped_calls = true
 implicit_reexport = true
 
+[[tool.mypy.overrides]]
+module = "xmltodict.*"
+follow_imports = "skip"
+
 [tool.poetry]
 name = "boostedblob"
 version = "0.11.1"
@@ -45,8 +49,8 @@ include = ["boostedblob/py.typed"]
 [tool.poetry.dependencies]
 python = "^3.7"
 aiohttp = ">=3.7.2"
+lxml = "4.9.1"
 pycryptodomex = ">=3.9"
-xmltodict = ">=0.12"
 # uvloop is not strictly necessary
 uvloop = ">=0.16.0"
 
@@ -67,7 +71,6 @@ flake8 = "^3.8.3"
 
 [tool.poetry.group.type.dependencies]
 mypy = "^0.971"
-types-xmltodict = "^0.12.0"
 
 [tool.poetry.scripts]
 bbb = 'boostedblob.__main__:main'

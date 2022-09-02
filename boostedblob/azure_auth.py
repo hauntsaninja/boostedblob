@@ -10,10 +10,7 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-if TYPE_CHECKING:
-    import xml.etree.ElementTree as etree
-else:
-    from lxml import etree
+from .xml import etree
 
 if TYPE_CHECKING:
     from .path import AzurePath

@@ -8,30 +8,12 @@ import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    AsyncIterator,
-    Dict,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-)
+from typing import Any, AsyncIterator, Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
 import aiohttp
 
-if TYPE_CHECKING:
-    import xml.etree.ElementTree as etree
-
-    Element = etree.Element
-else:
-    from lxml import etree
-
-    Element = None
-
 from .globals import config
+from .xml import dict_to_xml, etree
 
 
 class MissingSession(Exception):
@@ -213,9 +195,7 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
 
     data = request.data
     if data is not None and not isinstance(data, (bytes, bytearray)):
-        import xmltodict  # TODO: remove
-
-        data = xmltodict.unparse(data).encode("utf8")
+        data = dict_to_xml(data)
 
     result = Request(
         method=request.method,
@@ -264,7 +244,7 @@ async def googlify_request(request: Request, access_token: Optional[str] = None)
     )
 
 
-async def azure_page_iterator(request: Request) -> AsyncIterator[Element]:
+async def azure_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
     params = dict(request.params)
     while True:
         request = Request(

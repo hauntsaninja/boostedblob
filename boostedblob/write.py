@@ -5,7 +5,7 @@ import base64
 import hashlib
 import os
 import random
-from typing import TYPE_CHECKING, List, Mapping, Optional, Tuple, Union
+from typing import List, Mapping, Optional, Tuple, Union
 
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
@@ -19,11 +19,7 @@ from .request import (
     exponential_sleep_generator,
     googlify_request,
 )
-
-if TYPE_CHECKING:
-    import xml.etree.ElementTree as etree
-else:
-    from lxml import etree
+from .xml import etree
 
 AZURE_BLOCK_COUNT_LIMIT = 50_000
 

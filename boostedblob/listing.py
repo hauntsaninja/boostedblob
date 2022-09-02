@@ -4,16 +4,12 @@ import configparser
 import datetime
 import os
 import re
-from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
-
-if TYPE_CHECKING:
-    from xml.etree.ElementTree import Element
-else:
-    Element = None
+from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
 
 from . import google_auth
 from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
 from .request import Request, azure_page_iterator, google_page_iterator
+from .xml import etree
 
 
 def format_size(num: float, suffix: str = "B") -> str:
@@ -393,7 +389,7 @@ async def _local_glob_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
 # ==============================
 
 
-def _azure_get_entries(account: str, container: str, result: Element) -> Iterator[DirEntry]:
+def _azure_get_entries(account: str, container: str, result: etree.Element) -> Iterator[DirEntry]:
     blobs = result.find("Blobs")
     if blobs is None:
         return
