@@ -13,10 +13,6 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING, Any, List, Mapping, Tuple
 
-from Cryptodome.Hash import SHA256
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Signature import pkcs1_15
-
 if TYPE_CHECKING:
     from .path import GooglePath
     from .request import Request
@@ -166,6 +162,10 @@ def _is_gce_instance() -> bool:
 
 
 def _sign(private_key: str, msg: bytes) -> bytes:
+    from Cryptodome.Hash import SHA256
+    from Cryptodome.PublicKey import RSA
+    from Cryptodome.Signature import pkcs1_15
+
     key = RSA.import_key(private_key)
     h = SHA256.new(msg)
     return pkcs1_15.new(key).sign(h)
