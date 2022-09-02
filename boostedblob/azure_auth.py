@@ -223,13 +223,13 @@ async def can_access_account(account: str, container: Optional[str], auth: Tuple
             data = await resp.read()
 
         result = etree.fromstring(data)
-        if result.find("Containers") is None:
+        container = result.findtext("Containers/Container/Name")
+
+        if container is None:
             # there are no containers in this storage account
             # we can't test if we can access this storage account or not, so presume we can
             return True
-
-        # then also test that we can list a container. this is perhaps unnecessary...
-        container = result.findtext("Containers/Container/Name")
+        # then also test that we can list that container. this is perhaps unnecessary...
 
     # https://myaccount.blob.core.windows.net/mycontainer?restype=container&comp=list
     req = Request(

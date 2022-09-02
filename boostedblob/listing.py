@@ -447,7 +447,7 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
     )
     async for result in it:
         containers = result.find("Containers")
-        if containers is None:
+        if containers is None or len(containers) == 0:
             raise ValueError(f"No containers found in storage account {account}")
 
         for container in containers.iterfind("Container"):
