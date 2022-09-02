@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+- Improve the speed of listing operations on Azure. `bbb lsr` is 1.7x faster,
+  `bbb llr` is 1.6x faster, a complicated parallel list benchmark is 4x faster
+- Disable the storage account key fallback by default. This can be re-enabled using the
+  `BBB_SA_KEY_FALLBACK` env variable
+- Experimental code for recovering Azure blobs works more reliably
+- Use some lazy imports to reduce import time by 60ms when using Azure blob. This can make
+  autocomplete up to 1.3x faster
+- Save one network request when performing recursive cloud copies
+- `boostedblob`  no longer looks at `blobfile`'s fake mtimes
+- Longer DNS TTL
+- Avoid use of deprecated asyncio APIs
+- Update `poetry` version
+
 ## [v0.11.1]
 - Make `boostedblob` much faster when `gunicorn` is present in the same environment.
   It's been 1.5 years and `gunicorn` hasn't merged the fix, so add a hacky workaround
