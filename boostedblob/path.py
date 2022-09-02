@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime
+import email.utils
 import functools
 import os
 import urllib.parse
@@ -544,9 +545,9 @@ def _strip_slash(path: str) -> str:
 
 
 def _azure_parse_timestamp(text: str) -> float:
-    return datetime.datetime.strptime(
-        text.replace("GMT", "Z"), "%a, %d %b %Y %H:%M:%S %z"
-    ).timestamp()
+    # A little more than 2x faster than:
+    # strptime(text.replace("GMT", "Z"), "%a, %d %b %Y %H:%M:%S %z").timestamp()
+    return email.utils.parsedate_to_datetime(text).timestamp()
 
 
 def _azure_get_md5(content_md5: Optional[str]) -> Optional[str]:
