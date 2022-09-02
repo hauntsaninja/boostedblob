@@ -10,7 +10,10 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-import xmltodict
+if TYPE_CHECKING:
+    import xml.etree.ElementTree as etree
+else:
+    from lxml import etree
 
 if TYPE_CHECKING:
     from .path import AzurePath
@@ -222,14 +225,14 @@ async def can_access_account(account: str, container: Optional[str], auth: Tuple
                 return False
             data = await resp.read()
 
-        out = xmltodict.parse(data)
-        if out["EnumerationResults"]["Containers"] is None:
+        result = etree.fromstring(data)
+        if result.find("Containers") is None:
             # there are no containers in this storage account
             # we can't test if we can access this storage account or not, so presume we can
             return True
 
         # then also test that we can list a container. this is perhaps unnecessary...
-        container = out["EnumerationResults"]["Containers"]["Container"]["Name"]
+        container = result.findtext("Containers/Container/Name")
 
     # https://myaccount.blob.core.windows.net/mycontainer?restype=container&comp=list
     req = Request(
@@ -497,8 +500,9 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
             )
         data = await resp.read()
 
-    out = xmltodict.parse(data)
-    return out["UserDelegationKey"], time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
+    result = etree.fromstring(data)
+    user_delegation_key = {el.tag: el.text for el in result}
+    return user_delegation_key, time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
 
 
 async def generate_signed_url(path: AzurePath) -> Tuple[str, datetime.datetime]:
