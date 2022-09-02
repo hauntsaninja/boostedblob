@@ -276,10 +276,7 @@ class Stat(NamedTuple):
             raw_ctime = item["Creation-Time"]
         else:
             raw_ctime = item["x-ms-creation-time"]
-        if "x-ms-meta-blobfilemtime" in item:
-            mtime = float(item["x-ms-meta-blobfilemtime"])
-        else:
-            mtime = _azure_parse_timestamp(item["Last-Modified"])
+        mtime = _azure_parse_timestamp(item["Last-Modified"])
         return Stat(
             size=int(item["Content-Length"]),
             mtime=mtime,
@@ -290,10 +287,7 @@ class Stat(NamedTuple):
 
     @staticmethod
     def from_google(item: Mapping[str, Any]) -> Stat:
-        if "metadata" in item and "blobfile-mtime" in item["metadata"]:
-            mtime = float(item["metadata"]["blobfile-mtime"])
-        else:
-            mtime = _google_parse_timestamp(item["updated"])
+        mtime = _google_parse_timestamp(item["updated"])
         return Stat(
             size=int(item["size"]),
             mtime=mtime,
