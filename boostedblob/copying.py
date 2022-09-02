@@ -83,7 +83,7 @@ async def _cloudpath_copyfile(
         return
     if isinstance(dst, CloudPath):
         if type(src) is type(dst):
-            await cloud_copyfile(src, dst, executor, overwrite=overwrite)
+            await cloud_copyfile(src, dst, executor, overwrite=overwrite, size=size)
             return
 
         if size is not None and size <= config.chunk_size:
@@ -142,7 +142,11 @@ CloudPathT = TypeVar("CloudPathT", bound=CloudPath)
 
 @pathdispatch
 async def cloud_copyfile(
-    src: CloudPathT, dst: CloudPathT, executor: BoostExecutor, overwrite: bool = False
+    src: CloudPathT,
+    dst: CloudPathT,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: Optional[int] = None,
 ) -> None:
     """Copy a file named ``src` to a file named ``dst`` within the same cloud.
 
@@ -153,6 +157,7 @@ async def cloud_copyfile(
     :param dst: The file to copy to.
     :param executor: An executor.
     :param overwrite: If False, raises if the path already exists.
+    :param size: If specified, could save a network call.
 
     """
     raise ValueError(f"Unsupported path: {src}")
@@ -176,7 +181,11 @@ async def _azure_put_block_from_url(
 
 
 async def _azure_cloud_copyfile_via_block_urls(
-    src: AzurePath, dst: AzurePath, executor: BoostExecutor, overwrite: bool = False
+    src: AzurePath,
+    dst: AzurePath,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: Optional[int] = None,
 ) -> None:
     if overwrite:
         await prepare_block_blob_write(dst)
@@ -185,14 +194,15 @@ async def _azure_cloud_copyfile_via_block_urls(
             raise FileExistsError(dst)
 
     copy_source, _ = await azure_auth.generate_signed_url(src)
-    src_size = await getsize(src)
+    if size is None:
+        size = await getsize(src)
 
     # TODO: could consider doing a single Put Block from URL for blobs less than 256MB
 
     byte_ranges = itertools.zip_longest(
-        range(0, src_size, config.chunk_size),
-        range(config.chunk_size, src_size, config.chunk_size),
-        fillvalue=src_size,
+        range(0, size, config.chunk_size),
+        range(config.chunk_size, size, config.chunk_size),
+        fillvalue=size,
     )
 
     upload_id = get_upload_id()
@@ -280,12 +290,18 @@ async def _azure_cloud_copyfile_via_copy(
 
 @cloud_copyfile.register  # type: ignore
 async def _azure_cloud_copyfile(
-    src: AzurePath, dst: AzurePath, executor: BoostExecutor, overwrite: bool = False
+    src: AzurePath,
+    dst: AzurePath,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: Optional[int] = None,
 ) -> None:
     if src.account == dst.account:
         await _azure_cloud_copyfile_via_copy(src, dst, overwrite=overwrite)
     else:
-        await _azure_cloud_copyfile_via_block_urls(src, dst, executor, overwrite=overwrite)
+        await _azure_cloud_copyfile_via_block_urls(
+            src, dst, executor, overwrite=overwrite, size=size
+        )
 
 
 @cloud_copyfile.register  # type: ignore
