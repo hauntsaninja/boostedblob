@@ -334,7 +334,7 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
         data = await resp.read()
 
     result = etree.fromstring(data)
-    blocks = result.findall("CommittedBlocks/Block")
+    blocks = [b.text for b in result.iterfind("CommittedBlocks/Block/Name")]
     if not blocks:
         return
 
@@ -377,7 +377,7 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
             headers={**headers, "If-Match": metadata["etag"]},
             params=dict(comp="blocklist"),
-            data={"BlockList": {"Latest": [b.findtext("Name") for b in blocks]}},
+            data={"BlockList": {"Latest": blocks}},
             success_codes=(201, 404, 412),
         )
     )
