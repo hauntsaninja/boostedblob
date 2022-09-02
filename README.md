@@ -25,7 +25,8 @@ For help with a specific command:
 bbb ls --help
 ```
 
-To enable tab completion, add the following to your shell config (replacing `zsh` with `bash`, if appropriate):
+To enable tab completion, add the following to your shell config (replacing `zsh` with `bash`,
+if appropriate):
 ```sh
 eval "$(bbb complete init zsh)"
 ```
@@ -34,4 +35,5 @@ your shell config to make your shell startup a little faster.
 
 ## Contributing
 
-To get started with developing boostedblob and running tests, see [CONTRIBUTING.md](CONTRIBUTING.md)
+For developer documentation (getting started, running tests, debugging tricks, codebase tips),
+see [CONTRIBUTING.md](CONTRIBUTING.md)
