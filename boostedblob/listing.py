@@ -7,7 +7,19 @@ import re
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
 
 from . import google_auth
-from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, Stat, isfile, pathdispatch
+from .path import (
+    AzurePath,
+    AzureStat,
+    BasePath,
+    CloudPath,
+    GooglePath,
+    GoogleStat,
+    LocalPath,
+    LocalStat,
+    Stat,
+    isfile,
+    pathdispatch,
+)
 from .request import Request, azure_page_iterator, google_page_iterator
 from .xml import etree
 
@@ -394,18 +406,19 @@ def _azure_get_entries(account: str, container: str, result: etree.Element) -> I
     if blobs is None:
         return
     blob: str
-    for bp in blobs.findall("BlobPrefix"):
+    for bp in blobs.iterfind("BlobPrefix"):
         blob = bp.findtext("Name")  # type: ignore
         path = AzurePath(account, container, blob)
         yield DirEntry.from_dirpath(path)
-    for b in blobs.findall("Blob"):
+    for b in blobs.iterfind("Blob"):
         blob = b.findtext("Name")  # type: ignore
         path = AzurePath(account, container, blob)
         if blob.endswith("/"):
             yield DirEntry.from_dirpath(path)
         else:
+            # this is much more efficient than doing repeated finds, even if we get extra fields
             props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore
-            yield DirEntry.from_path_stat(path, Stat.from_azure(props))
+            yield DirEntry.from_path_stat(path, AzureStat(props))
 
 
 def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirEntry]:
@@ -420,7 +433,7 @@ def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirE
             if item["name"].endswith("/"):
                 yield DirEntry.from_dirpath(path)
             else:
-                yield DirEntry.from_path_stat(path, Stat.from_google(item))
+                yield DirEntry.from_path_stat(path, GoogleStat(item))
 
 
 async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
@@ -485,11 +498,11 @@ def _glob_to_regex(pattern: str) -> str:
     return regexp + r"/?$"
 
 
-def _os_safe_stat(entry: os.DirEntry[Any]) -> Optional[Stat]:
+def _os_safe_stat(entry: os.DirEntry[Any]) -> Optional[LocalStat]:
     # stat can fail and we don't want that to affect listing operations
     # In particular, we ran into the equivalent of the following raising FileNotFoundError:
     # next(x for x in os.scandir("/") if x.name == ".VolumeIcon.icns").stat()
     try:
-        return Stat.from_local(entry.stat())
+        return LocalStat(entry.stat())
     except Exception:
         return None

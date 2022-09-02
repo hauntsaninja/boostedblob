@@ -7,7 +7,7 @@ import functools
 import os
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, NamedTuple, Optional, TypeVar, Union
+from typing import Any, Callable, Mapping, Optional, TypeVar, Union
 
 from .request import Request, azure_page_iterator, azurify_request, googlify_request
 
@@ -263,44 +263,73 @@ def pathdispatch(fn: F) -> F:
 # ==============================
 
 
-class Stat(NamedTuple):
+class Stat:
     size: int
     mtime: float
     ctime: float
     md5: Optional[str]
     version: Optional[str]
 
-    @staticmethod
-    def from_azure(item: Mapping[str, Any]) -> Stat:
-        if "Creation-Time" in item:
-            raw_ctime = item["Creation-Time"]
-        else:
-            raw_ctime = item["x-ms-creation-time"]
-        mtime = _azure_parse_timestamp(item["Last-Modified"])
-        return Stat(
-            size=int(item["Content-Length"]),
-            mtime=mtime,
-            ctime=_azure_parse_timestamp(raw_ctime),
-            md5=_azure_get_md5(item),
-            version=item["Etag"],
-        )
 
-    @staticmethod
-    def from_google(item: Mapping[str, Any]) -> Stat:
-        mtime = _google_parse_timestamp(item["updated"])
-        return Stat(
-            size=int(item["size"]),
-            mtime=mtime,
-            ctime=_google_parse_timestamp(item["timeCreated"]),
-            md5=_google_get_md5(item),
-            version=item["generation"],
-        )
+class AzureStat(Stat):
+    __slots = (
+        "size",
+        "_mtime",
+        "_raw_mtime",
+        "_ctime",
+        "_raw_ctime",
+        "_md5",
+        "_raw_md5",
+        "version",
+    )
 
-    @staticmethod
-    def from_local(item: os.stat_result) -> Stat:
-        return Stat(
-            size=item.st_size, mtime=item.st_mtime, ctime=item.st_ctime, md5=None, version=None
+    def __init__(self, item: Mapping[str, Any]) -> None:
+        self.size = int(item["Content-Length"])
+        self.version = item["Etag"]
+        self._raw_ctime = (
+            item["Creation-Time"] if "Creation-Time" in item else item["x-ms-creation-time"]
         )
+        self._ctime: Optional[float] = None
+        self._raw_mtime = item["Last-Modified"]
+        self._mtime: Optional[float] = None
+        self._raw_md5 = item.get("Content-MD5")
+        self._md5: Optional[str] = ""
+
+    @property
+    def ctime(self) -> float:  # type: ignore[override]
+        if self._ctime is None:
+            self._ctime = _azure_parse_timestamp(self._raw_ctime)
+        return self._ctime
+
+    @property
+    def mtime(self) -> float:  # type: ignore[override]
+        if self._mtime is None:
+            self._mtime = _azure_parse_timestamp(self._raw_mtime)
+        return self._mtime
+
+    @property
+    def md5(self) -> Optional[str]:  # type: ignore[override]
+        if self._md5 == "":
+            self._md5 = _azure_get_md5(self._raw_md5)
+        return self._md5
+
+
+class GoogleStat(Stat):
+    def __init__(self, item: Mapping[str, Any]) -> None:
+        self.size = int(item["size"])
+        self.mtime = _google_parse_timestamp(item["updated"])
+        self.ctime = _google_parse_timestamp(item["timeCreated"])
+        self.md5 = _google_get_md5(item)
+        self.version = item["generation"]
+
+
+class LocalStat(Stat):
+    def __init__(self, item: os.stat_result) -> None:
+        self.size = item.st_size
+        self.mtime = item.st_mtime
+        self.ctime = item.st_ctime
+        self.md5 = None
+        self.version = None
 
 
 @pathdispatch
@@ -309,7 +338,7 @@ async def stat(path: Union[BasePath, str]) -> Stat:
 
 
 @stat.register  # type: ignore
-async def _azure_stat(path: AzurePath) -> Stat:
+async def _azure_stat(path: AzurePath) -> AzureStat:
     if not path.blob:
         raise FileNotFoundError(path)
     request = await azurify_request(
@@ -320,11 +349,11 @@ async def _azure_stat(path: AzurePath) -> Stat:
         )
     )
     async with request.execute() as resp:
-        return Stat.from_azure(resp.headers)
+        return AzureStat(resp.headers)
 
 
 @stat.register  # type: ignore
-async def _google_stat(path: GooglePath) -> Stat:
+async def _google_stat(path: GooglePath) -> GoogleStat:
     if not path.blob:
         raise FileNotFoundError(path)
     request = await googlify_request(
@@ -336,12 +365,12 @@ async def _google_stat(path: GooglePath) -> Stat:
     )
     async with request.execute() as resp:
         result = await resp.json()
-        return Stat.from_google(result)
+        return GoogleStat(result)
 
 
 @stat.register  # type: ignore
-async def _local_stat(path: LocalPath) -> Stat:
-    return Stat.from_local(os.stat(path))
+async def _local_stat(path: LocalPath) -> LocalStat:
+    return LocalStat(os.stat(path))
 
 
 # ==============================
@@ -520,13 +549,10 @@ def _azure_parse_timestamp(text: str) -> float:
     ).timestamp()
 
 
-def _azure_get_md5(metadata: Mapping[str, Any]) -> Optional[str]:
-    if "Content-MD5" in metadata:
-        b64_encoded = metadata["Content-MD5"]
-        if b64_encoded is None:
-            return None
-        return base64.b64decode(b64_encoded).hex()
-    return None
+def _azure_get_md5(content_md5: Optional[str]) -> Optional[str]:
+    if content_md5 is None:
+        return None
+    return base64.b64decode(content_md5).hex()
 
 
 def _google_parse_timestamp(text: str) -> float:
