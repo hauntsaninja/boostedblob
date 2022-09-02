@@ -5,9 +5,7 @@ import base64
 import hashlib
 import os
 import random
-from typing import List, Mapping, Optional, Tuple, Union
-
-import xmltodict
+from typing import TYPE_CHECKING, List, Mapping, Optional, Tuple, Union
 
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
@@ -21,6 +19,11 @@ from .request import (
     exponential_sleep_generator,
     googlify_request,
 )
+
+if TYPE_CHECKING:
+    import xml.etree.ElementTree as etree
+else:
+    from lxml import etree
 
 AZURE_BLOCK_COUNT_LIMIT = 50_000
 
@@ -334,13 +337,10 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
             return
         data = await resp.read()
 
-    result = xmltodict.parse(data)
-    if result["BlockList"]["CommittedBlocks"] is None:
+    result = etree.fromstring(data)
+    blocks = result.findall("CommittedBlocks/Block")
+    if not blocks:
         return
-
-    blocks = result["BlockList"]["CommittedBlocks"]["Block"]
-    if isinstance(blocks, dict):
-        blocks = [blocks]
 
     if not _always_clear and len(blocks) < 10_000:
         # Don't bother clearing uncommitted blocks if we have less than 10,000 committed blocks,
@@ -381,7 +381,7 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
             url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
             headers={**headers, "If-Match": metadata["etag"]},
             params=dict(comp="blocklist"),
-            data={"BlockList": {"Latest": [b["Name"] for b in blocks]}},
+            data={"BlockList": {"Latest": [b.findtext("Name") for b in blocks]}},
             success_codes=(201, 404, 412),
         )
     )
@@ -430,8 +430,8 @@ async def azure_put_block_list(
 
             assert resp.status == 400
             data = await resp.read()
-            result = xmltodict.parse(data)
-            if result["Error"]["Code"] == "InvalidBlockList":
+            result = etree.fromstring(data)
+            if result.findtext("Code") == "InvalidBlockList":
                 if attempt >= 3:
                     raise RuntimeError(
                         f"Invalid block list, most likely due to concurrent writes to {path}"
