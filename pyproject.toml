@@ -9,6 +9,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise ValueError",
     "if config.debug_mode",
+    "if TYPE_CHECKING",
 ]
 omit = ["boostedblob/__main__.py"]
 
