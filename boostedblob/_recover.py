@@ -45,8 +45,7 @@ async def _listtree_versions_snapshots(
     results = DefaultDict[AzurePath, List[Dict[str, Any]]](list)
     async for result in it:
         blobs = result.find("Blobs")
-        if blobs is None:
-            continue
+        assert blobs is not None
         for b in blobs.iterfind("Blob"):
             name: str = b.findtext("Name")  # type: ignore
             b_dict = {el.tag: el.text for el in b}

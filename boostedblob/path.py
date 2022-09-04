@@ -426,7 +426,8 @@ async def _azure_isdir(path: AzurePath) -> bool:
             )
             async for result in it:
                 blobs = result.find("Blobs")
-                if blobs is not None and len(blobs):
+                assert blobs is not None
+                if len(blobs):
                     return blobs.find("Blob") is not None or blobs.find("BlobPrefix") is not None
             return False
         else:

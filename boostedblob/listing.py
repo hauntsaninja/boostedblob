@@ -403,8 +403,7 @@ async def _local_glob_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
 
 def _azure_get_entries(account: str, container: str, result: etree.Element) -> Iterator[DirEntry]:
     blobs = result.find("Blobs")
-    if blobs is None:
-        return
+    assert blobs is not None
     blob: str
     for bp in blobs.iterfind("BlobPrefix"):
         blob = bp.findtext("Name")  # type: ignore
@@ -447,7 +446,8 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
     )
     async for result in it:
         containers = result.find("Containers")
-        if containers is None or len(containers) == 0:
+        assert containers is not None
+        if len(containers) == 0:
             raise ValueError(f"No containers found in storage account {account}")
 
         for container in containers.iterfind("Container"):
