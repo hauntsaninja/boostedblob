@@ -488,6 +488,7 @@ async def test_composition_ordered_unordered():
                 assert set(outer_futures) == {i + 1}
             inner_futures[i].set_result(None)
             await pause()
+            await pause()
             assert set(outer_futures) == {i}
             outer_futures[i].set_result(None)
         await pause()
