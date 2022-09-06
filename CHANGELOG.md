@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.12.0]
+## [v0.12.1]
 - Improve the speed of listing operations on Azure. `bbb lsr` is 1.7x faster,
   `bbb llr` is 1.6x faster, a complicated parallel list benchmark is 4x faster
 - Disable the storage account key fallback by default. This can be re-enabled using the
