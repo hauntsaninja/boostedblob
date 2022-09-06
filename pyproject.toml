@@ -50,7 +50,7 @@ include = ["boostedblob/py.typed"]
 [tool.poetry.dependencies]
 python = "^3.7"
 aiohttp = ">=3.7.2"
-lxml = "4.9.1"
+lxml = ">=4.9.1"
 pycryptodomex = ">=3.9"
 # uvloop is not strictly necessary
 uvloop = ">=0.16.0"
