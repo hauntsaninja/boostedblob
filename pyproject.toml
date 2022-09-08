@@ -37,7 +37,7 @@ follow_imports = "skip"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "C4", "PIE", "PLE"]
-ignore = ["E2", "E501", "C408", "PIE790"]
+ignore = ["E2", "E501", "E741", "C408", "PIE790"]
 
 [tool.poetry]
 name = "boostedblob"

@@ -47,10 +47,14 @@ class TokenManager(Generic[T]):
 
         now = time.time()
         expiration = self._expirations.get(key)
+
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
-            self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
-            assert self._expirations[key] is not None
-            self.dump_state()
+            async with config.auth_lock:
+                refresh_expiration = self._expirations.get(key)
+                if refresh_expiration == expiration:
+                    self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
+                    assert self._expirations[key] is not None
+                    self.dump_state()
 
         assert key in self._tokens
         return self._tokens[key]
@@ -141,19 +145,25 @@ class Config:
     _sessions: Dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
     )
+    _auth_locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = field(
+        default_factory=dict, init=False
+    )
 
     def _get_session(self) -> Optional[aiohttp.ClientSession]:
         return self._sessions.get(asyncio.get_running_loop())
 
     def _set_session(self, session: Optional[aiohttp.ClientSession]) -> None:
+        running_loop = asyncio.get_running_loop()
         if session is None:
-            self._sessions.pop(asyncio.get_running_loop(), None)
+            self._sessions.pop(running_loop, None)
             return
         # In case we're doing repeated asyncio.run, clean up old sessions
-        for loop in list(self._sessions):
-            if loop.is_closed():
-                del self._sessions[loop]
-        self._sessions[session._loop] = session
+        for l in list(self._sessions):
+            if l.is_closed():
+                del self._sessions[l]
+        if hasattr(session, "_loop"):  # in case aiohttp  changes
+            assert session._loop is running_loop
+        self._sessions[running_loop] = session
 
     async def _close_session(self) -> None:
         session = self._sessions.pop(asyncio.get_running_loop(), None)
@@ -179,8 +189,27 @@ class Config:
         warnings.warn(
             "Setting config.session is deprecated. Use config.configure(session=...) instead.",
             DeprecationWarning,
+            stacklevel=2,
         )
         self._set_session(session)
+
+    def _set_lock(self, lock: asyncio.Lock) -> None:
+        running_loop = asyncio.get_running_loop()
+        # In case we're doing repeated asyncio.run, clean up old locks
+        for l in list(self._auth_locks):
+            if l.is_closed():
+                del self._auth_locks[l]
+        self._auth_locks[running_loop] = lock
+
+    @property
+    def auth_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        try:
+            return self._auth_locks[loop]
+        except KeyError:
+            lock = asyncio.Lock()
+            self._set_lock(lock)
+            return lock
 
 
 config: Config = Config()
