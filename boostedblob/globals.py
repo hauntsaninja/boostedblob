@@ -46,10 +46,14 @@ class TokenManager(Generic[T]):
 
         now = time.time()
         expiration = self._expirations.get(key)
+
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
-            self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
-            assert self._expirations[key] is not None
-            self.dump_state()
+            async with config.auth_lock:
+                refresh_expiration = self._expirations.get(key)
+                if refresh_expiration == expiration:
+                    self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
+                    assert self._expirations[key] is not None
+                    self.dump_state()
 
         assert key in self._tokens
         return self._tokens[key]
@@ -136,6 +140,9 @@ class Config:
     _sessions: Dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
     )
+    _auth_locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = field(
+        default_factory=dict, init=False
+    )
 
     def _get_session(self) -> Optional[aiohttp.ClientSession]:
         return self._sessions.get(asyncio.get_running_loop())
@@ -169,6 +176,15 @@ class Config:
     def session(self, session: aiohttp.ClientSession) -> None:
         # TODO: remove this
         self._set_session(session)
+
+    @property
+    def auth_lock(self) -> asyncio.Lock:
+        try:
+            return self._auth_locks[asyncio.get_running_loop()]
+        except KeyError:
+            lock = asyncio.Lock()
+            self._auth_locks[asyncio.get_running_loop()] = lock
+            return lock
 
 
 config: Config = Config()
