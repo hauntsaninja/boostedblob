@@ -467,7 +467,7 @@ async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[D
             raise ValueError(
                 "Could not determine project in which to list buckets; try setting it "
                 "with `gsutil config`"
-            )
+            ) from None
 
     it = google_page_iterator(
         Request(

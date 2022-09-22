@@ -123,7 +123,7 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
             yield subpath
     except FileNotFoundError:
         if await isfile(path):
-            raise NotADirectoryError(path)
+            raise NotADirectoryError(path) from None
         raise
 
     marker = await marker_task

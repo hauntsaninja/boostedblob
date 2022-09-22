@@ -432,12 +432,11 @@ async def azure_put_block_list(
                     raise RuntimeError(
                         f"Invalid block list, most likely due to concurrent writes to {path}"
                     )
-                else:
-                    # It turns out these can actually succeed on retry.
-                    # We run into this when using unordered upload, maybe it means we're just
-                    # going too fast...
-                    await asyncio.sleep(backoff)
-                    continue
+                # It turns out these can actually succeed on retry.
+                # We run into this when using unordered upload, maybe it means we're just
+                # going too fast...
+                await asyncio.sleep(backoff)
+                continue
 
             raise RequestFailure(reason=str(resp.reason), request=request, status=resp.status)
 

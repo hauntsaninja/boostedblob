@@ -47,7 +47,7 @@ async def sync_action_iterator(
         raise ValueError(
             f"Failed to compile exclude pattern {repr(exclude)}: {e}\n"
             "Hint: exclude patterns should be Python regular expressions, not globs."
-        )
+        ) from None
 
     async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
         try:

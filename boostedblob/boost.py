@@ -595,8 +595,8 @@ async def blocking_dequeue_underlying(iterable: BoostUnderlying[T]) -> T:
     if isinstance(iterable, Iterator):
         try:
             return next(iterable)
-        except StopIteration:
-            raise StopAsyncIteration
+        except StopIteration as e:
+            raise StopAsyncIteration from e
     raise AssertionError
 
 

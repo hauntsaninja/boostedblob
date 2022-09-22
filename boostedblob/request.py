@@ -314,8 +314,7 @@ def exponential_sleep_generator(
         sleep = base * (1 - jitter_fraction) + base * random.random() * jitter_fraction
         yield sleep
         base *= multiplier
-        if base > maximum:
-            base = maximum
+        base = min(base, maximum)
 
 
 _hostname_check_cache: Dict[str, Tuple[float, bool]] = {}
