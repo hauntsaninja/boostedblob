@@ -273,7 +273,7 @@ class Stat:
 
 
 class AzureStat(Stat):
-    __slots = (
+    __slots__ = (
         "size",
         "_mtime",
         "_raw_mtime",
