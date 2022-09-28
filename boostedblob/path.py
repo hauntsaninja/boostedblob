@@ -314,6 +314,17 @@ class AzureStat(Stat):
             self._md5 = _azure_get_md5(self._raw_md5)
         return self._md5
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Stat):
+            return False
+        return (
+            self.size == other.size
+            and self.mtime == other.mtime
+            and self.ctime == other.ctime
+            and self.md5 == other.md5
+            and self.version == other.version
+        )
+
 
 class GoogleStat(Stat):
     def __init__(self, item: Mapping[str, Any]) -> None:
@@ -323,6 +334,17 @@ class GoogleStat(Stat):
         self.md5 = _google_get_md5(item)
         self.version = item["generation"]
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Stat):
+            return False
+        return (
+            self.size == other.size
+            and self.mtime == other.mtime
+            and self.ctime == other.ctime
+            and self.md5 == other.md5
+            and self.version == other.version
+        )
+
 
 class LocalStat(Stat):
     def __init__(self, item: os.stat_result) -> None:
@@ -331,6 +353,17 @@ class LocalStat(Stat):
         self.ctime = item.st_ctime
         self.md5 = None
         self.version = None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Stat):
+            return False
+        return (
+            self.size == other.size
+            and self.mtime == other.mtime
+            and self.ctime == other.ctime
+            and self.md5 == other.md5
+            and self.version == other.version
+        )
 
 
 @pathdispatch
