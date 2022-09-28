@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.12.2]
+- Add `--read-only` flag to `bbb edit` to prevent updating the file
+- Fix an issue where `bbb edit` was a little too eager about updating the remote file
+- Specify updated build requirements (some non-isolated builds could fail)
+- Minor error and memory usage improvements
+
 ## [v0.12.1]
 - Improve the speed of listing operations on Azure. `bbb lsr` is 1.7x faster,
   `bbb llr` is 1.6x faster, a complicated parallel list benchmark is 4x faster
