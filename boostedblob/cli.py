@@ -293,7 +293,7 @@ async def sync(
 
 
 @sync_with_session
-async def edit(path: str) -> None:
+async def edit(path: str, read_only: bool = False) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         path_obj = bbb.BasePath.from_str(path)
         local = bbb.LocalPath(tmpdir) / path_obj.name
@@ -309,10 +309,17 @@ async def edit(path: str) -> None:
             subprocess.check_call([*editor, local])
             post_stat = await bbb.stat(local)
             if pre_stat != post_stat:
-                await bbb.copyfile(local, path_obj, executor, overwrite=True)
-                print(f"Updated {path_obj}")
+                if read_only:
+                    raise RuntimeError(
+                        "File was edited, but read-only mode is enabled. "
+                        "Edits were not persisted."
+                    )
+                else:
+                    await bbb.copyfile(local, path_obj, executor, overwrite=True)
+                    print(f"Updated {path_obj}")
             else:
-                print("File unmodified, skipping reupload...")
+                if not read_only:
+                    print("File unmodified, skipping reupload...")
 
 
 def complete_init(shell: str) -> None:
@@ -624,6 +631,7 @@ eval "$(bbb complete init zsh)"
     )
     subparser.set_defaults(command=edit)
     subparser.add_argument("path")
+    subparser.add_argument("-r", "--read-only", action="store_true", help="Open file read-only")
 
     subparser = subparsers.add_parser(
         "rm",
