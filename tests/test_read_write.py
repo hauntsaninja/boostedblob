@@ -1,11 +1,8 @@
 import asyncio
-import os
-import tempfile
 
 import pytest
 
 import boostedblob as bbb
-from boostedblob import read
 
 from . import helpers
 
@@ -78,17 +75,11 @@ async def test_azure_write_unordered():
 
 
 @pytest.mark.asyncio
-async def test_read_byte_range_local():
-    with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, "content.txt")
-        with open(path, "wb") as f:
-            f.write(b"1111222233334444")
-
-        val = await read.read_byte_range(path, (0, 4))
-        assert val == b"1111"
-        val = await read.read_byte_range(path, (4, 8))
-        assert val == b"2222"
-        val = await read.read_byte_range(path, (8, None))
-        assert val == b"33334444"
-        val = await read.read_byte_range(path, (None, 3))
-        assert val == b"111"
+@bbb.ensure_session
+async def test_read_byte_range(any_dir):
+    path = any_dir / "blob"
+    helpers.create_file(path, b"1111222233334444")
+    assert b"1111" == await bbb.read.read_byte_range(path, (0, 4))
+    assert b"2222" == await bbb.read.read_byte_range(path, (4, 8))
+    assert b"33334444" == await bbb.read.read_byte_range(path, (8, None))
+    assert b"11112" == await bbb.read.read_byte_range(path, (None, 5))
