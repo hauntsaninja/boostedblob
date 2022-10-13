@@ -83,3 +83,4 @@ async def test_read_byte_range(any_dir):
     assert b"2222" == await bbb.read.read_byte_range(path, (4, 8))
     assert b"33334444" == await bbb.read.read_byte_range(path, (8, None))
     assert b"11112" == await bbb.read.read_byte_range(path, (None, 5))
+    assert b"1111222233334444" == await bbb.read.read_byte_range(path, (None, None))

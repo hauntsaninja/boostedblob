@@ -73,11 +73,9 @@ async def _local_read_byte_range(path: LocalPath, byte_range: OptByteRange) -> b
     with open(path, "rb") as f:
         start, end = byte_range
         if start is None:
-            return f.read(end)
+            return f.read() if end is None else f.read(end)
         f.seek(start)
-        if end is None:
-            return f.read()
-        return f.read(end - start)
+        return f.read() if end is None else f.read(end - start)
 
 
 # ==============================
