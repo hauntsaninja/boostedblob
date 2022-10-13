@@ -72,3 +72,15 @@ async def test_azure_write_unordered():
 
             await bbb.write.write_stream_unordered(path, iter(stream), e)
             assert b"".join(contents) == await bbb.read.read_single(path)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_read_byte_range(any_dir):
+    path = any_dir / "blob"
+    helpers.create_file(path, b"1111222233334444")
+    assert b"1111" == await bbb.read.read_byte_range(path, (0, 4))
+    assert b"2222" == await bbb.read.read_byte_range(path, (4, 8))
+    assert b"33334444" == await bbb.read.read_byte_range(path, (8, None))
+    assert b"11112" == await bbb.read.read_byte_range(path, (None, 5))
+    assert b"1111222233334444" == await bbb.read.read_byte_range(path, (None, None))
