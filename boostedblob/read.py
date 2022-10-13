@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import itertools
-import os
 from typing import Any, Iterator, Optional, Tuple, Union
 
 from .boost import (
@@ -23,9 +22,7 @@ OptByteRange = Tuple[Optional[int], Optional[int]]
 
 
 @pathdispatch
-async def read_byte_range(
-    path: Union[CloudPath, LocalPath, str], byte_range: OptByteRange
-) -> bytes:
+async def read_byte_range(path: Union[BasePath, str], byte_range: OptByteRange) -> bytes:
     """Read the content of ``path`` in the given byte range.
 
     :param path: The path to read from.
@@ -76,11 +73,10 @@ async def _local_read_byte_range(path: LocalPath, byte_range: OptByteRange) -> b
     with open(path, "rb") as f:
         start, end = byte_range
         if start is None:
-            start = 0
-        if end is None:
-            f.seek(0, os.SEEK_END)
-            end = f.tell()
+            return f.read(end)
         f.seek(start)
+        if end is None:
+            return f.read()
         return f.read(end - start)
 
 
