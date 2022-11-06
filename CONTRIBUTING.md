@@ -20,6 +20,8 @@ use `BBB_TEST_LOCATIONS` to tell tests what locations to use. E.g.,
 `BBB_TEST_LOCATIONS=az://some/location ./test.sh` will run Azure tests reading and writing to the
 `az://some/location` and skip Google Cloud tests.
 
+Note that CI will only run linting and type checking, not actual tests.
+
 ## Debugging tricks
 
 Set the environment variable `BBB_DEBUG=1` to get full tracebacks on error and debug logs.
