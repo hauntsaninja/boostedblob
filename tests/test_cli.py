@@ -2,7 +2,9 @@ import contextlib
 import datetime
 import io
 import os
+import shlex
 import subprocess
+import sys
 from typing import Any, List, Tuple
 from unittest.mock import MagicMock
 
@@ -166,3 +168,25 @@ def test_complete():
 
     subprocess.check_call(["bash", "-c", run_bbb(["complete", "init", "bash"])])
     subprocess.check_call(["zsh", "-ic", run_bbb(["complete", "init", "zsh"])])
+
+
+def test_edit():
+    with helpers.tmp_azure_dir() as azure_dir:
+        helpers.create_file(azure_dir / "somefile", contents=b"this\nis\nfun")
+
+        env = os.environ.copy()
+        script = """
+import sys
+with open(sys.argv[1], "r") as f:
+    c = f.read()
+with open(sys.argv[1], "w") as f:
+    f.write(c.replace("fun", "nasty"))
+"""
+        try:
+            os.environ["EDITOR"] = " ".join(map(shlex.quote, [sys.executable, "-c", script]))
+            run_bbb(["edit", azure_dir / "somefile"])
+            output = run_bbb(["cat", azure_dir / "somefile"])
+            assert output == "this\nis\nnasty"
+        finally:
+            os.environ.clear()
+            os.environ.update(env)
