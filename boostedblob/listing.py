@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import configparser
-import datetime
 import os
 import re
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple, Optional, Union
@@ -23,16 +22,6 @@ from .path import (
 from .request import Request, azure_page_iterator, google_page_iterator
 from .xml import etree
 
-
-def format_size(num: float, suffix: str = "B") -> str:
-    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
-        if abs(num) < 1024.0:
-            unit += suffix
-            return f"{num:.1f} {unit:<3}"
-        num /= 1024.0
-    return f"{num:.1f} Yi{suffix}"
-
-
 # ==============================
 # DirEntry
 # ==============================
@@ -53,15 +42,6 @@ class DirEntry(NamedTuple):
     def from_path_stat(path: BasePath, stat: Stat) -> DirEntry:
         assert not path.is_directory_like()
         return DirEntry(path=path, is_dir=False, is_file=True, stat=stat)
-
-    def format(self, human_readable: bool = False) -> str:
-        size = (
-            (format_size(self.stat.size) if human_readable else self.stat.size) if self.stat else ""
-        )
-        mtime = (
-            datetime.datetime.fromtimestamp(int(self.stat.mtime)).isoformat() if self.stat else ""
-        )
-        return f"{size:>12}  {mtime:19}  {self.path}"
 
 
 # ==============================
@@ -223,8 +203,9 @@ async def _cloud_listdir(path: CloudPath) -> AsyncIterator[CloudPath]:
 
 @listdir.register  # type: ignore
 async def _local_listdir(path: LocalPath) -> AsyncIterator[LocalPath]:
-    for p in os.listdir(path):
-        yield LocalPath(p)
+    for entry in os.scandir(path):
+        entry_path = LocalPath(os.path.normpath(entry.path))
+        yield entry_path.ensure_directory_like() if entry.is_dir() else entry_path
 
 
 # ==============================

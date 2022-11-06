@@ -101,6 +101,9 @@ class LocalPath(BasePath):
     def ensure_directory_like(self) -> LocalPath:
         return self if self.is_directory_like() else LocalPath(self.path + "/")
 
+    def abspath(self) -> LocalPath:
+        return LocalPath(os.path.abspath(self.path))
+
     def __truediv__(self, relative_path: str) -> LocalPath:
         return LocalPath(os.path.join(self.path, relative_path))
 

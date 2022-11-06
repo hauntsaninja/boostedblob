@@ -28,10 +28,13 @@ def test_cli():
     with helpers.tmp_local_dir() as local_dir:
         with helpers.tmp_azure_dir() as remote_dir:
 
-            def normalise(output: str) -> List[str]:
+            def normalise_abs(output: str) -> List[str]:
                 return sorted(
                     BasePath.from_str(p).relative_to(remote_dir) for p in output.splitlines()
                 )
+
+            def normalise_rel(output: str) -> List[str]:
+                return sorted(p for p in output.splitlines())
 
             def normalise_long(output: str) -> List[Tuple[str, str, str]]:
                 def parse_line(line: str) -> Tuple[str, str, str]:
@@ -68,10 +71,13 @@ def test_cli():
             with pytest.raises(NotADirectoryError):
                 run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir / "missing"])
             run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir])
-            assert normalise(run_bbb(["ls", remote_dir])) == ["f1", "f2"]
+            assert normalise_abs(run_bbb(["ls", remote_dir])) == ["f1", "f2"]
+            assert normalise_rel(run_bbb(["ls", remote_dir, "--relative"])) == ["f1", "f2"]
 
             # ls a file prints that file
-            assert normalise(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]
+            assert normalise_abs(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]
+            assert normalise_rel(run_bbb(["ls", remote_dir / "f1", "--relative"])) == ["f1"]
+            assert normalise_rel(run_bbb(["ls", local_dir / "f1", "--relative"])) == ["f1"]
             assert normalise_long(run_bbb(["ls", "-l", "--machine", remote_dir / "f1"])) == [
                 ("4", "mtime", "f1")
             ]
@@ -96,7 +102,10 @@ def test_cli():
             )
 
             run_bbb(["cptree", local_dir, remote_dir])
-            assert normalise(run_bbb(["ls", remote_dir])) == ["d1/", "f1", "f2", "g3"]
+            contents = ["d1/", "f1", "f2", "g3"]
+            assert normalise_abs(run_bbb(["ls", remote_dir])) == contents
+            assert normalise_rel(run_bbb(["ls", remote_dir, "--relative"])) == contents
+            assert normalise_rel(run_bbb(["ls", local_dir, "--relative"])) == contents
             assert normalise_long(run_bbb(["ls", "-l", remote_dir])) == [
                 ("", "", "d1/"),
                 ("11.0 B", "mtime", "g3"),
@@ -108,7 +117,10 @@ def test_cli():
             helpers.create_file(remote_dir / "f5")
             run_bbb(["sync", "--delete", local_dir, remote_dir])
 
-            assert normalise(run_bbb(["lstree", remote_dir])) == ["d1/f4", "f1", "f2", "g3"]
+            contents = ["d1/f4", "f1", "f2", "g3"]
+            assert normalise_abs(run_bbb(["lstree", remote_dir])) == contents
+            assert normalise_rel(run_bbb(["lstree", remote_dir, "--relative"])) == contents
+            assert normalise_rel(run_bbb(["lstree", local_dir, "--relative"])) == contents
             assert normalise_long(run_bbb(["lstree", "-l", "--machine", remote_dir])) == [
                 ("11", "mtime", "d1/f4"),
                 ("11", "mtime", "g3"),

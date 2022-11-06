@@ -1,6 +1,7 @@
 import pytest
 
 import boostedblob as bbb
+import boostedblob.cli
 from boostedblob.xml import dict_to_xml
 
 from . import helpers
@@ -16,11 +17,11 @@ async def test_get_storage_account_key():
 
 
 def test_format_size():
-    assert bbb.listing.format_size(1023) == "1023.0 B  "
-    assert bbb.listing.format_size(1024) == "1.0 KiB"
-    assert bbb.listing.format_size(1024 * 1024 + 1) == "1.0 MiB"
-    assert bbb.listing.format_size(1024 * 1024 * 1076) == "1.1 GiB"
-    assert bbb.listing.format_size(2**81) == "2.0 YiB"
+    assert boostedblob.cli.format_size(1023) == "1023.0 B  "
+    assert boostedblob.cli.format_size(1024) == "1.0 KiB"
+    assert boostedblob.cli.format_size(1024 * 1024 + 1) == "1.0 MiB"
+    assert boostedblob.cli.format_size(1024 * 1024 * 1076) == "1.1 GiB"
+    assert boostedblob.cli.format_size(2**81) == "2.0 YiB"
 
 
 def test_xml():

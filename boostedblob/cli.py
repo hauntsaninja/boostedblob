@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import datetime
 import functools
 import os
 import shlex
@@ -42,7 +43,39 @@ def is_glob(path: str) -> bool:
     return "*" in path
 
 
-async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bool) -> None:
+def format_size(num: float, suffix: str = "B") -> str:
+    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
+        if abs(num) < 1024.0:
+            unit += suffix
+            return f"{num:.1f} {unit:<3}"
+        num /= 1024.0
+    return f"{num:.1f} Yi{suffix}"
+
+
+def format_path_relative(path: bbb.BasePath, relative_to: Optional[bbb.BasePath]) -> str:
+    if relative_to is None:
+        return str(path)
+    if relative_to == path:
+        return path.name
+    return path.relative_to(relative_to)
+
+
+def format_long_entry(
+    entry: bbb.listing.DirEntry, human_readable: bool, relative_to: Optional[bbb.BasePath]
+) -> str:
+    size = (
+        (format_size(entry.stat.size) if human_readable else entry.stat.size) if entry.stat else ""
+    )
+    mtime = datetime.datetime.fromtimestamp(int(entry.stat.mtime)).isoformat() if entry.stat else ""
+    path = format_path_relative(entry.path, relative_to)
+    return f"{size:>12}  {mtime:19}  {path}"
+
+
+async def print_long(
+    it: AsyncIterator[bbb.listing.DirEntry],
+    human_readable: bool,
+    relative_to: Optional[bbb.BasePath],
+) -> None:
     total = 0
     num_files = 0
     async for entry in it:
@@ -50,55 +83,71 @@ async def print_long(it: AsyncIterator[bbb.listing.DirEntry], human_readable: bo
             num_files += 1
         if entry.stat:
             total += entry.stat.size
-        print(entry.format(human_readable=human_readable))
+        print(format_long_entry(entry, human_readable=human_readable, relative_to=relative_to))
     if human_readable:
-        human_total = bbb.listing.format_size(total).strip()
+        human_total = format_size(total).strip()
         print(f"Listed {num_files} files summing to {total} bytes ({human_total})")
 
 
 @sync_with_session
-async def ls(path: str, long: bool = False, machine: bool = False) -> None:
+async def ls(path: str, long: bool = False, machine: bool = False, relative: bool = False) -> None:
     path_obj = bbb.BasePath.from_str(path)
+    if isinstance(path_obj, bbb.LocalPath):
+        path_obj = path_obj.abspath()
+    relative_to = path_obj if relative else None
+
     if is_glob(path):
         it = bbb.listing.glob_scandir(path_obj)
         if long:
-            await print_long(it, human_readable=not machine)
+            await print_long(it, human_readable=not machine, relative_to=relative_to)
         else:
             async for entry in it:
-                print(entry.path)
+                print(format_path_relative(entry.path, relative_to))
         return
 
     try:
         if long:
-            await print_long(bbb.scandir(path_obj), human_readable=not machine)
+            await print_long(
+                bbb.scandir(path_obj),
+                human_readable=not machine,
+                relative_to=path_obj if relative else None,
+            )
         else:
             async for p in bbb.listdir(path_obj):
-                print(p)
+                print(format_path_relative(p, relative_to))
     except NotADirectoryError:
         if long:
             stat = await bbb.stat(path_obj)
             entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
-            print(entry.format(human_readable=not machine))
+            print(format_long_entry(entry, human_readable=not machine, relative_to=relative_to))
         else:
-            print(path_obj)
+            print(format_path_relative(path_obj, relative_to))
 
 
 @sync_with_session
-async def lstree(path: str, long: bool = False, machine: bool = False) -> None:
+async def lstree(
+    path: str, long: bool = False, machine: bool = False, relative: bool = False
+) -> None:
+    path_obj = bbb.BasePath.from_str(path)
+    if isinstance(path_obj, bbb.LocalPath):
+        path_obj = path_obj.abspath()
+    relative_to = path_obj if relative else None
+
     try:
         if long:
-            await print_long(bbb.scantree(path), human_readable=not machine)
+            await print_long(
+                bbb.scantree(path), human_readable=not machine, relative_to=relative_to
+            )
         else:
             async for p in bbb.listtree(path):
-                print(p)
+                print(format_path_relative(p, relative_to))
     except NotADirectoryError:
-        path_obj = bbb.BasePath.from_str(path)
         if long:
             stat = await bbb.stat(path_obj)
             entry = bbb.listing.DirEntry.from_path_stat(path_obj, stat)
-            print(entry.format(human_readable=not machine))
+            print(format_long_entry(entry, human_readable=not machine, relative_to=relative_to))
         else:
-            print(path_obj)
+            print(format_path_relative(path_obj, relative_to))
 
 
 @sync_with_session
@@ -122,7 +171,7 @@ async def _dud1(path: str) -> None:
     def print_sizes() -> int:
         sorted_sizes = sorted(sizes.items(), key=lambda x: x[1])
         for subpath, size in sorted_sizes:
-            print(f"{bbb.listing.format_size(size).strip():>12}  {subpath}")
+            print(f"{format_size(size).strip():>12}  {subpath}")
         return len(sorted_sizes)
 
     def clear_lines(num_lines: int) -> None:
@@ -163,7 +212,7 @@ async def _dud1(path: str) -> None:
     await printer
 
     print_sizes()
-    total_size = bbb.listing.format_size(sum(sizes.values())).strip()
+    total_size = format_size(sum(sizes.values())).strip()
     print(f"Listed {total_count} files summing to {total_size}")
 
 
@@ -423,8 +472,12 @@ $ bbb ls -l .
 To check whether a file exists:
 $ bbb ls schrodingers_file.txt
 
+To show relative paths:
+$ bbb ls --relative .
+
 Aliases:
 bbb ll == bbb ls -l
+bbb ll -s == bbb ls --long --relative
 """
     lstree_desc = """\
 `bbb lstree` lists all files present anywhere in the given directory tree.
@@ -440,9 +493,13 @@ $ bbb lstree -l gs://my_bucket/
 To make output more easily machine readable:
 $ bbb lstree --machine .
 
+To show relative paths:
+$ bbb lstree --relative .
+
 Aliases:
 bbb lsr == bbb lstree
 bbb llr == bbb lstree -l == bbb lsr -l == bbb du
+bbb lsr -s == bbb lstree --relative
 """
     cat_desc = """\
 `bbb cat` copies the contents of a given file to stdout.
@@ -546,6 +603,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "--machine", action="store_true", help="Make output more easily machine readable"
     )
+    subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser(
         "ll", formatter_class=argparse.RawDescriptionHelpFormatter, description=ls_desc
@@ -555,6 +613,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "--machine", action="store_true", help="Make output more easily machine readable"
     )
+    subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser(
         "lstree",
@@ -571,6 +630,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "--machine", action="store_true", help="Make output more easily machine readable"
     )
+    subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser(
         "llr",
@@ -583,6 +643,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument(
         "--machine", action="store_true", help="Make output more easily machine readable"
     )
+    subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser("_dud1")
     subparser.set_defaults(command=_dud1)
