@@ -205,7 +205,7 @@ async def _dud1(path: str) -> None:
 
     printer = asyncio.create_task(live_update())
 
-    async with bbb.BoostExecutor(100) as executor:
+    async with bbb.BoostExecutor(DEFAULT_CONCURRENCY) as executor:
         await bbb.boost.consume(executor.map_unordered(_dud0, executor.eagerise(bbb.scandir(path))))
 
     finished.set_result(None)
