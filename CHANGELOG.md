@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.13.0]
+- Move local stream writes back to a side thread, this can make downloads up to 1.4x faster
+- Tune default concurrency to improve performance
+- Add `--relative` option to listing commands
+- Add a local implementation for `read_byte_range`
+- Various testing and dev improvements
+
 ## [v0.12.2]
 - Add `--read-only` flag to `bbb edit` to prevent updating the file
 - Fix an issue where `bbb edit` was a little too eager about updating the remote file
