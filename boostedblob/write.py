@@ -220,13 +220,10 @@ async def _local_write_stream(
             raise FileExistsError(path)
 
     os.makedirs(path.parent, exist_ok=True)
+    loop = asyncio.get_running_loop()
     with open(path, mode="wb") as f:
         async for data in iter_underlying(stream):
-            # Note that this is a blocking write. We used to use loop.run_in_executor, but it
-            # didn't seem to help much, and had some downsides. First, we run into
-            # https://bugs.python.org/issue35279 on Python 3.7. Second, blocking writes provide
-            # natural backpressure.
-            f.write(data)
+            await loop.run_in_executor(config.executor, f.write, data)
 
 
 # ==============================

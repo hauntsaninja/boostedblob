@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -110,6 +111,9 @@ class TokenManager(Generic[T]):
 @dataclass
 class Config:
     session: Optional[aiohttp.ClientSession] = None
+
+    # Avoid the default executor because https://bugs.python.org/issue35279
+    executor: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=32))
 
     debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
     storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
