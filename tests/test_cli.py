@@ -75,6 +75,7 @@ def test_cli():
             run_bbb(["cp", local_dir / "f1", local_dir / "f2", remote_dir])
             assert normalise_abs(run_bbb(["ls", remote_dir])) == ["f1", "f2"]
             assert normalise_rel(run_bbb(["ls", remote_dir, "--relative"])) == ["f1", "f2"]
+            assert normalise_rel(run_bbb(["ls", remote_dir / "f*", "--relative"])) == ["f1", "f2"]
 
             # ls a file prints that file
             assert normalise_abs(run_bbb(["ls", remote_dir / "f1"])) == ["f1"]

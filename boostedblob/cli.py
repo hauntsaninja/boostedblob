@@ -43,6 +43,10 @@ def is_glob(path: str) -> bool:
     return "*" in path
 
 
+def glob_parent(path: str) -> str:
+    return path.split("*", 1)[0].rsplit("/", 1)[0]
+
+
 def format_size(num: float, suffix: str = "B") -> str:
     for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
         if abs(num) < 1024.0:
@@ -94,9 +98,9 @@ async def ls(path: str, long: bool = False, machine: bool = False, relative: boo
     path_obj = bbb.BasePath.from_str(path)
     if isinstance(path_obj, bbb.LocalPath):
         path_obj = path_obj.abspath()
-    relative_to = path_obj if relative else None
 
     if is_glob(path):
+        relative_to = bbb.BasePath.from_str(glob_parent(path)) if relative else None
         it = bbb.listing.glob_scandir(path_obj)
         if long:
             await print_long(it, human_readable=not machine, relative_to=relative_to)
@@ -105,6 +109,7 @@ async def ls(path: str, long: bool = False, machine: bool = False, relative: boo
                 print(format_path_relative(entry.path, relative_to))
         return
 
+    relative_to = path_obj if relative else None
     try:
         if long:
             await print_long(
