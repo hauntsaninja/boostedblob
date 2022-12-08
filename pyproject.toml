@@ -37,7 +37,7 @@ follow_imports = "skip"
 
 [tool.poetry]
 name = "boostedblob"
-version = "0.12.2"
+version = "0.13.0"
 description = """
 Command line tool and async library to perform basic file operations on local \
 paths, Google Cloud Storage paths and Azure Blob Storage paths.\
