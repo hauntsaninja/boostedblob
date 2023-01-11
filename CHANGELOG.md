@@ -1,5 +1,8 @@
 # Changelog
 
+## [Unreleased]
+- Add `--ignore-mtime` option to `bbb sync` to ignore mtimes (at your own risk) when syncing
+
 ## [v0.13.0]
 - Move local stream writes back to a side thread, this can make downloads up to 1.4x faster
 - Tune default concurrency to improve performance

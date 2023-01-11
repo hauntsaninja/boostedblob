@@ -28,7 +28,7 @@ class DeleteAction(Action):
 
 
 async def sync_action_iterator(
-    src: BasePath, dst: BasePath, exclude: Optional[str] = None
+    src: BasePath, dst: BasePath, exclude: Optional[str] = None, ignore_mtime: bool = False
 ) -> Iterator[Action]:
     """Yields the actions to take to sync the tree rooted at ``src`` to ``dst``.
 
@@ -61,11 +61,11 @@ async def sync_action_iterator(
     # We block on tree collection, rather than streaming actions, for fear that the list
     # operations might start to reflect our changes, causing weird things to happen.
     src_files, dst_files = await asyncio.gather(collect_tree(src), collect_tree(dst))
-    return sync_files_action_iterator(src_files, dst_files)
+    return sync_files_action_iterator(src_files, dst_files, ignore_mtime=ignore_mtime)
 
 
 def sync_files_action_iterator(
-    src_files: List[Tuple[str, DirEntry]], dst_files: List[Tuple[str, DirEntry]]
+    src_files: List[Tuple[str, DirEntry]], dst_files: List[Tuple[str, DirEntry]], ignore_mtime: bool
 ) -> Iterator[Action]:
     src_files.sort(key=lambda p: p[0])
     dst_files.sort(key=lambda p: p[0])
@@ -84,7 +84,7 @@ def sync_files_action_iterator(
             j += 1
             continue
         if src_files[i][0] == dst_files[j][0]:
-            if should_copy(src_files[i][1].stat, dst_files[j][1].stat):
+            if should_copy(src_files[i][1].stat, dst_files[j][1].stat, ignore_mtime):
                 src_stat = src_files[i][1].stat
                 size = src_stat.size if src_stat else None
                 yield CopyAction(src_files[i][0], size)
@@ -105,6 +105,7 @@ async def sync(
     executor: BoostExecutor,
     delete: bool = False,
     exclude: Optional[str] = None,
+    ignore_mtime: bool = False,
 ) -> AsyncIterator[BasePath]:
     """Syncs the tree rooted at ``src`` to ``dst``.
 
@@ -152,14 +153,15 @@ async def sync(
         return None
 
     actions = executor.map_unordered(
-        action_wrapper, await sync_action_iterator(src_obj, dst_obj, exclude=exclude)
+        action_wrapper,
+        await sync_action_iterator(src_obj, dst_obj, exclude=exclude, ignore_mtime=ignore_mtime),
     )
     async for path in actions:
         if path is not None:
             yield path
 
 
-def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
+def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat], ignore_mtime: bool) -> bool:
     if src_stat is None and dst_stat is None:
         return False
     if src_stat is None or dst_stat is None:
@@ -176,7 +178,7 @@ def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
     if src_stat.md5 and dst_stat.md5:
         return src_stat.md5 != dst_stat.md5
     # Round mtime, since different stores have different precisions
-    if int(src_stat.mtime) >= int(dst_stat.mtime):
+    if not ignore_mtime and int(src_stat.mtime) >= int(dst_stat.mtime):
         return True
     # If hashes are unavailable, sizes are the same and the dst file has a newer mtime
     # than the src file, we take our chances.
