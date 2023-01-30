@@ -47,6 +47,21 @@ def load_credentials() -> Dict[str, Any]:
             "storage_account_key": connection_data["accountkey"],
         }
 
+    if "AZURE_APPLICATION_CREDENTIALS" in os.environ:
+        creds_path = os.environ["AZURE_APPLICATION_CREDENTIALS"]
+        if not os.path.exists(creds_path):
+            raise RuntimeError(
+                f"Credentials not found at '{creds_path}' specified by environment variable 'AZURE_APPLICATION_CREDENTIALS'"
+            )
+        with open(creds_path) as f:
+            creds = json.load(f)
+            return {
+                "_azure_auth": "svcact",
+                "client_id": creds["appId"],
+                "client_secret": creds["password"],
+                "tenant_id": creds["tenant"],
+            }
+
     if "AZURE_CLIENT_ID" in os.environ:
         return {
             "_azure_auth": "svcact",
@@ -92,7 +107,10 @@ def load_credentials() -> Dict[str, Any]:
 2) Create an account with 'az ad sp create-for-rbac --name <name>' and
    individually set the 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', and
    'AZURE_TENANT_ID' environment variables
-3) Set the environment variable 'AZURE_STORAGE_ACCOUNT_KEY' to your storage account key which you
+3) Create an account as in (2), save the credentials in a JSON file, and set the path to this file
+   in the 'AZURE_APPLICATION_CREDENTIALS' environment variable. The JSON schema should be:
+   {"appId": "$AZURE_CLIENT_ID", "password": "$AZURE_CLIENT_SECRET", "tenant": "$AZURE_TENANT_ID"}
+4) Set the environment variable 'AZURE_STORAGE_ACCOUNT_KEY' to your storage account key which you
    can find by following this guide:
    https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage
 """
