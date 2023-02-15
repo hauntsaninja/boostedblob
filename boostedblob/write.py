@@ -83,9 +83,10 @@ async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = Fa
         if await exists(path):
             raise FileExistsError(path)
 
+    loop = asyncio.get_running_loop()
     os.makedirs(path.parent, exist_ok=True)
     with open(path, mode="wb") as f:
-        f.write(data)
+        await loop.run_in_executor(config.executor, f.write, data)
 
 
 # ==============================
