@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.13.1]
+- Fix XML parsing issue in experimental recovery code for Azure blobs (affecting snapshotting but
+  not versioning)
+- Allow specifying Azure credentials via JSON file
+- Move local single writes to a side thread as well
+- Drop the Python upper bound that poetry introduces
+
 ## [v0.13.0]
 - Move local stream writes back to a side thread, this can make downloads up to 1.4x faster
 - Tune default concurrency to improve performance
