@@ -12,6 +12,15 @@ from typing import Any, DefaultDict, Dict, List, Union
 from .boost import BoostExecutor
 from .path import AzurePath
 from .request import Request, azure_page_iterator, azurify_request
+from .xml import etree
+
+
+def _xml_to_dict(element: etree.Element) -> Any:
+    # This is a hack, but works fine here
+    if len(element) == 0:
+        return element.text or ""
+    else:
+        return {e.tag: _xml_to_dict(e) for e in element}
 
 
 async def _listtree_versions_snapshots(
@@ -47,8 +56,8 @@ async def _listtree_versions_snapshots(
         blobs = result.find("Blobs")
         assert blobs is not None
         for b in blobs.iterfind("Blob"):
-            name: str = b.findtext("Name")  # type: ignore
-            b_dict = {el.tag: el.text for el in b}
+            b_dict = _xml_to_dict(b)
+            name: str = b_dict["Name"]
             results[AzurePath(prefix.account, prefix.container, name)].append(b_dict)
     return results
 
@@ -136,14 +145,14 @@ async def _determine_candidate_and_recover(
         if should_recover:
             assert candidate_index is not None
             candidate_desc = repr(versions[candidate_index]["VersionId"])
-            desc = f"Recovering {path} to {candidate_desc}."
+            desc = f"Recovering {path} to {candidate_desc}"
         else:
-            desc = f"Not attempting to recover {path}."
+            desc = f"Not attempting to recover {path}"
 
         alternatives = [b for i, b in enumerate(versions) if i != candidate_index]
         alternatives_desc = ", ".join(repr(b["VersionId"]) for b in alternatives)
         if alternatives:
-            desc += f" Alternatives include {alternatives_desc}."
+            desc += f" Alternatives include {alternatives_desc}"
 
         if dry_run or not should_recover:
             return desc
@@ -181,14 +190,14 @@ async def _determine_candidate_and_recover(
 
         if should_recover:
             candidate_desc = repr(_to_ts_desc(snapshots[candidate_index]))
-            desc = f"Recovering {path} to {candidate_desc}."
+            desc = f"Recovering {path} to {candidate_desc}"
         else:
-            desc = f"Not attempting to recover {path}."
+            desc = f"Not attempting to recover {path}"
 
         alternatives = [b for i, b in enumerate(snapshots) if i != candidate_index]
         alternatives_desc = ", ".join(repr(_to_ts_desc(b)) for b in alternatives)
         if alternatives:
-            desc += f" Alternatives include {alternatives_desc}."
+            desc += f" Alternatives include {alternatives_desc}"
 
         if dry_run or not should_recover:
             return desc
