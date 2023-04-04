@@ -331,7 +331,6 @@ async def sync(
     dst: str,
     delete: bool = False,
     exclude: Optional[str] = None,
-    ignore_mtime: bool = False,
     quiet: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:
@@ -342,9 +341,7 @@ async def sync(
     if not src_is_dirlike:
         raise ValueError(f"{src_obj} is not a directory")
     async with bbb.BoostExecutor(concurrency) as executor:
-        async for p in bbb.sync(
-            src_obj, dst_obj, executor, delete=delete, exclude=exclude, ignore_mtime=ignore_mtime
-        ):
+        async for p in bbb.sync(src_obj, dst_obj, executor, delete=delete, exclude=exclude):
             if not quiet:
                 print(p)
 
@@ -753,11 +750,6 @@ eval "$(bbb complete init zsh)"
             "Only copy or delete files whose relative path don't match this Python regular "
             "expression at any position"
         ),
-    )
-    subparser.add_argument(
-        "--ignore-mtime",
-        action="store_true",
-        help="At your own risk, ignore mtimes when deciding whether to sync files",
     )
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
