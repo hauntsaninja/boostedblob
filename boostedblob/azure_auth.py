@@ -139,6 +139,7 @@ def load_stored_subscription_ids() -> List[str]:
     subscriptions.sort(key=lambda x: x["isDefault"], reverse=True)
     return [sub["id"] for sub in subscriptions]
 
+
 async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
     account, container = cache_key
 
@@ -149,7 +150,7 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
     # This enables the use of Managed Identity, Workload Identity, and other auth methods not implemented here
     if creds["_azure_auth"] == "azure-identity":
         try:
-            from azure.identity.aio import DefaultAzureCredential # type: ignore
+            from azure.identity.aio import DefaultAzureCredential  # type: ignore
         except ImportError:
             raise RuntimeError(
                 "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"
