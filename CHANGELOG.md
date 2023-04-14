@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.13.2]
+- `AZURE_USE_IDENTITY=1` env variable will let you authenticate using `azure-identity` package.
+  Note that `azure-identity` is not a dependency of `boostedblob` and must be installed separately.
+
 ## [v0.13.1]
 - Fix XML parsing issue in experimental recovery code for Azure blobs (affecting snapshotting but
   not versioning)
