@@ -25,6 +25,10 @@ SHARED_KEY = "shared_key"
 
 
 def load_credentials() -> Dict[str, Any]:
+    # When AZURE_USE_IDENTITY=1, boostedblob will use the azure-identity package to retrieve AAD access tokens
+    if os.getenv("AZURE_USE_IDENTITY", "0") == "1":
+        return {"_azure_auth": "azure-identity"}
+
     # AZURE_STORAGE_KEY seems to be the environment variable mentioned by the az cli
     # AZURE_STORAGE_ACCOUNT_KEY is mentioned elsewhere on the internet
     for varname in ["AZURE_STORAGE_KEY", "AZURE_STORAGE_ACCOUNT_KEY"]:
@@ -141,6 +145,22 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
 
     now = time.time()
     creds = load_credentials()
+
+    # If opted into using azure-identity, use DefaultAzureCredential to get a token
+    # This enables the use of Managed Identity, Workload Identity, and other auth methods not implemented here
+    if creds["_azure_auth"] == "azure-identity":
+        try:
+            from azure.identity.aio import DefaultAzureCredential  # type: ignore
+        except ImportError:
+            raise RuntimeError(
+                "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"
+            )
+
+        async with DefaultAzureCredential() as cred:
+            token = await cred.get_token("https://storage.azure.com/.default")
+        auth = (OAUTH_TOKEN, token.token)
+        if await can_access_account(account, container, auth):
+            return (auth, token.expires_on)
 
     if creds["_azure_auth"] == "sakey":
         if "account" in creds:
