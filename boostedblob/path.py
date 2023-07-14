@@ -136,6 +136,9 @@ class AzurePath(CloudPath):
         else:
             raise ValueError(f"Invalid URL '{url}'; expected 'https' or 'az' scheme")
 
+        if not account:
+            raise ValueError(f"Invalid URL '{url}'; expected account name")
+
         # split the unparsed URL
         parts = url.split("/", maxsplit=4)
         container = parts[3] if len(parts) >= 4 else ""

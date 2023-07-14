@@ -33,7 +33,8 @@ def test_path_from_str():
                 with pytest.raises(ValueError):
                     path_cls.from_str(str(path))
 
-    assert AzurePath.from_str("az://") == AzurePath("", "", "")
+    with pytest.raises(ValueError, match="expected account name"):
+        AzurePath.from_str("az://")
     assert AzurePath.from_str("az://a") == AzurePath("a", "", "")
     assert AzurePath.from_str("az://a/") == AzurePath("a", "", "")
     assert AzurePath.from_str("az://a/b") == AzurePath("a", "b", "")
