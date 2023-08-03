@@ -12,6 +12,7 @@ from .listing import DirEntry, glob_scandir, scantree
 from .path import (
     AzurePath,
     BasePath,
+    BlobPath,
     CloudPath,
     GooglePath,
     LocalPath,
@@ -40,8 +41,8 @@ from .write import (
 
 @pathdispatch
 async def copyfile(
-    src: Union[BasePath, str],
-    dst: Union[BasePath, str],
+    src: Union[BasePath, BlobPath, str],
+    dst: Union[BasePath, BlobPath, str],
     executor: BoostExecutor,
     overwrite: bool = False,
     size: Optional[int] = None,
@@ -64,13 +65,15 @@ async def copyfile(
 @copyfile.register  # type: ignore
 async def _cloudpath_copyfile(
     src: CloudPath,
-    dst: Union[BasePath, str],
+    dst: Union[BasePath, BlobPath, str],
     executor: BoostExecutor,
     overwrite: bool = False,
     size: Optional[int] = None,
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
+    elif isinstance(dst, BlobPath):
+        dst = BasePath.from_str(dst.__blobpath__())
 
     if isinstance(dst, LocalPath):
         if size is not None and size <= config.chunk_size:
@@ -106,13 +109,15 @@ async def _cloudpath_copyfile(
 @copyfile.register  # type: ignore
 async def _localpath_copyfile(
     src: LocalPath,
-    dst: Union[BasePath, str],
+    dst: Union[BasePath, BlobPath, str],
     executor: BoostExecutor,
     overwrite: bool = False,
     size: Optional[int] = None,
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
+    elif isinstance(dst, BlobPath):
+        dst = BasePath.from_str(dst.__blobpath__())
 
     if isinstance(dst, LocalPath):
         if not overwrite:
@@ -351,7 +356,7 @@ async def _google_cloud_copyfile(
 
 
 async def copytree_iterator(
-    src: BasePath, dst: Union[BasePath, str], executor: BoostExecutor
+    src: BasePath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Copies the tree rooted at ``src`` to ``dst``.
 
@@ -364,6 +369,8 @@ async def copytree_iterator(
     """
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
+    elif isinstance(dst, BlobPath):
+        dst = BasePath.from_str(dst.__blobpath__())
 
     if isinstance(src, LocalPath):
         src = LocalPath(os.path.abspath(src.path))
@@ -385,7 +392,9 @@ async def copytree_iterator(
 
 @pathdispatch
 async def copytree(
-    src: Union[BasePath, str], dst: Union[BasePath, str], executor: BoostExecutor
+    src: Union[BasePath, BlobPath, str],
+    dst: Union[BasePath, BlobPath, str],
+    executor: BoostExecutor,
 ) -> None:
     """Copies the tree rooted at ``src`` to ``dst``.
 
@@ -399,14 +408,14 @@ async def copytree(
 
 @copytree.register  # type: ignore
 async def _cloud_copytree(
-    src: CloudPath, dst: Union[BasePath, str], executor: BoostExecutor
+    src: CloudPath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
 ) -> None:
     await consume(copytree_iterator(src, dst, executor))
 
 
 @copytree.register  # type: ignore
 async def _local_copytree(
-    src: LocalPath, dst: Union[BasePath, str], executor: BoostExecutor
+    src: LocalPath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
@@ -425,7 +434,7 @@ async def _local_copytree(
 
 
 async def copyglob_iterator(
-    src: BasePath, dst: Union[BasePath, str], executor: BoostExecutor
+    src: BasePath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Copies files matching the glob ``src`` into the directory ``dst``.
 
@@ -436,6 +445,9 @@ async def copyglob_iterator(
     """
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
+    elif isinstance(dst, BlobPath):
+        dst = BasePath.from_str(dst.__blobpath__())
+
     dst = dst.ensure_directory_like()
 
     async def copy_wrapper(entry: DirEntry) -> Optional[BasePath]:

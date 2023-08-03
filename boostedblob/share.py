@@ -3,11 +3,11 @@ import os
 from typing import Optional, Tuple, Union
 
 from . import azure_auth, google_auth
-from .path import AzurePath, BasePath, GooglePath, LocalPath, pathdispatch
+from .path import AzurePath, BasePath, BlobPath, GooglePath, LocalPath, pathdispatch
 
 
 @pathdispatch
-async def get_url(path: Union[BasePath, str]) -> Tuple[str, Optional[datetime.datetime]]:
+async def get_url(path: Union[BasePath, BlobPath, str]) -> Tuple[str, Optional[datetime.datetime]]:
     raise ValueError(f"Unsupported path: {path}")
 
 

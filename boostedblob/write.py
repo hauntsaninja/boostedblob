@@ -10,7 +10,16 @@ from typing import List, Mapping, Optional, Tuple, Union
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
 from .globals import config
-from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, exists, pathdispatch
+from .path import (
+    AzurePath,
+    BasePath,
+    BlobPath,
+    CloudPath,
+    GooglePath,
+    LocalPath,
+    exists,
+    pathdispatch,
+)
 from .read import ByteRange
 from .request import (
     Request,
@@ -29,7 +38,9 @@ AZURE_BLOCK_COUNT_LIMIT = 50_000
 
 
 @pathdispatch
-async def write_single(path: Union[BasePath, str], data: bytes, overwrite: bool = False) -> None:
+async def write_single(
+    path: Union[BasePath, BlobPath, str], data: bytes, overwrite: bool = False
+) -> None:
     """Write the given stream to ``path``.
 
     :param path: The path to write to.
@@ -96,7 +107,7 @@ async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = Fa
 
 @pathdispatch
 async def write_stream(
-    path: Union[BasePath, str],
+    path: Union[BasePath, BlobPath, str],
     stream: BoostUnderlying[bytes],
     executor: BoostExecutor,
     overwrite: bool = False,

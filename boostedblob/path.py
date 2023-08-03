@@ -8,7 +8,7 @@ import functools
 import os
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Optional, TypeVar, Union
+from typing import Any, Callable, Mapping, Optional, Protocol, TypeVar, Union, runtime_checkable
 
 from .request import Request, azure_page_iterator, azurify_request, googlify_request
 
@@ -246,6 +246,12 @@ class GooglePath(CloudPath):
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+@runtime_checkable
+class BlobPath(Protocol):
+    def __blobpath__(self) -> str:
+        ...
+
+
 def pathdispatch(fn: F) -> F:
     """Implements the singledispatch pattern for paths.
 
@@ -261,6 +267,10 @@ def pathdispatch(fn: F) -> F:
     @ret.register  # type: ignore
     def strdispatch(path: str, *args: Any, **kwargs: Any) -> Any:
         return ret(BasePath.from_str(path), *args, **kwargs)
+
+    @ret.register  # type: ignore
+    def blobpathdispatch(path: BlobPath, *args: Any, **kwargs: Any) -> Any:
+        return ret(BasePath.from_str(path.__blobpath__()), *args, **kwargs)
 
     return ret
 
@@ -373,7 +383,7 @@ class LocalStat(Stat):
 
 
 @pathdispatch
-async def stat(path: Union[BasePath, str]) -> Stat:
+async def stat(path: Union[BasePath, BlobPath, str]) -> Stat:
     raise ValueError(f"Unsupported path: {path}")
 
 
@@ -419,7 +429,7 @@ async def _local_stat(path: LocalPath) -> LocalStat:
 
 
 @pathdispatch
-async def getsize(path: Union[BasePath, str]) -> int:
+async def getsize(path: Union[BasePath, BlobPath, str]) -> int:
     s = await stat(path)
     return s.size
 
@@ -430,7 +440,7 @@ async def getsize(path: Union[BasePath, str]) -> int:
 
 
 @pathdispatch
-async def isdir(path: Union[BasePath, str], raise_on_missing: bool = False) -> bool:
+async def isdir(path: Union[BasePath, BlobPath, str], raise_on_missing: bool = False) -> bool:
     """Check whether ``path`` is a directory.
 
     :param path: The path that could be a directory.
@@ -528,7 +538,7 @@ async def _local_isdir(path: LocalPath) -> bool:
 
 
 @pathdispatch
-async def isfile(path: Union[BasePath, str]) -> bool:
+async def isfile(path: Union[BasePath, BlobPath, str]) -> bool:
     raise ValueError(f"Unsupported path: {path}")
 
 
@@ -552,7 +562,7 @@ async def _local_isfile(path: LocalPath) -> bool:
 
 
 @pathdispatch
-async def exists(path: Union[BasePath, str]) -> int:
+async def exists(path: Union[BasePath, BlobPath, str]) -> int:
     raise ValueError(f"Unsupported path: {path}")
 
 

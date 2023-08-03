@@ -5,7 +5,17 @@ from typing import AsyncIterator, Optional, Union
 
 from .boost import BoostExecutor, consume
 from .listing import glob_scandir, listtree
-from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, isdir, isfile, pathdispatch
+from .path import (
+    AzurePath,
+    BasePath,
+    BlobPath,
+    CloudPath,
+    GooglePath,
+    LocalPath,
+    isdir,
+    isfile,
+    pathdispatch,
+)
 from .request import Request, azurify_request, googlify_request
 
 # ==============================
@@ -14,7 +24,7 @@ from .request import Request, azurify_request, googlify_request
 
 
 @pathdispatch
-async def remove(path: Union[BasePath, str]) -> BasePath:
+async def remove(path: Union[BasePath, BlobPath, str]) -> BasePath:
     """Delete the file ``path``.
 
     :param path: The path to delete.
@@ -75,7 +85,7 @@ async def _local_remove(path: LocalPath) -> LocalPath:
 
 
 async def glob_remove(
-    path: Union[BasePath, str], executor: BoostExecutor
+    path: Union[BasePath, BlobPath, str], executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Delete all files that match the glob ``path``.
 
@@ -132,7 +142,7 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
 
 
 @pathdispatch
-async def rmtree(path: Union[BasePath, str], executor: BoostExecutor) -> None:
+async def rmtree(path: Union[BasePath, BlobPath, str], executor: BoostExecutor) -> None:
     """Delete the directory ``path``.
 
     :param path: The path to delete.

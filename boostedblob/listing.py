@@ -10,6 +10,7 @@ from .path import (
     AzurePath,
     AzureStat,
     BasePath,
+    BlobPath,
     CloudPath,
     GooglePath,
     GoogleStat,
@@ -134,7 +135,7 @@ async def _google_list_blobs(
 
 
 @pathdispatch
-def scandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
+def scandir(path: Union[BasePath, BlobPath, str]) -> AsyncIterator[DirEntry]:
     """Iterate over the entries in a directory.
 
     :param path: The directory we want to scan.
@@ -185,7 +186,7 @@ async def _local_scandir(path: LocalPath) -> AsyncIterator[DirEntry]:
 
 
 @pathdispatch
-def listdir(path: Union[BasePath, str]) -> AsyncIterator[BasePath]:
+def listdir(path: Union[BasePath, BlobPath, str]) -> AsyncIterator[BasePath]:
     """Iterate over the names of entries in a directory.
 
     :param path: The directory we want to scan.
@@ -214,7 +215,7 @@ async def _local_listdir(path: LocalPath) -> AsyncIterator[LocalPath]:
 
 
 @pathdispatch
-def scantree(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
+def scantree(path: Union[BasePath, BlobPath, str]) -> AsyncIterator[DirEntry]:
     """Iterate over file entries in the directory tree rooted at path.
 
     :param path: The root of the tree we want to scan.
@@ -268,7 +269,7 @@ async def _local_scantree(path: LocalPath) -> AsyncIterator[DirEntry]:
 
 
 @pathdispatch
-def listtree(path: Union[BasePath, str]) -> AsyncIterator[BasePath]:
+def listtree(path: Union[BasePath, BlobPath, str]) -> AsyncIterator[BasePath]:
     """List files in the directory tree rooted at path.
 
     :param path: The directory we want to scan.
@@ -297,7 +298,7 @@ async def _local_listtree(path: LocalPath) -> AsyncIterator[LocalPath]:
 
 
 @pathdispatch
-def glob_scandir(path: Union[BasePath, str]) -> AsyncIterator[DirEntry]:
+def glob_scandir(path: Union[BasePath, BlobPath, str]) -> AsyncIterator[DirEntry]:
     """Iterate over a glob in a directory.
 
     :param path: The glob to match against.

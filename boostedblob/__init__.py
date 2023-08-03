@@ -25,6 +25,7 @@ from .listing import scandir as scandir
 from .listing import scantree as scantree
 from .path import AzurePath as AzurePath
 from .path import BasePath as BasePath
+from .path import BlobPath as BlobPath
 from .path import CloudPath as CloudPath
 from .path import GooglePath as GooglePath
 from .path import LocalPath as LocalPath

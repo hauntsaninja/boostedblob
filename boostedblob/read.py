@@ -10,7 +10,16 @@ from .boost import (
     UnorderedMappingBoostable,
 )
 from .globals import config
-from .path import AzurePath, BasePath, CloudPath, GooglePath, LocalPath, getsize, pathdispatch
+from .path import (
+    AzurePath,
+    BasePath,
+    BlobPath,
+    CloudPath,
+    GooglePath,
+    LocalPath,
+    getsize,
+    pathdispatch,
+)
 from .request import Request, azurify_request, execute_retrying_read, googlify_request
 
 ByteRange = Tuple[int, int]
@@ -22,7 +31,7 @@ OptByteRange = Tuple[Optional[int], Optional[int]]
 
 
 @pathdispatch
-async def read_byte_range(path: Union[BasePath, str], byte_range: OptByteRange) -> bytes:
+async def read_byte_range(path: Union[BasePath, BlobPath, str], byte_range: OptByteRange) -> bytes:
     """Read the content of ``path`` in the given byte range.
 
     :param path: The path to read from.
@@ -84,7 +93,7 @@ async def _local_read_byte_range(path: LocalPath, byte_range: OptByteRange) -> b
 
 
 @pathdispatch
-async def read_single(path: Union[BasePath, str]) -> bytes:
+async def read_single(path: Union[BasePath, BlobPath, str]) -> bytes:
     """Read the content of ``path``.
 
     :param path: The path to read from.
@@ -111,7 +120,7 @@ async def _local_read_single(path: LocalPath) -> bytes:
 
 @pathdispatch
 async def read_stream(
-    path: Union[BasePath, str], executor: BoostExecutor, size: Optional[int] = None
+    path: Union[BasePath, BlobPath, str], executor: BoostExecutor, size: Optional[int] = None
 ) -> BoostUnderlying[bytes]:
     """Read the content of ``path``.
 

@@ -84,3 +84,20 @@ async def test_stat(any_dir):
         # test container / bucket
         with pytest.raises(FileNotFoundError):
             await bbb.stat(base)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_stat_blobpath(any_dir):
+    now = time.time() - 1
+    helpers.create_file(any_dir / "alpha", contents=b"this is twenty bytes")
+
+    class BlobPath:
+        def __blobpath__(self) -> str:
+            return str(any_dir / "alpha")
+
+    stat = await bbb.stat(BlobPath())
+    assert stat.size == 20
+    assert stat.size == await bbb.getsize(any_dir / "alpha")
+    assert stat.mtime >= now
+    assert stat.ctime >= now
