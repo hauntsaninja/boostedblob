@@ -131,7 +131,7 @@ async def test_map_ordered_many_reversed():
     async with bbb.BoostExecutor(N * 2) as e:
         it = e.map_ordered(get_futures_fn(futures), iter(range(N)))
         asyncio.create_task(collect(it, results))
-        while not N - 1 in futures:
+        while N - 1 not in futures:
             await pause()  # take a couple dozen pauses to get everything scheduled
         for i in reversed(range(N)):
             futures[i].set_result(None)
@@ -170,7 +170,7 @@ async def test_map_ordered_many_random():
     async with bbb.BoostExecutor(N * 2) as e:
         it = e.map_ordered(get_futures_fn(futures), iter(range(N)))
         task = asyncio.create_task(collect(it, results))
-        while not N - 1 in futures:
+        while N - 1 not in futures:
             await pause()  # take a couple dozen pauses to get everything scheduled
         shuffled = list(reversed(range(N)))
         random.shuffle(shuffled)
@@ -260,7 +260,7 @@ async def test_map_unordered_many_reversed():
     async with bbb.BoostExecutor(N * 2) as e:
         it = e.map_unordered(get_futures_fn(futures), iter(range(N)))
         asyncio.create_task(collect(it, results))
-        while not N - 1 in futures:
+        while N - 1 not in futures:
             await pause()  # take a couple dozen pauses to get everything scheduled
         for i in reversed(range(N)):
             futures[i].set_result(None)
@@ -295,7 +295,7 @@ async def test_map_unordered_many_random():
     async with bbb.BoostExecutor(N * 2) as e:
         it = e.map_unordered(get_futures_fn(futures), iter(range(N)))
         task = asyncio.create_task(collect(it, results))
-        while not N - 1 in futures:
+        while N - 1 not in futures:
             await pause()  # take a couple dozen pauses to get everything scheduled
         shuffled = list(reversed(range(N)))
         random.shuffle(shuffled)
@@ -480,7 +480,7 @@ async def test_composition_ordered_unordered():
         inner_it = e.map_unordered(get_futures_fn(inner_futures), iter(range(N)))
         outer_it = e.map_ordered(get_futures_fn(outer_futures), inner_it)
         asyncio.create_task(collect(outer_it, results))
-        while not N - 1 in inner_futures:
+        while N - 1 not in inner_futures:
             await pause()  # take a couple dozen pauses to get everything scheduled
         for i in reversed(range(N)):
             if outer_futures:
@@ -559,22 +559,18 @@ async def test_boost_executor_shutdown():
 
     async with bbb.BoostExecutor(4) as e:
         e.map_ordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
-    assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
-        "test_boost_executor_shutdown"
-    }
+    assert {get_coro(t).__name__ for t in asyncio.all_tasks()} == {"test_boost_executor_shutdown"}
 
     async with bbb.BoostExecutor(4) as e:
         e.map_unordered(asyncio.sleep, (random.random() * 0.1 for _ in range(10)))
-    assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
-        "test_boost_executor_shutdown"
-    }
+    assert {get_coro(t).__name__ for t in asyncio.all_tasks()} == {"test_boost_executor_shutdown"}
 
 
 @pytest.mark.asyncio
 async def test_boost_executor_exception():
     with pytest.raises(ValueError):
         async with bbb.BoostExecutor(10):
-            assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
+            assert {get_coro(t).__name__ for t in asyncio.all_tasks()} == {
                 "test_boost_executor_exception",
                 "run",
             }
@@ -582,9 +578,7 @@ async def test_boost_executor_exception():
             raise ValueError
 
     await pause()
-    assert set(get_coro(t).__name__ for t in asyncio.all_tasks()) == {
-        "test_boost_executor_exception"
-    }
+    assert {get_coro(t).__name__ for t in asyncio.all_tasks()} == {"test_boost_executor_exception"}
 
 
 @pytest.mark.asyncio

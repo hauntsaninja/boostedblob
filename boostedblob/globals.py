@@ -64,7 +64,7 @@ class TokenManager(Generic[T]):
             return
         try:
             cache_file = self.get_cache_file()
-            with open(cache_file, "r") as f:
+            with open(cache_file) as f:
                 state = json.load(f)
             if state.get("__version__") != 1:
                 os.remove(cache_file)
