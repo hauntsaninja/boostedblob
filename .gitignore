@@ -37,3 +37,6 @@ htmlcov
 
 # General
 .DS_Store
+
+# Poetry
+poetry.lock
