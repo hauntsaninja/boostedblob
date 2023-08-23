@@ -199,22 +199,6 @@ def set_event_loop_exception_handler() -> None:
     ) -> None:  # pragma: no cover
         message = context["message"]
         exception = context.get("exception", Exception)
-        if sys.version_info < (3, 7, 4) and message in (
-            "SSL error in data received",
-            "Fatal error on transport",
-        ):
-            # Ignore aiohttp #3535 / cpython #13548 issue with SSL data after close
-            # Adapted from https://github.com/aio-libs/aiohttp/issues/3535#issuecomment-483268542
-            import ssl
-            from asyncio.sslproto import SSLProtocol
-
-            protocol = context.get("protocol")
-            if (
-                isinstance(exception, ssl.SSLError)
-                and exception.reason == "KRB5_S_INIT"
-                and isinstance(protocol, SSLProtocol)
-            ):
-                return
 
         # Our main interest here is minimising the other various errors and tracebacks that
         # drown out the politely formatted errors from cli.py when things go wrong

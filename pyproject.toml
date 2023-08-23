@@ -21,7 +21,7 @@ skip_gitignore = true
 [tool.mypy]
 strict = true
 no_warn_return_any = true
-python_version = "3.7"
+python_version = "3.8"
 show_error_codes = true
 enable_error_code = ["redundant-expr", "truthy-bool"]
 
@@ -48,7 +48,7 @@ readme = "README.md"
 include = ["boostedblob/py.typed"]
 
 [tool.poetry.dependencies]
-python = ">=3.7"
+python = ">=3.8"
 aiohttp = ">=3.7.2"
 lxml = ">=4.9.1"
 pycryptodomex = ">=3.9"

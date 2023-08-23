@@ -424,8 +424,7 @@ async def _local_copytree(
         await consume(copytree_iterator(src, dst, executor))
         return
     assert isinstance(dst, LocalPath)
-    kwargs = {} if sys.version_info < (3, 8) else {"dirs_exist_ok": True}
-    shutil.copytree(src, dst, **kwargs)  # type: ignore[arg-type]
+    shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 # ==============================

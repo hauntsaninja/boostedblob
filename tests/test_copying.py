@@ -1,12 +1,9 @@
 import asyncio
-import os
-import sys
 
 import blobfile
 import pytest
 
 import boostedblob as bbb
-from boostedblob.path import LocalPath
 
 from . import helpers
 
@@ -58,8 +55,6 @@ async def test_copytree(any_dir, other_any_dir):
     )
 
     async with bbb.BoostExecutor(100) as e:
-        if sys.version_info < (3, 8) and isinstance(other_any_dir, LocalPath):
-            os.rmdir(other_any_dir)
         await bbb.copytree(any_dir, other_any_dir, e)
 
     async def _listtree(d, base):
