@@ -30,4 +30,4 @@ def dict_to_xml(dictionary: Mapping[str, Any]) -> bytes:
     root = etree.Element(root_key)
     inner(root_key, root_value, None)
 
-    return etree.tostring(root, encoding="utf-8", xml_declaration=True)  # type: ignore[call-overload]
+    return etree.tostring(root, encoding="utf-8", xml_declaration=True)

@@ -71,7 +71,7 @@ isort = "^5.11.1"
 flake8 = "^3.8.3"
 
 [tool.poetry.group.type.dependencies]
-mypy = "^0.981"
+mypy = "^1.5.1"
 
 [tool.poetry.scripts]
 bbb = 'boostedblob.__main__:main'
