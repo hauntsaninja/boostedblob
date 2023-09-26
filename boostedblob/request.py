@@ -194,7 +194,7 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
     from .azure_auth import OAUTH_TOKEN, SHARED_KEY, sign_request_with_shared_key
 
     data = request.data
-    if data is not None and not isinstance(data, (bytes, bytearray)):
+    if data is not None and not isinstance(data, (bytes, bytearray, memoryview)):
         data = dict_to_xml(data)
 
     result = Request(
@@ -229,7 +229,7 @@ async def googlify_request(request: Request, access_token: Optional[str] = None)
     headers["Authorization"] = f"Bearer {access_token}"
 
     data = request.data
-    if data is not None and not isinstance(data, (bytes, bytearray)):
+    if data is not None and not isinstance(data, (bytes, bytearray, memoryview)):
         data = json.dumps(data).encode("utf8")
 
     return Request(
