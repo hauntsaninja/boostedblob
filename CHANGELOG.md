@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.14.2]
+- Fix regression on Python 3.9 and older
+
 ## [v0.14.1]
 - Use `__blobpath__` to resolve paths for input path objects
 - Allow passing memoryviews for data to write functions
