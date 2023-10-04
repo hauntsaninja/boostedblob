@@ -22,6 +22,7 @@ from typing import (
 
 A = TypeVar("A")
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 R = TypeVar("R")
 
 
@@ -215,7 +216,7 @@ class NotReady:
     pass
 
 
-class Boostable(Generic[T]):
+class Boostable(Generic[T_co]):
     """A Boostable is an async iterable with a twist.
 
     The twist is that it can make use of additional concurrency to compute the elements it iterates
@@ -251,7 +252,7 @@ class Boostable(Generic[T]):
         """
         pass
 
-    def dequeue(self) -> Union[NotReady, Exhausted, T]:
+    def dequeue(self) -> Union[NotReady, Exhausted, T_co]:
         """Non-blockingly dequeue a result we have ready.
 
         Returns NotReady if it's not ready to dequeue.
@@ -260,7 +261,7 @@ class Boostable(Generic[T]):
         """
         raise NotImplementedError
 
-    async def blocking_dequeue(self) -> T:
+    async def blocking_dequeue(self) -> T_co:
         """Dequeue a result, waiting if necessary.
 
         Raises StopAsyncIteration if exhausted.
@@ -268,8 +269,8 @@ class Boostable(Generic[T]):
         """
         raise NotImplementedError
 
-    def __aiter__(self) -> AsyncIterator[T]:
-        async def iterator() -> AsyncIterator[T]:
+    def __aiter__(self) -> AsyncIterator[T_co]:
+        async def iterator() -> AsyncIterator[T_co]:
             try:
                 self.executor.semaphore.release()
                 while True:

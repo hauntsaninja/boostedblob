@@ -39,7 +39,9 @@ AZURE_BLOCK_COUNT_LIMIT = 50_000
 
 @pathdispatch
 async def write_single(
-    path: Union[BasePath, BlobPath, str], data: bytes, overwrite: bool = False
+    path: Union[BasePath, BlobPath, str],
+    data: bytes | bytearray | memoryview,
+    overwrite: bool = False,
 ) -> None:
     """Write the given stream to ``path``.
 
@@ -52,7 +54,9 @@ async def write_single(
 
 
 @write_single.register  # type: ignore
-async def _azure_write_single(path: AzurePath, data: bytes, overwrite: bool = False) -> None:
+async def _azure_write_single(
+    path: AzurePath, data: bytes | bytearray | memoryview, overwrite: bool = False
+) -> None:
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
@@ -70,7 +74,9 @@ async def _azure_write_single(path: AzurePath, data: bytes, overwrite: bool = Fa
 
 
 @write_single.register  # type: ignore
-async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = False) -> None:
+async def _google_write_single(
+    path: GooglePath, data: bytes | bytearray | memoryview, overwrite: bool = False
+) -> None:
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
@@ -89,7 +95,9 @@ async def _google_write_single(path: GooglePath, data: bytes, overwrite: bool = 
 
 
 @write_single.register  # type: ignore
-async def _local_write_single(path: LocalPath, data: bytes, overwrite: bool = False) -> None:
+async def _local_write_single(
+    path: LocalPath, data: bytes | bytearray | memoryview, overwrite: bool = False
+) -> None:
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
@@ -393,7 +401,9 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
     await request.execute_reponseless()
 
 
-async def _azure_put_block(path: AzurePath, block_id: str, chunk: bytes) -> None:
+async def _azure_put_block(
+    path: AzurePath, block_id: str, chunk: bytes | bytearray | memoryview
+) -> None:
     request = await azurify_request(
         Request(
             method="PUT",
