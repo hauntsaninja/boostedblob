@@ -43,7 +43,7 @@ async def write_single(
     data: Union[bytes, bytearray, memoryview],
     overwrite: bool = False,
 ) -> None:
-    """Write the given stream to ``path``.
+    """Write ``data`` to ``path`` in a single request.
 
     :param path: The path to write to.
     :param data: The data to write.
