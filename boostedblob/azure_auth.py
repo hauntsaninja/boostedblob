@@ -51,13 +51,25 @@ def load_credentials() -> Dict[str, Any]:
             "storage_account_key": connection_data["accountkey"],
         }
 
+    if "AZURE_APPLICATION_CREDENTIALS" in os.environ:
+        creds_path = os.environ["AZURE_APPLICATION_CREDENTIALS"]
+        if not os.path.exists(creds_path):
+            raise RuntimeError(
+                f"Credentials not found at '{creds_path}' specified by environment variable 'AZURE_APPLICATION_CREDENTIALS'"
+            )
+        with open(creds_path) as f:
+            creds = json.load(f)
+            return {
+                "_azure_auth": "svcact",
+                "client_id": creds["appId"],
+                "client_secret": creds["password"],
+                "tenant_id": creds["tenant"],
+            }
+
     # MSI_ENDPOINT is what the Azure CLI uses to detect managed service identity
     # https://github.com/Azure/azure-sdk-for-python/blob/2d61792d140ad895cfbf8f945454ca947cf638f2/sdk/identity/azure-identity/azure/identity/_constants.py#L47
     if "MSI_ENDPOINT" in os.environ:
-        return {
-            "_azure_auth": "msi",
-            "msi_endpoint": os.environ["MSI_ENDPOINT"],
-        }
+        return {"_azure_auth": "msi", "msi_endpoint": os.environ["MSI_ENDPOINT"]}
 
     if "AZURE_CLIENT_ID" in os.environ:
         return {
@@ -137,7 +149,7 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
     account, container = cache_key
     now = time.time()
     creds = load_credentials()
-    
+
     # If opted into using azure-identity, use DefaultAzureCredential to get a token
     # This enables the use of Managed Identity, Workload Identity, and other auth methods not implemented here
     if creds["_azure_auth"] == "azure-identity":
@@ -166,8 +178,8 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             return (auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
         raise RuntimeError(
             f"Found storage account key, but it was unable to access storage account: '{account}'"
-        ) 
-    
+        )
+
     from .globals import config
 
     if creds["_azure_auth"] == "msi":
@@ -175,22 +187,15 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
         req = create_access_token_request(
             creds=creds,
             scope=f"https://{account}.blob.core.windows.net/.default",
-            success_codes=(200, 400),
+            success_codes=(200,),
         )
-        
+
         async with req.execute() as resp:
             result = await resp.json()
 
         auth = (OAUTH_TOKEN, result["access_token"])
         if await can_access_account(account, container, auth):
             return (auth, result["expires_on"])
-
-        if config.storage_account_key_fallback:
-            storage_account_key_auth = await get_storage_account_key(
-                account=account, creds=creds, container_hint=container
-            )
-            if storage_account_key_auth is not None:
-                return (storage_account_key_auth, now + AZURE_SHARED_KEY_EXPIRATION_SECONDS)
 
     if creds["_azure_auth"] == "refresh":
         # we have a refresh token, convert it into an access token for this account
@@ -299,11 +304,10 @@ def create_access_token_request(
     creds: Mapping[str, str], scope: str, success_codes: Sequence[int] = (200,)
 ) -> Request:
     from .request import Request
+
     if creds["_azure_auth"] == "msi":
-        url = creds['msi_endpoint']
-        data = {
-            "resource": scope,
-        }
+        url = creds["msi_endpoint"]
+        data = {"resource": scope}
     elif creds["_azure_auth"] == "refresh":
         # https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#refresh-the-access-token
         data = {
@@ -325,7 +329,7 @@ def create_access_token_request(
         url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
     else:
         raise AssertionError
-    
+
     return Request(
         url=url,
         method="POST",
