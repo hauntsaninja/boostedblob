@@ -151,10 +151,10 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
     if creds["_azure_auth"] == "azure-identity":
         try:
             from azure.identity.aio import DefaultAzureCredential  # type: ignore
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError(
                 "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"
-            )
+            ) from e
 
         async with DefaultAzureCredential() as cred:
             token = await cred.get_token("https://storage.azure.com/.default")
