@@ -186,7 +186,7 @@ async def _dud1(path: str) -> None:
         print("\r" + f"{cursor_up}{erase_in_line}" * num_lines, end="")
         print(clear_scrollback, end="")
 
-    def print_spinner(message: str, _pos: Any = [0]) -> None:
+    def print_spinner(message: str, _pos: Any = [0]) -> None:  # noqa: B006
         clocks = ["🕛", "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"]
         print(f"{clocks[_pos[0]]} {message}")
         _pos[0] = (_pos[0] + 1) % len(clocks)

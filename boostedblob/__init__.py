@@ -6,7 +6,7 @@ if "pkg_resources" not in sys.modules:
     # workaround for the following:
     # https://github.com/benoitc/gunicorn/pull/2539
     sys.modules["pkg_resources"] = object()  # type: ignore[assignment]
-    import aiohttp
+    import aiohttp  # noqa: F401
 
     del sys.modules["pkg_resources"]
 
