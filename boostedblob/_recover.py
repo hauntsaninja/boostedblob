@@ -5,6 +5,7 @@ Experimental code to recover deleted or overwritten data in Azure.
 This has been used and should work, but isn't tested to the degree something like this should be.
 
 """
+
 import datetime
 import urllib.parse
 from typing import Any, DefaultDict, Dict, List, Union

@@ -248,8 +248,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 @runtime_checkable
 class BlobPath(Protocol):
-    def __blobpath__(self) -> str:
-        ...
+    def __blobpath__(self) -> str: ...
 
 
 def pathdispatch(fn: F) -> F:
