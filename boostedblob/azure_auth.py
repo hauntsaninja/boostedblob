@@ -328,7 +328,7 @@ def create_access_token_request(
         url = creds["msi_endpoint"]
         data = {"resource": scope}
     else:
-        raise AssertionError
+        raise AssertionError(f"Unknown auth type: {creds['_azure_auth']}")
 
     return Request(
         url=url,
