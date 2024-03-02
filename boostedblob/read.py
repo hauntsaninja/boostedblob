@@ -20,7 +20,7 @@ from .path import (
     getsize,
     pathdispatch,
 )
-from .request import Request, azurify_request, execute_retrying_read, googlify_request
+from .request import Request, azure_auth_req, execute_retrying_read, google_auth_req
 
 ByteRange = Tuple[int, int]
 OptByteRange = Tuple[Optional[int], Optional[int]]
@@ -47,14 +47,13 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
     range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
     success_codes = (206,) if range_header else (200,)
-    request = await azurify_request(
-        Request(
-            method="GET",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers=range_header,
-            success_codes=success_codes,
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="GET",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        headers=range_header,
+        success_codes=success_codes,
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=azure_auth_req,
     )
     return await execute_retrying_read(request)
 
@@ -64,15 +63,14 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
     range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
     success_codes = (206,) if range_header else (200,)
-    request = await googlify_request(
-        Request(
-            method="GET",
-            url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
-            params=dict(alt="media"),
-            headers=range_header,
-            success_codes=success_codes,
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="GET",
+        url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
+        params=dict(alt="media"),
+        headers=range_header,
+        success_codes=success_codes,
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=google_auth_req,
     )
     return await execute_retrying_read(request)
 

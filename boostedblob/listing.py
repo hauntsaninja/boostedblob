@@ -20,7 +20,13 @@ from .path import (
     isfile,
     pathdispatch,
 )
-from .request import Request, azure_page_iterator, google_page_iterator
+from .request import (
+    Request,
+    azure_auth_req,
+    google_auth_req,
+    json_token_page_iterator,
+    xml_page_iterator,
+)
 from .xml import etree
 
 # ==============================
@@ -85,11 +91,12 @@ async def _azure_list_blobs(
     params = {}
     if delimiter is not None:
         params["delimiter"] = delimiter
-    it = azure_page_iterator(
+    it = xml_page_iterator(
         Request(
             method="GET",
             url=prefix.format_url("https://{account}.blob.core.windows.net/{container}"),
             params=dict(comp="list", restype="container", prefix=prefix.blob, **params),
+            auth=azure_auth_req,
         )
     )
 
@@ -116,11 +123,12 @@ async def _google_list_blobs(
     params = {}
     if delimiter is not None:
         params["delimiter"] = delimiter
-    it = google_page_iterator(
+    it = json_token_page_iterator(
         Request(
             method="GET",
             url=prefix.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o"),
             params=dict(prefix=prefix.blob, **params),
+            auth=google_auth_req,
         )
     )
 
@@ -418,12 +426,13 @@ def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirE
 
 
 async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
-    it = azure_page_iterator(
+    it = xml_page_iterator(
         Request(
             method="GET",
             url=f"https://{account}.blob.core.windows.net/",
             params=dict(comp="list"),
             failure_exceptions={404: FileNotFoundError(AzurePath(account, "", ""))},
+            auth=azure_auth_req,
         )
     )
     async for result in it:
@@ -451,11 +460,12 @@ async def _google_list_buckets(project: Optional[str] = None) -> AsyncIterator[D
                 "with `gsutil config`"
             ) from None
 
-    it = google_page_iterator(
+    it = json_token_page_iterator(
         Request(
             method="GET",
             url="https://storage.googleapis.com/storage/v1/b",
             params=dict(project=project),
+            auth=google_auth_req,
         )
     )
     async for result in it:

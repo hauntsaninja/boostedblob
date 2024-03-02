@@ -12,7 +12,7 @@ from typing import Any, DefaultDict, Dict, List, Union
 
 from .boost import BoostExecutor
 from .path import AzurePath
-from .request import Request, azure_page_iterator, azurify_request
+from .request import Request, azure_auth_req, xml_page_iterator
 from .xml import etree
 
 
@@ -39,7 +39,7 @@ async def _listtree_versions_snapshots(
     # https://docs.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview
     # https://docs.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview#blob-soft-delete-and-versioning
 
-    it = azure_page_iterator(
+    it = xml_page_iterator(
         Request(
             method="GET",
             url=prefix.format_url("https://{account}.blob.core.windows.net/{container}"),
@@ -49,6 +49,7 @@ async def _listtree_versions_snapshots(
                 prefix=prefix.blob,
                 include="deleted,snapshots,versions",
             ),
+            auth=azure_auth_req,
         )
     )
 
@@ -64,13 +65,12 @@ async def _listtree_versions_snapshots(
 
 
 async def _undelete(path: AzurePath) -> AzurePath:
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            params=dict(comp="undelete"),
-            success_codes=(200,),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        params=dict(comp="undelete"),
+        success_codes=(200,),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
     return path
@@ -84,13 +84,12 @@ async def _promote_candidate(path: AzurePath, candidate: Dict[str, Any]) -> None
     else:
         raise AssertionError
     url = path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=url,
-            headers={"x-ms-copy-source": url + "?" + source},
-            success_codes=(202,),
-        )
+    request = Request(
+        method="PUT",
+        url=url,
+        headers={"x-ms-copy-source": url + "?" + source},
+        success_codes=(202,),
+        auth=azure_auth_req,
     )
     async with request.execute() as resp:
         copy_status = resp.headers["x-ms-copy-status"]
@@ -98,13 +97,12 @@ async def _promote_candidate(path: AzurePath, candidate: Dict[str, Any]) -> None
 
 
 async def _delete_snapshot(path: AzurePath, snapshot: str) -> None:
-    request = await azurify_request(
-        Request(
-            method="DELETE",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            params={"snapshot": snapshot},
-            success_codes=(202,),
-        )
+    request = Request(
+        method="DELETE",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        params={"snapshot": snapshot},
+        success_codes=(202,),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
 

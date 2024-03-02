@@ -24,9 +24,9 @@ from .read import ByteRange
 from .request import (
     Request,
     RequestFailure,
-    azurify_request,
+    azure_auth_req,
     exponential_sleep_generator,
-    googlify_request,
+    google_auth_req,
 )
 from .xml import etree
 
@@ -61,14 +61,13 @@ async def _azure_write_single(
         if await exists(path):
             raise FileExistsError(path)
 
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            data=data,
-            headers={"x-ms-blob-type": "BlockBlob"},
-            success_codes=(201,),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        data=data,
+        headers={"x-ms-blob-type": "BlockBlob"},
+        success_codes=(201,),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
 
@@ -81,15 +80,14 @@ async def _google_write_single(
         if await exists(path):
             raise FileExistsError(path)
 
-    request = await googlify_request(
-        Request(
-            method="POST",
-            url=path.format_url(
-                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={blob}"
-            ),
-            data=data,
-            headers={"Content-Type": "application/octet-stream"},
-        )
+    request = Request(
+        method="POST",
+        url=path.format_url(
+            "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=media&name={blob}"
+        ),
+        data=data,
+        headers={"Content-Type": "application/octet-stream"},
+        auth=google_auth_req,
     )
     await request.execute_reponseless()
 
@@ -210,17 +208,16 @@ async def _google_write_stream(
             total_size = str(end)
             is_finalised = True
 
-        request = await googlify_request(
-            Request(
-                method="PUT",
-                url=upload_url,
-                data=chunk,
-                headers={
-                    "Content-Type": "application/octet-stream",
-                    "Content-Range": f"bytes {start}-{end-1}/{total_size}",
-                },
-                success_codes=(200, 201) if is_finalised else (308,),
-            )
+        request = Request(
+            method="PUT",
+            url=upload_url,
+            data=chunk,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Range": f"bytes {start}-{end-1}/{total_size}",
+            },
+            success_codes=(200, 201) if is_finalised else (308,),
+            auth=google_auth_req,
         )
         await request.execute_reponseless()
 
@@ -331,13 +328,12 @@ def get_block_id(upload_id: int, index: int) -> str:
 
 
 async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False) -> None:
-    request = await azurify_request(
-        Request(
-            method="GET",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            params=dict(comp="blocklist"),
-            success_codes=(200, 404, 400),
-        )
+    request = Request(
+        method="GET",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        params=dict(comp="blocklist"),
+        success_codes=(200, 404, 400),
+        auth=azure_auth_req,
     )
     async with request.execute() as resp:
         # If the block doesn't exist, we're good to go.
@@ -366,12 +362,11 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
     # the etag.
 
     # Make sure to preserve metadata for the file
-    request = await azurify_request(
-        Request(
-            method="HEAD",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="HEAD",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=azure_auth_req,
     )
     async with request.execute() as resp:
         metadata = resp.headers
@@ -388,15 +383,14 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
         if src in metadata:
             headers[dst] = metadata[src]
 
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers={**headers, "If-Match": metadata["etag"]},
-            params=dict(comp="blocklist"),
-            data={"BlockList": {"Latest": blocks}},
-            success_codes=(201, 404, 412),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        headers={**headers, "If-Match": metadata["etag"]},
+        params=dict(comp="blocklist"),
+        data={"BlockList": {"Latest": blocks}},
+        success_codes=(201, 404, 412),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
 
@@ -404,14 +398,13 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
 async def _azure_put_block(
     path: AzurePath, block_id: str, chunk: Union[bytes, bytearray, memoryview]
 ) -> None:
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            params=dict(comp="block", blockid=block_id),
-            data=chunk,
-            success_codes=(201,),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        params=dict(comp="block", blockid=block_id),
+        data=chunk,
+        success_codes=(201,),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
 
@@ -421,15 +414,14 @@ async def azure_put_block_list(
 ) -> None:
     if headers is None:
         headers = {}
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers=headers,
-            params=dict(comp="blocklist"),
-            data={"BlockList": {"Latest": block_list}},
-            success_codes=(201, 400),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        headers=headers,
+        params=dict(comp="blocklist"),
+        data={"BlockList": {"Latest": block_list}},
+        success_codes=(201, 400),
+        auth=azure_auth_req,
     )
 
     for attempt, backoff in enumerate(
@@ -461,16 +453,15 @@ async def azure_put_block_list(
 
 
 async def _google_start_resumable_upload(path: GooglePath) -> str:
-    request = await googlify_request(
-        Request(
-            method="POST",
-            url=path.format_url(
-                "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=resumable"
-            ),
-            data=dict(name=path.blob),
-            headers={"Content-Type": "application/json; charset=UTF-8"},
-            failure_exceptions={400: FileNotFoundError(), 404: FileNotFoundError()},
-        )
+    request = Request(
+        method="POST",
+        url=path.format_url(
+            "https://storage.googleapis.com/upload/storage/v1/b/{bucket}/o?uploadType=resumable"
+        ),
+        data=dict(name=path.blob),
+        headers={"Content-Type": "application/json; charset=UTF-8"},
+        failure_exceptions={400: FileNotFoundError(), 404: FileNotFoundError()},
+        auth=google_auth_req,
     )
     async with request.execute() as resp:
         upload_url = resp.headers["Location"]
@@ -479,7 +470,11 @@ async def _google_start_resumable_upload(path: GooglePath) -> str:
 
 async def _google_finalise_upload(upload_url: str, total_size: int) -> None:
     headers = {"Content-Type": "application/octet-stream", "Content-Range": f"bytes */{total_size}"}
-    request = await googlify_request(
-        Request(method="PUT", url=upload_url, headers=headers, success_codes=(200, 201))
+    request = Request(
+        method="PUT",
+        url=upload_url,
+        headers=headers,
+        success_codes=(200, 201),
+        auth=google_auth_req,
     )
     await request.execute_reponseless()

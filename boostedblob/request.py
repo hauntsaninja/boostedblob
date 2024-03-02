@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import datetime
@@ -8,7 +10,18 @@ import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, Iterator, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import aiohttp
 
@@ -21,12 +34,67 @@ class MissingSession(Exception):
 
 
 @dataclass(frozen=True)
+class RawRequest:
+    method: str
+    url: str
+    params: Mapping[str, str] = field(default_factory=dict)
+    # data can be large, so don't put it in the repr
+    data: bytes | bytearray | memoryview | None = field(repr=False, default=None)
+    # headers can contain authorisation details, so don't put them in the repr
+    headers: Mapping[str, str] = field(repr=False, default_factory=dict)
+
+    @contextlib.asynccontextmanager
+    async def raw_execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
+        """Actually execute the request, with no extra fluff."""
+        if config.session is None:
+            raise MissingSession(
+                "No session available, use `async with session_context()` or `@ensure_session`"
+            )
+        ctx = config.session.request(
+            method=self.method,
+            url=self.url,
+            params=self.params,
+            data=self.data,
+            headers=self.headers,
+            allow_redirects=False,
+            timeout=aiohttp.ClientTimeout(
+                connect=config.connect_timeout, sock_read=config.read_timeout
+            ),
+            # Figuring out that some requests break because aiohttp adds some headers
+            # automatically was not fun
+            skip_auto_headers={"Content-Type"},
+        )
+        if config.debug_mode:
+            print(f"[boostedblob] Making request: {self}", file=sys.stderr)
+            now = time.time()
+        async with ctx as resp:
+            if config.debug_mode:
+                duration = time.time() - now
+                print(
+                    f"[boostedblob] Completed request, took {duration:.3f}s: {self}",
+                    file=sys.stderr,
+                )
+            yield resp
+
+    @classmethod
+    def from_request(cls, request: Request) -> RawRequest:
+        assert isinstance(request.data, (bytes, bytearray, memoryview)) or request.data is None
+        return cls(
+            method=request.method,
+            url=request.url,
+            params=request.params,
+            data=request.data,
+            headers=request.headers,
+        )
+
+
+@dataclass(frozen=True)
 class Request:
     method: str
     url: str
     params: Mapping[str, str] = field(default_factory=dict)
     # data can be large, so don't put it in the repr
-    data: Any = field(repr=False, default_factory=lambda: None)
+    data: dict[str, Any] | bytes | None = field(repr=False, default=None)
     # headers can contain authorisation details, so don't put them in the repr
     headers: Mapping[str, str] = field(repr=False, default_factory=dict)
     success_codes: Sequence[int] = field(repr=False, default_factory=lambda: (200,))
@@ -34,6 +102,7 @@ class Request:
         repr=False, default_factory=lambda: (408, 429, 500, 502, 503, 504)
     )
     failure_exceptions: Mapping[int, Exception] = field(repr=False, default_factory=dict)
+    auth: Callable[[Request], Awaitable[RawRequest]] | None = None
 
     @contextlib.asynccontextmanager
     async def execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
@@ -46,6 +115,8 @@ class Request:
         ```
 
         """
+        rreq: RawRequest | None = None
+        last_auth_t = 0.0
 
         for attempt, backoff in enumerate(
             exponential_sleep_generator(
@@ -54,9 +125,18 @@ class Request:
                 jitter_fraction=config.backoff_jitter_fraction,
             )
         ):
+            now = time.time()
+            if (now - last_auth_t) > config.request_reauth_seconds:
+                if self.auth is not None:
+                    rreq = await self.auth(self)
+                else:
+                    rreq = RawRequest.from_request(self)
+                last_auth_t = now
+            assert rreq is not None
+
             async with contextlib.AsyncExitStack() as stack:
                 try:
-                    resp = await stack.enter_async_context(self._raw_execute())
+                    resp = await stack.enter_async_context(rreq.raw_execute())
                 except aiohttp.ClientConnectionError as e:
                     if isinstance(e, aiohttp.ClientConnectorError):
                         # azure accounts have unique urls and it's hard to tell apart
@@ -104,39 +184,6 @@ class Request:
         async with self.execute():
             pass
 
-    @contextlib.asynccontextmanager
-    async def _raw_execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
-        """Actually execute the request, with no extra fluff."""
-        if config.session is None:
-            raise MissingSession(
-                "No session available, use `async with session_context()` or `@ensure_session`"
-            )
-        ctx = config.session.request(
-            method=self.method,
-            url=self.url,
-            params=self.params,
-            data=self.data,
-            headers=self.headers,
-            allow_redirects=False,
-            timeout=aiohttp.ClientTimeout(
-                connect=config.connect_timeout, sock_read=config.read_timeout
-            ),
-            # Figuring out that some requests break because aiohttp adds some headers
-            # automatically was not fun
-            skip_auto_headers={"Content-Type"},
-        )
-        if config.debug_mode:
-            print(f"[boostedblob] Making request: {self}", file=sys.stderr)
-            now = time.time()
-        async with ctx as resp:
-            if config.debug_mode:
-                duration = time.time() - now
-                print(
-                    f"[boostedblob] Completed request, took {duration:.3f}s: {self}",
-                    file=sys.stderr,
-                )
-            yield resp
-
 
 class RequestFailure(Exception):
     def __init__(self, reason: str, request: Request, status: Optional[int] = None):
@@ -182,7 +229,7 @@ async def execute_retrying_read(request: Request) -> bytes:
 # ==============================
 
 
-async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = None) -> Request:
+async def azure_auth_req(request: Request, *, auth: Optional[Tuple[str, str]] = None) -> RawRequest:
     """Return a Request that can be submitted to Azure Blob."""
     u = urllib.parse.urlparse(request.url)
     account = u.netloc.split(".")[0]
@@ -204,18 +251,12 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
     if data is not None and not isinstance(data, (bytes, bytearray, memoryview)):
         data = dict_to_xml(data)
 
-    result = Request(
-        method=request.method,
-        url=request.url,
-        params=request.params,
-        headers=headers,
-        data=data,
-        success_codes=request.success_codes,
-        retry_codes=request.retry_codes,
-        failure_exceptions=request.failure_exceptions,
+    result = RawRequest(
+        method=request.method, url=request.url, params=request.params, headers=headers, data=data
     )
 
     # mutate headers to add the authorization header to result
+    # the control flow is a little complex in that we pass result into sign_request_with_shared_key
     if kind == SHARED_KEY:
         # make sure we are signing a request that includes changes made in this function
         # i.e., the request has the x-ms-* headers added and data bytes-ified.
@@ -227,7 +268,7 @@ async def azurify_request(request: Request, auth: Optional[Tuple[str, str]] = No
     return result
 
 
-async def googlify_request(request: Request, access_token: Optional[str] = None) -> Request:
+async def google_auth_req(request: Request, *, access_token: Optional[str] = None) -> RawRequest:
     """Return a Request that can be submitted to GCS."""
     if access_token is None:
         access_token = await config.google_access_token_manager.get_token(key="")
@@ -239,19 +280,12 @@ async def googlify_request(request: Request, access_token: Optional[str] = None)
     if data is not None and not isinstance(data, (bytes, bytearray, memoryview)):
         data = json.dumps(data).encode("utf8")
 
-    return Request(
-        method=request.method,
-        url=request.url,
-        params=request.params,
-        headers=headers,
-        data=data,
-        success_codes=request.success_codes,
-        retry_codes=request.retry_codes,
-        failure_exceptions=request.failure_exceptions,
+    return RawRequest(
+        method=request.method, url=request.url, params=request.params, headers=headers, data=data
     )
 
 
-async def azure_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
+async def xml_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
     params = dict(request.params)
     while True:
         request = Request(
@@ -263,9 +297,8 @@ async def azure_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
             success_codes=request.success_codes,
             retry_codes=request.retry_codes,
             failure_exceptions=request.failure_exceptions,
+            auth=request.auth,
         )
-
-        request = await azurify_request(request)
         body = await execute_retrying_read(request)
 
         result = etree.fromstring(body)
@@ -277,7 +310,7 @@ async def azure_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
         params["marker"] = next_marker
 
 
-async def google_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]:
+async def json_token_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]:
     params = dict(request.params)
     while True:
         request = Request(
@@ -288,8 +321,8 @@ async def google_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]
             success_codes=(200, 404),
             retry_codes=request.retry_codes,
             failure_exceptions=request.failure_exceptions,
+            auth=request.auth,
         )
-        request = await googlify_request(request)
         async with request.execute() as resp:
             if resp.status == 404:
                 return

@@ -128,6 +128,7 @@ class Config:
     retry_limit: int = 25
 
     token_early_expiration_seconds: int = 300
+    request_reauth_seconds: int = 300
 
     azure_access_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
         default_factory=lambda: TokenManager(azure_auth.get_access_token)

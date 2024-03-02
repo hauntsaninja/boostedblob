@@ -64,6 +64,7 @@ async def get_access_token(_: str) -> Tuple[Any, float]:
                 method="GET",
                 url="http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
                 headers={"Metadata-Flavor": "Google"},
+                auth=None,
             )
             async with req.execute() as resp:
                 result = await resp.json()
@@ -130,6 +131,7 @@ def create_token_request(client_email: str, private_key: str, scopes: List[str])
         method="POST",
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         data=urllib.parse.urlencode(data).encode("utf8"),
+        auth=None,
     )
 
 
@@ -150,6 +152,7 @@ def _refresh_access_token_request(
         method="POST",
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         data=urllib.parse.urlencode(data).encode("utf8"),
+        auth=None,
     )
 
 

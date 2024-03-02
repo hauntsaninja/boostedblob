@@ -16,7 +16,7 @@ from .path import (
     isfile,
     pathdispatch,
 )
-from .request import Request, azurify_request, googlify_request
+from .request import Request, azure_auth_req, google_auth_req
 
 # ==============================
 # remove
@@ -35,13 +35,12 @@ async def remove(path: Union[BasePath, BlobPath, str]) -> BasePath:
 
 @remove.register  # type: ignore
 async def _azure_remove(path: AzurePath) -> AzurePath:
-    request = await azurify_request(
-        Request(
-            method="DELETE",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            success_codes=(202,),
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="DELETE",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        success_codes=(202,),
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=azure_auth_req,
     )
     try:
         await request.execute_reponseless()
@@ -55,13 +54,12 @@ async def _azure_remove(path: AzurePath) -> AzurePath:
 
 @remove.register  # type: ignore
 async def _google_remove(path: GooglePath) -> GooglePath:
-    request = await googlify_request(
-        Request(
-            method="DELETE",
-            url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
-            success_codes=(204,),
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="DELETE",
+        url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
+        success_codes=(204,),
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=google_auth_req,
     )
     try:
         await request.execute_reponseless()

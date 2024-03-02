@@ -22,7 +22,7 @@ from .path import (
     url_format,
 )
 from .read import ByteRange, byte_range_to_str, read_single, read_stream, read_stream_unordered
-from .request import Request, azurify_request, exponential_sleep_generator, googlify_request
+from .request import Request, azure_auth_req, exponential_sleep_generator, google_auth_req
 from .write import (
     AZURE_BLOCK_COUNT_LIMIT,
     azure_put_block_list,
@@ -173,14 +173,13 @@ async def _azure_put_block_from_url(
 ) -> None:
     range_str = byte_range_to_str(byte_range)
     assert range_str is not None
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers={"x-ms-copy-source": copy_source, "x-ms-source-range": range_str},
-            params=dict(comp="block", blockid=block_id),
-            success_codes=(201,),
-        )
+    request = Request(
+        method="PUT",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        headers={"x-ms-copy-source": copy_source, "x-ms-source-range": range_str},
+        params=dict(comp="block", blockid=block_id),
+        success_codes=(201,),
+        auth=azure_auth_req,
     )
     await request.execute_reponseless()
 
@@ -242,14 +241,13 @@ async def _azure_cloud_copyfile_via_copy(
         copy_source = src.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
     else:
         copy_source, _ = await azure_auth.generate_signed_url(src)
-    request = await azurify_request(
-        Request(
-            method="PUT",
-            url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            headers={"x-ms-copy-source": copy_source},
-            success_codes=(202,),
-            failure_exceptions={404: FileNotFoundError(src)},
-        )
+    request = Request(
+        method="PUT",
+        url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        headers={"x-ms-copy-source": copy_source},
+        success_codes=(202,),
+        failure_exceptions={404: FileNotFoundError(src)},
+        auth=azure_auth_req,
     )
 
     async with request.execute() as resp:
@@ -267,13 +265,10 @@ async def _azure_cloud_copyfile_via_copy(
         )
         while copy_status == "pending":
             await asyncio.sleep(next(sleep))
-            request = await azurify_request(
-                Request(
-                    method="GET",
-                    url=dst.format_url(
-                        "https://{account}.blob.core.windows.net/{container}/{blob}"
-                    ),
-                )
+            request = Request(
+                method="GET",
+                url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+                auth=azure_auth_req,
             )
             async with request.execute() as resp:
                 if resp.headers["x-ms-copy-id"] != copy_id:
@@ -325,22 +320,21 @@ async def _google_cloud_copyfile(
         jitter_fraction=config.backoff_jitter_fraction,
     )
     while True:
-        request = await googlify_request(
-            Request(
-                method="POST",
-                url=url_format(
-                    (
-                        "https://storage.googleapis.com/storage/v1/b/{src_bucket}/o/"
-                        "{src_blob}/rewriteTo/b/{dst_bucket}/o/{dst_blob}"
-                    ),
-                    src_bucket=src.bucket,
-                    src_blob=src.blob,
-                    dst_bucket=dst.bucket,
-                    dst_blob=dst.blob,
+        request = Request(
+            method="POST",
+            url=url_format(
+                (
+                    "https://storage.googleapis.com/storage/v1/b/{src_bucket}/o/"
+                    "{src_blob}/rewriteTo/b/{dst_bucket}/o/{dst_blob}"
                 ),
-                params=params,
-                failure_exceptions={404: FileNotFoundError(src)},
-            )
+                src_bucket=src.bucket,
+                src_blob=src.blob,
+                dst_bucket=dst.bucket,
+                dst_blob=dst.blob,
+            ),
+            params=params,
+            failure_exceptions={404: FileNotFoundError(src)},
+            auth=google_auth_req,
         )
         async with request.execute() as resp:
             result = await resp.json()

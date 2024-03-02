@@ -10,7 +10,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional, Protocol, TypeVar, Union, runtime_checkable
 
-from .request import Request, azure_page_iterator, azurify_request, googlify_request
+from .request import Request, azure_auth_req, google_auth_req, xml_page_iterator
 
 T = TypeVar("T")
 
@@ -390,12 +390,11 @@ async def stat(path: Union[BasePath, BlobPath, str]) -> Stat:
 async def _azure_stat(path: AzurePath) -> AzureStat:
     if not path.blob:
         raise FileNotFoundError(path)
-    request = await azurify_request(
-        Request(
-            method="HEAD",
-            url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="HEAD",
+        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=azure_auth_req,
     )
     async with request.execute() as resp:
         return AzureStat(resp.headers)
@@ -405,12 +404,11 @@ async def _azure_stat(path: AzurePath) -> AzureStat:
 async def _google_stat(path: GooglePath) -> GoogleStat:
     if not path.blob:
         raise FileNotFoundError(path)
-    request = await googlify_request(
-        Request(
-            method="GET",
-            url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
-            failure_exceptions={404: FileNotFoundError(path)},
-        )
+    request = Request(
+        method="GET",
+        url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o/{blob}"),
+        failure_exceptions={404: FileNotFoundError(path)},
+        auth=google_auth_req,
     )
     async with request.execute() as resp:
         result = await resp.json()
@@ -458,7 +456,7 @@ async def _azure_isdir(path: AzurePath) -> bool:
             if not prefix.endswith("/"):
                 prefix += "/"
 
-            it = azure_page_iterator(
+            it = xml_page_iterator(
                 Request(
                     method="GET",
                     url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
@@ -470,6 +468,7 @@ async def _azure_isdir(path: AzurePath) -> bool:
                         maxresults="1",
                     ),
                     failure_exceptions={404: FileNotFoundError()},
+                    auth=azure_auth_req,
                 )
             )
             async for result in it:
@@ -479,13 +478,12 @@ async def _azure_isdir(path: AzurePath) -> bool:
                     return blobs.find("Blob") is not None or blobs.find("BlobPrefix") is not None
             return False
         else:
-            request = await azurify_request(
-                Request(
-                    method="GET",
-                    url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
-                    params=dict(restype="container"),
-                    failure_exceptions={404: FileNotFoundError()},
-                )
+            request = Request(
+                method="GET",
+                url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
+                params=dict(restype="container"),
+                failure_exceptions={404: FileNotFoundError()},
+                auth=azure_auth_req,
             )
             await request.execute_reponseless()
             return True
@@ -501,24 +499,22 @@ async def _google_isdir(path: GooglePath) -> bool:
             prefix: str = path.blob
             if not prefix.endswith("/"):
                 prefix += "/"
-            request = await googlify_request(
-                Request(
-                    method="GET",
-                    url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o"),
-                    params=dict(prefix=prefix, delimiter="/", maxResults="1"),
-                    failure_exceptions={404: FileNotFoundError()},
-                )
+            request = Request(
+                method="GET",
+                url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}/o"),
+                params=dict(prefix=prefix, delimiter="/", maxResults="1"),
+                failure_exceptions={404: FileNotFoundError()},
+                auth=google_auth_req,
             )
             async with request.execute() as resp:
                 result = await resp.json()
                 return "items" in result or "prefixes" in result
         else:
-            request = await googlify_request(
-                Request(
-                    method="GET",
-                    url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}"),
-                    failure_exceptions={404: FileNotFoundError()},
-                )
+            request = Request(
+                method="GET",
+                url=path.format_url("https://storage.googleapis.com/storage/v1/b/{bucket}"),
+                failure_exceptions={404: FileNotFoundError()},
+                auth=google_auth_req,
             )
             async with request.execute() as resp:
                 return True

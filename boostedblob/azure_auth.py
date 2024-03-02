@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import functools
 import hmac
 import json
 import os
@@ -14,7 +15,7 @@ from .xml import etree
 
 if TYPE_CHECKING:
     from .path import AzurePath
-    from .request import Request
+    from .request import RawRequest, Request
 
 
 AZURE_SAS_TOKEN_EXPIRATION_SECONDS = 60 * 60
@@ -262,7 +263,7 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
 
 
 async def can_access_account(account: str, container: Optional[str], auth: Tuple[str, str]) -> bool:
-    from .request import Request, azurify_request
+    from .request import Request, azure_auth_req
 
     if not container:
         # if a container isn't specified, check that we can list the storage account
@@ -271,8 +272,8 @@ async def can_access_account(account: str, container: Optional[str], auth: Tuple
             url=f"https://{account}.blob.core.windows.net",
             params={"comp": "list", "maxresults": "1"},
             success_codes=(200, 403),
+            auth=functools.partial(azure_auth_req, auth=auth),
         )
-        req = await azurify_request(req, auth=auth)
 
         async with req.execute() as resp:
             if resp.status == 403:
@@ -294,8 +295,8 @@ async def can_access_account(account: str, container: Optional[str], auth: Tuple
         url=f"https://{account}.blob.core.windows.net/{container}",
         params={"restype": "container", "comp": "list", "maxresults": "1"},
         success_codes=(200, 403),
+        auth=functools.partial(azure_auth_req, auth=auth),
     )
-    req = await azurify_request(req, auth=auth)
     async with req.execute() as resp:
         return resp.status == 200
 
@@ -336,23 +337,24 @@ def create_access_token_request(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         data=urllib.parse.urlencode(data).encode("utf8"),
         success_codes=success_codes,
+        auth=None,
     )
 
 
 async def get_storage_account_id_with_subscription(
     subscription_id: str, account: str, auth: Tuple[str, str]
 ) -> Optional[str]:
-    from .request import Request, azurify_request
+    from .request import Request, azure_auth_req
 
     req = Request(
         method="GET",
         url=f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
         params={"api-version": "2019-04-01"},
         success_codes=(200, 401, 403, 429),
+        auth=functools.partial(azure_auth_req, auth=auth),
     )
 
     while True:
-        req = await azurify_request(req, auth=auth)
         async with req.execute() as resp:
             if resp.status in (401, 403):
                 # we aren't allowed to query this for this subscription, skip it
@@ -381,12 +383,17 @@ async def get_storage_account_id_with_subscription(
 
         if "nextLink" not in result:
             break
-        req = Request(method="GET", url=result["nextLink"], success_codes=(200, 401, 403))
+        req = Request(
+            method="GET",
+            url=result["nextLink"],
+            success_codes=(200, 401, 403),
+            auth=functools.partial(azure_auth_req, auth=auth),
+        )
     return None
 
 
 async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optional[str]:
-    from .request import Request, azurify_request
+    from .request import Request, azure_auth_req
 
     stored_subscription_ids = load_stored_subscription_ids()
     for subscription_id in stored_subscription_ids:
@@ -400,10 +407,10 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
         method="GET",
         url="https://management.azure.com/subscriptions",
         params={"api-version": "2020-01-01"},
+        auth=functools.partial(azure_auth_req, auth=auth),
     )
 
     while True:
-        req = await azurify_request(req, auth=auth)
         async with req.execute() as resp:
             result = await resp.json()
         subscription_ids = {item["subscriptionId"] for item in result["value"]}
@@ -417,14 +424,16 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
 
         if "nextLink" not in result:
             break
-        req = Request(method="GET", url=result["nextLink"])
+        req = Request(
+            method="GET", url=result["nextLink"], auth=functools.partial(azure_auth_req, auth=auth)
+        )
     return None
 
 
 async def get_storage_account_key(
     account: str, creds: Mapping[str, Any], container_hint: Optional[str] = None
 ) -> Optional[Tuple[Any, float]]:
-    from .request import Request, azurify_request
+    from .request import Request, azure_auth_req
 
     # get an access token for the management service
     req = create_access_token_request(creds=creds, scope="https://management.azure.com/.default")
@@ -441,8 +450,8 @@ async def get_storage_account_key(
         method="POST",
         url=f"https://management.azure.com{storage_account_id}/listKeys",
         params={"api-version": "2019-04-01"},
+        auth=functools.partial(azure_auth_req, auth=auth),
     )
-    req = await azurify_request(req, auth=auth)
 
     async with req.execute() as resp:
         result = await resp.json()
@@ -460,7 +469,7 @@ async def get_storage_account_key(
     )
 
 
-def sign_request_with_shared_key(request: Request, key: str) -> str:
+def sign_request_with_shared_key(request: RawRequest, key: str) -> str:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/authorize-with-shared-key
     from yarl import URL
 
@@ -516,7 +525,7 @@ def sign_request_with_shared_key(request: Request, key: str) -> str:
 
 async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
     from .globals import config
-    from .request import Request, azurify_request
+    from .request import Request, azure_auth_req
 
     auth = await config.azure_access_token_manager.get_token(key=cache_key)
     account, container = cache_key
@@ -541,15 +550,13 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
     start = (now + datetime.timedelta(hours=-1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     expiration = now + datetime.timedelta(days=6)
     expiry = expiration.strftime("%Y-%m-%dT%H:%M:%SZ")
-    req = await azurify_request(
-        Request(
-            url=f"https://{account}.blob.core.windows.net/",
-            method="POST",
-            params=dict(restype="service", comp="userdelegationkey"),
-            data={"KeyInfo": {"Start": start, "Expiry": expiry}},
-            success_codes=(200, 403),
-        ),
-        auth=auth,
+    req = Request(
+        url=f"https://{account}.blob.core.windows.net/",
+        method="POST",
+        params=dict(restype="service", comp="userdelegationkey"),
+        data={"KeyInfo": {"Start": start, "Expiry": expiry}},
+        success_codes=(200, 403),
+        auth=functools.partial(azure_auth_req, auth=auth),
     )
     async with req.execute() as resp:
         if resp.status == 403:
