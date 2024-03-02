@@ -74,12 +74,19 @@ class Request:
 
                     assert resp.reason is not None
                     reason = repr(resp.reason)
-                    if config.debug_mode:
-                        body = (await resp.read()).decode("utf-8")
-                        reason += "\nBody:\n" + body + "\nHeaders:\n" + str(resp.headers)
                     error = RequestFailure(reason=reason, request=self, status=resp.status)
                     if resp.status not in self.retry_codes:
-                        raise self.failure_exceptions.get(resp.status, error)
+                        if resp.status in self.failure_exceptions:
+                            raise self.failure_exceptions[resp.status]
+                        # If we're actually going to raise, read the body
+                        body = (await resp.read()).decode("utf-8")
+                        reason += "\nBody:\n" + body + "\nHeaders:\n" + str(resp.headers)
+                        raise RequestFailure(reason=reason, request=self, status=resp.status)
+                    else:
+                        if config.debug_mode:
+                            body = (await resp.read()).decode("utf-8")
+                            reason += "\nBody:\n" + body + "\nHeaders:\n" + str(resp.headers)
+                        error = RequestFailure(reason=reason, request=self, status=resp.status)
 
             if attempt >= config.retry_limit:
                 raise error
