@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.15.0]
+- Make sessions per event loop. This should make boostedblob more usable in the presence of
+  multiple event loops and remove some toil regarding session management
+- Set a high TCP connection limit by default (previously unlimited)
+- Avoid racy authorisation in the presence of concurrency
+- Fix rare issue regarding reaunthentication of retried requests
+- Add support for Azure MSI endpoints
+- Improve some error messages
+- Read and include response body and headers in exceptions
+
 ## [v0.14.2]
 - Fix regression on Python 3.9 and older
 
