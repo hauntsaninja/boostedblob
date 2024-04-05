@@ -40,16 +40,22 @@ class TokenManager(Generic[T]):
         self._get_token_fn = get_token_fn
         self._tokens: Dict[T, Any] = {}
         self._expirations: Dict[T, float] = {}
+        self._locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
 
     async def get_token(self, key: T) -> Any:
         if not self._tokens:
             self.load_state()
 
+        running_loop = asyncio.get_running_loop()
+        if running_loop not in self._locks:
+            self._locks[running_loop] = asyncio.Lock()
+        lock = self._locks[running_loop]
+
         now = time.time()
         expiration = self._expirations.get(key)
 
         if expiration is None or (now + config.token_early_expiration_seconds) > expiration:
-            async with config.auth_lock:
+            async with lock:
                 refresh_expiration = self._expirations.get(key)
                 if refresh_expiration == expiration:
                     self._tokens[key], self._expirations[key] = await self._get_token_fn(key)
@@ -145,9 +151,6 @@ class Config:
     _sessions: Dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
     )
-    _auth_locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = field(
-        default_factory=dict, init=False
-    )
 
     def _get_session(self) -> Optional[aiohttp.ClientSession]:
         return self._sessions.get(asyncio.get_running_loop())
@@ -161,7 +164,7 @@ class Config:
         for l in list(self._sessions):
             if l.is_closed():
                 del self._sessions[l]
-        if hasattr(session, "_loop"):  # in case aiohttp  changes
+        if hasattr(session, "_loop"):  # hasattr in case aiohttp changes
             assert session._loop is running_loop
         self._sessions[running_loop] = session
 
@@ -192,24 +195,6 @@ class Config:
             stacklevel=2,
         )
         self._set_session(session)
-
-    def _set_lock(self, lock: asyncio.Lock) -> None:
-        running_loop = asyncio.get_running_loop()
-        # In case we're doing repeated asyncio.run, clean up old locks
-        for l in list(self._auth_locks):
-            if l.is_closed():
-                del self._auth_locks[l]
-        self._auth_locks[running_loop] = lock
-
-    @property
-    def auth_lock(self) -> asyncio.Lock:
-        loop = asyncio.get_running_loop()
-        try:
-            return self._auth_locks[loop]
-        except KeyError:
-            lock = asyncio.Lock()
-            self._set_lock(lock)
-            return lock
 
 
 config: Config = Config()
