@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.15.1]
+- Fix authentication locking logic
+
 ## [v0.15.0]
 - Make sessions per event loop. This should make boostedblob more usable in the presence of
   multiple event loops and remove some toil regarding session management
