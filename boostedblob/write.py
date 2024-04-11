@@ -198,7 +198,7 @@ async def _google_write_stream(
         # invalid chunk size. If we continue to receive chunks, which can happen if the file is
         # being written to concurrently, then we discard these additional chunks.
         if is_finalised:
-            continue
+            break
         should_finalise = len(chunk) % (256 * 1024) != 0
         if should_finalise:
             total_size = str(end)
