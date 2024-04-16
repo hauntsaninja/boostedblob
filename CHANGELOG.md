@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.15.2]
+- Fix `cloud_copyfile` for Google Cloud
+- Allow uploading streams to Google Cloud that are concurrently written to
+
 ## [v0.15.1]
 - Fix authentication locking logic
 
