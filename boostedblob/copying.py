@@ -306,7 +306,11 @@ async def _azure_cloud_copyfile(
 
 @cloud_copyfile.register  # type: ignore
 async def _google_cloud_copyfile(
-    src: GooglePath, dst: GooglePath, executor: BoostExecutor, overwrite: bool = False
+    src: GooglePath,
+    dst: GooglePath,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: Optional[int] = None,
 ) -> None:
     assert isinstance(dst, GooglePath)
     if not overwrite:
