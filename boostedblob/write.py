@@ -198,6 +198,16 @@ async def _google_write_stream(
         # invalid chunk size. If we continue to receive chunks, which can happen if the file is
         # being written to concurrently, then we discard these additional chunks.
         if is_finalised:
+            if chunk:
+                import warnings
+
+                warnings.warn(
+                    "The upload was already finalised. A likely cause is a) the file was being "
+                    "written to concurrently, or b) the given stream was chunked incorrectly. "
+                    "Uploads to Google Cloud need to be chunked in multiples of 256 KB "
+                    "(except for the last chunk).",
+                    stacklevel=2,
+                )
             break
         should_finalise = len(chunk) % (256 * 1024) != 0
         if should_finalise:
