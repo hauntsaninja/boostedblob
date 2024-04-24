@@ -94,7 +94,7 @@ class Request:
         repr=False, default_factory=lambda: (408, 429, 500, 502, 503, 504)
     )
     failure_exceptions: Mapping[int, Exception] = field(repr=False, default_factory=dict)
-    auth: Callable[[Request], Awaitable[RawRequest]] | None = None
+    auth: Callable[[Request], Awaitable[RawRequest]] | None = field(repr=False, default=None)
 
     @contextlib.asynccontextmanager
     async def execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
