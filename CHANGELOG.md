@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.15.3]
+- Remove auth info from `Request`'s `repr`
+
 ## [v0.15.2]
 - Fix `cloud_copyfile` for Google Cloud
 - Allow uploading streams to Google Cloud that are concurrently written to
