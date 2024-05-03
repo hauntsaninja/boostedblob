@@ -11,7 +11,6 @@ from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional
 
 import boostedblob as bbb
 
-F = TypeVar("F", bound=Callable[..., Any])
 T = TypeVar("T")
 
 
@@ -32,8 +31,8 @@ def syncify(fn: Callable[..., Coroutine[T, None, None]]) -> Callable[..., T]:
     return wrapper
 
 
-def sync_with_session(fn: F) -> F:
-    return syncify(bbb.ensure_session(fn))  # type: ignore[return-value]
+def sync_with_session(fn: Callable[..., Coroutine[T, None, None]]) -> Callable[..., T]:
+    return syncify(bbb.ensure_session(fn))
 
 
 DEFAULT_CONCURRENCY = int(os.environ.get("BBB_DEFAULT_CONCURRENCY", 32))
