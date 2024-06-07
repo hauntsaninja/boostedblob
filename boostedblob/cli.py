@@ -358,7 +358,7 @@ async def edit(path: str, read_only: bool = False) -> None:
                 with open(local, "w"):
                     pass
             pre_stat = await bbb.stat(local)
-            editor = shlex.split(os.environ.get("EDITOR", "vi"))
+            editor = shlex.split(os.environ.get("EDITOR") or "vi")
             subprocess.check_call([*editor, local])
             post_stat = await bbb.stat(local)
             if pre_stat != post_stat:
