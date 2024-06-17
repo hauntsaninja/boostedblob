@@ -18,7 +18,7 @@ def syncify(fn: Callable[..., Coroutine[T, None, None]]) -> Callable[..., T]:
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
-            import uvloop
+            import uvloop  # type: ignore[import-not-found]
 
             if sys.version_info < (3, 9) or (
                 tuple(map(int, cast(Any, uvloop).__version__.split("."))) >= (0, 15, 0)
