@@ -56,10 +56,8 @@ python = ">=3.8"
 aiohttp = ">=3.7.2"
 lxml = ">=4.9.1"
 pycryptodomex = ">=3.9"
-
-[tool.poetry.group.uvloop.dependencies]
 # uvloop is not strictly necessary
-uvloop = ">=0.16.0"
+uvloop = { version = ">=0.16.0", markers = "sys_platform != 'win32'" }
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=7.2.0"
