@@ -235,7 +235,7 @@ async def azure_auth_req(request: Request, *, auth: Optional[Tuple[str, str]] = 
     headers = dict(request.headers)
     # https://docs.microsoft.com/en-us/rest/api/storageservices/previous-azure-storage-service-versions
     headers["x-ms-version"] = "2023-05-03"
-    headers["x-ms-date"] = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+    headers["x-ms-date"] = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     from .azure_auth import OAUTH_TOKEN, SHARED_KEY, sign_request_with_shared_key
 

@@ -546,7 +546,7 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
         )
 
     # https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     start = (now + datetime.timedelta(hours=-1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     expiration = now + datetime.timedelta(days=6)
     expiry = expiration.strftime("%Y-%m-%dT%H:%M:%SZ")

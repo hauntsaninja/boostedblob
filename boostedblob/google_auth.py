@@ -196,9 +196,10 @@ def generate_signed_url(path: GooglePath) -> Tuple[str, datetime.datetime]:
     host = "storage.googleapis.com"
     canonical_uri = path.format_url("/{bucket}/{blob}")
 
-    datetime_now = datetime.datetime.utcnow()
-    request_timestamp = datetime_now.strftime("%Y%m%dT%H%M%SZ")
-    datestamp = datetime_now.strftime("%Y%m%d")
+    now_local = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    request_timestamp = now.strftime("%Y%m%dT%H%M%SZ")
+    datestamp = now.strftime("%Y%m%d")
 
     credential_scope = f"{datestamp}/auto/storage/goog4_request"
     credential = f"{creds['client_email']}/{credential_scope}"
@@ -250,4 +251,4 @@ def generate_signed_url(path: GooglePath) -> Tuple[str, datetime.datetime]:
     signature = binascii.hexlify(_sign(creds["private_key"], string_to_sign)).decode("utf8")
     signed_url = f"https://{host}{canonical_uri}"
     signed_url += f"?{canonical_query_string}&X-Goog-Signature={signature}"
-    return signed_url, datetime_now + datetime.timedelta(seconds=MAX_EXPIRATION_SECONDS)
+    return signed_url, now_local + datetime.timedelta(seconds=MAX_EXPIRATION_SECONDS)
