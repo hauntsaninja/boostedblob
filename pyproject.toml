@@ -41,7 +41,7 @@ ignore = ["E2", "E501", "E741", "C408", "PIE790"]
 
 [tool.poetry]
 name = "boostedblob"
-version = "0.15.3"
+version = "0.15.4"
 description = """
 Command line tool and async library to perform basic file operations on local \
 paths, Google Cloud Storage paths and Azure Blob Storage paths.\
