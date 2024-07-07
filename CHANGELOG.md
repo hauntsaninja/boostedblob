@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.15.4]
+- Remove dependency on uvloop for windows
+- Empty `EDITOR` defaults to `vi` in `bbb edit`
+- Improve types for `sync_with_session`
+- Fix `utcnow` deprecations
+
 ## [v0.15.3]
 - Remove auth info from `Request`'s `repr`
 
