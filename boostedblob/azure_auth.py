@@ -258,7 +258,8 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
             return (auth, result["expires_on"])
 
     raise RuntimeError(
-        f"Could not find any credentials that grant access to storage account: '{account}'"
+        "Could not find any credentials that grant access to "
+        f"storage account {account!r} and container {container!r}"
     )
 
 
