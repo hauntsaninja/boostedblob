@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.15.5]
+- Mention container name in Azure authentication error message
+
 ## [v0.15.4]
 - Remove dependency on uvloop for windows
 - Empty `EDITOR` defaults to `vi` in `bbb edit`
