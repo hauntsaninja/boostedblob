@@ -367,7 +367,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
             # no errors encountered, the hostname exists
             return False
         except OSError as e:
-            if e.errno != socket.EAI_NONAME:
+            if e.errno != socket.EAI_NONAME and e.errno != socket.EAI_NODATA:
                 # we got some sort of other socket error, so it's unclear if the host exists or not
                 return False
 
