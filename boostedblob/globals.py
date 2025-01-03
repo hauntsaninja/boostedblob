@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import (
@@ -111,8 +112,11 @@ class TokenManager(Generic[T]):
         try:
             cache_file = self.get_cache_file()
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            with open(cache_file, "w") as f:
+            suffix = "." + str(uuid.uuid4()) + ".tmp"
+            cache_file_tmp = cache_file + suffix
+            with open(cache_file_tmp, "w") as f:
                 json.dump(state, f)
+            os.rename(cache_file_tmp, cache_file)
         except Exception as e:
             if config.debug_mode:
                 print(f"[boostedblob] Error while dumping token cache: {e}", file=sys.stderr)
