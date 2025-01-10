@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.15.6]
+- Treat `EAI_NODATA` similarly to `EAI_NONAME` in DNS retry logic
+- Use rename when writing to token cache
+
 ## [v0.15.5]
 - Mention container name in Azure authentication error message
 
