@@ -165,9 +165,9 @@ def _is_gce_instance() -> bool:
 
 
 def _sign(private_key: str, msg: bytes) -> bytes:
-    from Cryptodome.Hash import SHA256
-    from Cryptodome.PublicKey import RSA
-    from Cryptodome.Signature import pkcs1_15
+    from Cryptodome.Hash import SHA256  # type: ignore[import, unused-ignore]
+    from Cryptodome.PublicKey import RSA  # type: ignore[import, unused-ignore]
+    from Cryptodome.Signature import pkcs1_15  # type: ignore[import, unused-ignore]
 
     key = RSA.import_key(private_key)
     h = SHA256.new(msg)
