@@ -353,6 +353,8 @@ async def edit(path: str, read_only: bool = False) -> None:
         async with bbb.BoostExecutor(DEFAULT_CONCURRENCY) as executor:
             try:
                 await bbb.copyfile(path_obj, local, executor)
+            except bbb.request.HostNotFoundError:
+                raise
             except FileNotFoundError:
                 print("File not found, creating new file...")
                 with open(local, "w"):
