@@ -562,7 +562,7 @@ async def exists(path: Union[BasePath, BlobPath, str]) -> int:
 
 
 @exists.register  # type: ignore
-async def _cloud_exists(path: CloudPath) -> int:
+async def _cloud_exists(path: CloudPath) -> bool:
     # TODO: this is two network requests, make it one
     for fut in asyncio.as_completed([isfile(path), isdir(path)]):
         if await fut:
@@ -571,7 +571,7 @@ async def _cloud_exists(path: CloudPath) -> int:
 
 
 @exists.register  # type: ignore
-async def _local_exists(path: LocalPath) -> int:
+async def _local_exists(path: LocalPath) -> bool:
     return os.path.exists(path)
 
 
