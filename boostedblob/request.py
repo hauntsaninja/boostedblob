@@ -86,7 +86,7 @@ class Request:
     url: str
     params: Mapping[str, str] = field(default_factory=dict)
     # data can be large, so don't put it in the repr
-    data: dict[str, Any] | bytes | None = field(repr=False, default=None)
+    data: dict[str, Any] | bytes | bytearray | memoryview | None = field(repr=False, default=None)
     # headers can contain authorisation details, so don't put them in the repr
     headers: Mapping[str, str] = field(repr=False, default_factory=dict)
     success_codes: Sequence[int] = field(repr=False, default_factory=lambda: (200,))
