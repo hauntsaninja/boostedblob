@@ -114,7 +114,7 @@ async def _local_write_single(
 @pathdispatch
 async def write_stream(
     path: Union[BasePath, BlobPath, str],
-    stream: BoostUnderlying[bytes],
+    stream: BoostUnderlying[bytes | bytearray | memoryview],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -133,7 +133,7 @@ async def write_stream(
 @write_stream.register  # type: ignore
 async def _azure_write_stream(
     path: AzurePath,
-    stream: BoostUnderlying[bytes],
+    stream: BoostUnderlying[Union[bytes, bytearray, memoryview]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -147,7 +147,7 @@ async def _azure_write_stream(
     md5 = hashlib.md5()
     max_block_index = -1
 
-    async def upload_chunk(index_chunk: Tuple[int, bytes]) -> None:
+    async def upload_chunk(index_chunk: Tuple[int, Union[bytes, bytearray, memoryview]]) -> None:
         block_index, chunk = index_chunk
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
         assert block_index < AZURE_BLOCK_COUNT_LIMIT
@@ -172,7 +172,7 @@ async def _azure_write_stream(
 @write_stream.register  # type: ignore
 async def _google_write_stream(
     path: GooglePath,
-    stream: BoostUnderlying[bytes],
+    stream: BoostUnderlying[Union[bytes, bytearray, memoryview]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -234,7 +234,7 @@ async def _google_write_stream(
 @write_stream.register  # type: ignore
 async def _local_write_stream(
     path: LocalPath,
-    stream: BoostUnderlying[bytes],
+    stream: BoostUnderlying[Union[bytes, bytearray, memoryview]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -257,7 +257,7 @@ async def _local_write_stream(
 @pathdispatch
 async def write_stream_unordered(
     path: Union[CloudPath, str],
-    stream: BoostUnderlying[Tuple[bytes, ByteRange]],
+    stream: BoostUnderlying[Tuple[Union[bytes, bytearray, memoryview], ByteRange]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -276,7 +276,7 @@ async def write_stream_unordered(
 @write_stream_unordered.register  # type: ignore
 async def _azure_write_stream_unordered(
     path: AzurePath,
-    stream: BoostUnderlying[Tuple[bytes, ByteRange]],
+    stream: BoostUnderlying[Tuple[Union[bytes, bytearray, memoryview], ByteRange]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
@@ -290,7 +290,9 @@ async def _azure_write_stream_unordered(
     upload_id = get_upload_id()
     block_list = []
 
-    async def upload_chunk(index_chunk_byte_range: Tuple[int, Tuple[bytes, ByteRange]]) -> None:
+    async def upload_chunk(
+        index_chunk_byte_range: Tuple[int, Tuple[Union[bytes, bytearray, memoryview], ByteRange]]
+    ) -> None:
         unordered_index, (chunk, byte_range) = index_chunk_byte_range
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
         assert unordered_index < AZURE_BLOCK_COUNT_LIMIT
