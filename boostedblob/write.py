@@ -114,7 +114,7 @@ async def _local_write_single(
 @pathdispatch
 async def write_stream(
     path: Union[BasePath, BlobPath, str],
-    stream: BoostUnderlying[bytes | bytearray | memoryview],
+    stream: BoostUnderlying[Union[bytes, bytearray, memoryview]],
     executor: BoostExecutor,
     overwrite: bool = False,
 ) -> None:
