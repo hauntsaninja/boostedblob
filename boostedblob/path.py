@@ -22,13 +22,13 @@ T = TypeVar("T")
 class BasePath:
     @staticmethod
     def from_str(path: str) -> BasePath:
+        from .registry import try_get_cloud_path_type
+
         url = urllib.parse.urlparse(path)
-        if url.scheme == "gs":
-            return GooglePath.from_str(path)
-        if url.scheme == "az" or (
-            url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net")
-        ):
-            return AzurePath.from_str(path)
+        cloud_path_type = try_get_cloud_path_type(url)
+        if cloud_path_type:
+            return cloud_path_type.from_str(path)
+
         if url.scheme:
             raise ValueError(f"Invalid path '{path}'")
         return LocalPath(path)
@@ -36,14 +36,14 @@ class BasePath:
     @property
     def name(self) -> str:
         """Returns the name of path, normalised to exclude any trailing slash."""
-        raise NotImplementedError
+        raise NotImplementedError(f"Name not implemented for {type(self)}")
 
     @property
     def parent(self: T) -> T:
-        raise NotImplementedError
+        raise NotImplementedError(f"Parent not implemented for {type(self)}")
 
     def relative_to(self: T, other: T) -> str:
-        raise NotImplementedError
+        raise NotImplementedError(f"relative_to not implemented for {type(self)}")
 
     def is_relative_to(self: T, other: T) -> bool:
         try:
@@ -53,13 +53,13 @@ class BasePath:
             return False
 
     def is_directory_like(self) -> bool:
-        raise NotImplementedError
+        raise NotImplementedError(f"is_directory_like not implemented for {type(self)}")
 
     def ensure_directory_like(self: T) -> T:
-        raise NotImplementedError
+        raise NotImplementedError(f"ensure_directory_like not implemented for {type(self)}")
 
     def __truediv__(self: T, relative_path: str) -> T:
-        raise NotImplementedError
+        raise NotImplementedError(f"__truediv__ not implemented for {type(self)}")
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,12 @@ class LocalPath(BasePath):
 
 
 class CloudPath(BasePath):
-    pass
+    @staticmethod
+    def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
+        """
+        Returns True if the URL is a cloud path for this cloud provider
+        """
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -123,6 +128,12 @@ class AzurePath(CloudPath):
     account: str
     container: str
     blob: str
+
+    @staticmethod
+    def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
+        return url.scheme == "az" or (
+            url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net")
+        )
 
     @staticmethod
     def from_str(url: str) -> AzurePath:
@@ -195,6 +206,10 @@ class AzurePath(CloudPath):
 class GooglePath(CloudPath):
     bucket: str
     blob: str
+
+    @staticmethod
+    def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
+        return url.scheme == "gs"
 
     @staticmethod
     def from_str(url: str) -> GooglePath:

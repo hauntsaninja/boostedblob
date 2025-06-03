@@ -155,7 +155,7 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
     # This enables the use of Managed Identity, Workload Identity, and other auth methods not implemented here
     if creds["_azure_auth"] == "azure-identity":
         try:
-            from azure.identity.aio import DefaultAzureCredential  # type: ignore
+            from azure.identity.aio import DefaultAzureCredential
         except ImportError as e:
             raise RuntimeError(
                 "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"

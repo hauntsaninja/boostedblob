@@ -34,4 +34,7 @@ from .path import getsize as getsize
 from .path import isdir as isdir
 from .path import isfile as isfile
 from .path import stat as stat
+from .registry import register_plugins as _register_plugins
 from .syncing import sync as sync
+
+_register_plugins()
