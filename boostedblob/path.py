@@ -22,7 +22,7 @@ T = TypeVar("T")
 class BasePath:
     @staticmethod
     def from_str(path: str) -> BasePath:
-        from .registry import try_get_cloud_path_type
+        from .path_registry import try_get_cloud_path_type
 
         url = urllib.parse.urlparse(path)
         cloud_path_type = try_get_cloud_path_type(url)
