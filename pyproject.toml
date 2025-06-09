@@ -3,7 +3,7 @@ name = "boostedblob"
 version = "0.15.6"
 description = "Command line tool and async library to perform basic file operations on local paths, Google Cloud Storage paths and Azure Blob Storage paths."
 authors = [{ name = "Shantanu Jain", email = "hauntsaninja@gmail.com" }]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
 dependencies = [
@@ -60,7 +60,7 @@ skip_gitignore = true
 [tool.mypy]
 strict = true
 no_warn_return_any = true
-python_version = "3.8"
+python_version = "3.9"
 show_error_codes = true
 enable_error_code = ["redundant-expr", "truthy-bool"]
 
