@@ -3,7 +3,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator, List, Optional, Tuple, Union
+from typing import AsyncIterator, Iterator, Optional, Union
 
 from .boost import BoostExecutor
 from .copying import copyfile
@@ -49,7 +49,7 @@ async def sync_action_iterator(
             "Hint: exclude patterns should be Python regular expressions, not globs."
         ) from None
 
-    async def collect_tree(tree: BasePath) -> List[Tuple[str, DirEntry]]:
+    async def collect_tree(tree: BasePath) -> list[tuple[str, DirEntry]]:
         try:
             # Note that if you create marker files to mark directories, scantree will return
             # those. Filter by is_file to avoid syncing these files that represent directories.
@@ -65,7 +65,7 @@ async def sync_action_iterator(
 
 
 def sync_files_action_iterator(
-    src_files: List[Tuple[str, DirEntry]], dst_files: List[Tuple[str, DirEntry]]
+    src_files: list[tuple[str, DirEntry]], dst_files: list[tuple[str, DirEntry]]
 ) -> Iterator[Action]:
     src_files.sort(key=lambda p: p[0])
     dst_files.sort(key=lambda p: p[0])

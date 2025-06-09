@@ -10,18 +10,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Dict,
-    Generic,
-    Iterator,
-    Optional,
-    Tuple,
-    TypeVar,
-)
+from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, TypeVar
 
 import aiohttp
 
@@ -37,11 +26,11 @@ F = TypeVar("F", bound=Callable[..., Any])
 class TokenManager(Generic[T]):
     """Automatically refresh a token when it expires."""
 
-    def __init__(self, get_token_fn: Callable[[T], Awaitable[Tuple[Any, float]]]) -> None:
+    def __init__(self, get_token_fn: Callable[[T], Awaitable[tuple[Any, float]]]) -> None:
         self._get_token_fn = get_token_fn
-        self._tokens: Dict[T, Any] = {}
-        self._expirations: Dict[T, float] = {}
-        self._locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
+        self._tokens: dict[T, Any] = {}
+        self._expirations: dict[T, float] = {}
+        self._locks: dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
 
     async def get_token(self, key: T) -> Any:
         if not self._tokens:
@@ -142,24 +131,24 @@ class Config:
     token_early_expiration_seconds: int = 300
     request_reauth_seconds: int = 300
 
-    azure_access_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
+    azure_access_token_manager: TokenManager[tuple[str, str | None]] = field(
         default_factory=lambda: TokenManager(azure_auth.get_access_token)
     )
-    azure_sas_token_manager: TokenManager[Tuple[str, Optional[str]]] = field(
+    azure_sas_token_manager: TokenManager[tuple[str, str | None]] = field(
         default_factory=lambda: TokenManager(azure_auth.get_sas_token)
     )
     google_access_token_manager: TokenManager[str] = field(
         default_factory=lambda: TokenManager(google_auth.get_access_token)
     )
 
-    _sessions: Dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
+    _sessions: dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
     )
 
-    def _get_session(self) -> Optional[aiohttp.ClientSession]:
+    def _get_session(self) -> aiohttp.ClientSession | None:
         return self._sessions.get(asyncio.get_running_loop())
 
-    def _set_session(self, session: Optional[aiohttp.ClientSession]) -> None:
+    def _set_session(self, session: aiohttp.ClientSession | None) -> None:
         running_loop = asyncio.get_running_loop()
         if session is None:
             self._sessions.pop(running_loop, None)
@@ -260,7 +249,7 @@ def set_event_loop_exception_handler() -> None:
     loop = asyncio.get_running_loop()
 
     def handler(
-        loop: asyncio.AbstractEventLoop, context: Dict[str, Any]
+        loop: asyncio.AbstractEventLoop, context: dict[str, Any]
     ) -> None:  # pragma: no cover
         message = context["message"]
         exception = context.get("exception", Exception)

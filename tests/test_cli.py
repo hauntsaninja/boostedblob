@@ -5,7 +5,7 @@ import os
 import shlex
 import subprocess
 import sys
-from typing import Any, List, Tuple
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,7 +16,7 @@ from boostedblob import BasePath
 from . import helpers
 
 
-def run_bbb(argv: List[Any]) -> str:
+def run_bbb(argv: list[Any]) -> str:
     """Wrapper around boostedblob.cli.run_bbb that converts arguments and captures output."""
     output = io.StringIO()
     output.buffer = MagicMock()  # type: ignore
@@ -30,16 +30,16 @@ def test_cli():
     with helpers.tmp_local_dir() as local_dir:
         with helpers.tmp_azure_dir() as remote_dir:
 
-            def normalise_abs(output: str) -> List[str]:
+            def normalise_abs(output: str) -> list[str]:
                 return sorted(
                     BasePath.from_str(p).relative_to(remote_dir) for p in output.splitlines()
                 )
 
-            def normalise_rel(output: str) -> List[str]:
+            def normalise_rel(output: str) -> list[str]:
                 return sorted(p for p in output.splitlines())
 
-            def normalise_long(output: str) -> List[Tuple[str, str, str]]:
-                def parse_line(line: str) -> Tuple[str, str, str]:
+            def normalise_long(output: str) -> list[tuple[str, str, str]]:
+                def parse_line(line: str) -> tuple[str, str, str]:
                     size = line[:12]
                     mtime = line[12 + 2 : 12 + 2 + 19]
                     path = line[12 + 2 + 19 + 2 :]

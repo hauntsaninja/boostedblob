@@ -8,7 +8,8 @@ This has been used and should work, but isn't tested to the degree something lik
 
 import datetime
 import urllib.parse
-from typing import Any, DefaultDict, Dict, List, Union
+from collections import defaultdict
+from typing import Any, Union
 
 from .boost import BoostExecutor
 from .path import AzurePath
@@ -26,7 +27,7 @@ def _xml_to_dict(element: etree.Element) -> Any:
 
 async def _listtree_versions_snapshots(
     prefix: Union[str, AzurePath]
-) -> Dict[AzurePath, List[Dict[str, Any]]]:
+) -> dict[AzurePath, list[dict[str, Any]]]:
     if isinstance(prefix, str):
         prefix = AzurePath.from_str(prefix)
 
@@ -53,7 +54,7 @@ async def _listtree_versions_snapshots(
         )
     )
 
-    results = DefaultDict[AzurePath, List[Dict[str, Any]]](list)
+    results = defaultdict[AzurePath, list[dict[str, Any]]](list)
     async for result in it:
         blobs = result.find("Blobs")
         assert blobs is not None
@@ -76,7 +77,7 @@ async def _undelete(path: AzurePath) -> AzurePath:
     return path
 
 
-async def _promote_candidate(path: AzurePath, candidate: Dict[str, Any]) -> None:
+async def _promote_candidate(path: AzurePath, candidate: dict[str, Any]) -> None:
     if "Snapshot" in candidate:
         source = "snapshot=" + urllib.parse.quote(candidate["Snapshot"])
     elif "VersionId" in candidate:
@@ -108,7 +109,7 @@ async def _delete_snapshot(path: AzurePath, snapshot: str) -> None:
 
 
 async def _recover_snapshot(
-    path: AzurePath, candidate: Dict[str, Any], alternatives: List[Dict[str, Any]]
+    path: AzurePath, candidate: dict[str, Any], alternatives: list[dict[str, Any]]
 ) -> None:
     # https://docs.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview#restoring-soft-deleted-objects
     await _undelete(path)
@@ -124,7 +125,7 @@ async def _recover_snapshot(
 
 
 async def _determine_candidate_and_recover(
-    path: AzurePath, restore_ts: str, versions_snapshots: List[Dict[str, Any]], dry_run: bool = True
+    path: AzurePath, restore_ts: str, versions_snapshots: list[dict[str, Any]], dry_run: bool = True
 ) -> str:
     if any("VersionId" in b for b in versions_snapshots):
         # If using versioning, I think all blobs should have versions
@@ -178,7 +179,7 @@ async def _determine_candidate_and_recover(
             or snapshots[candidate_index].get("Deleted") == "true"
         )
 
-        def _to_ts_desc(b: Dict[str, Any]) -> str:
+        def _to_ts_desc(b: dict[str, Any]) -> str:
             if "Snapshot" in b:
                 return b["Snapshot"]
             assert candidate_index is not None

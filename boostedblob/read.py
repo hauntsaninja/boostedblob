@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any, Iterator, Optional, Tuple, Union
+from typing import Any, Iterator, Optional
 
 from .boost import (
     BoostExecutor,
@@ -22,8 +22,8 @@ from .path import (
 )
 from .request import Request, azure_auth_req, execute_retrying_read, google_auth_req
 
-ByteRange = Tuple[int, int]
-OptByteRange = Tuple[Optional[int], Optional[int]]
+ByteRange = tuple[int, int]
+OptByteRange = tuple[Optional[int], Optional[int]]
 
 # ==============================
 # read_byte_range
@@ -31,7 +31,7 @@ OptByteRange = Tuple[Optional[int], Optional[int]]
 
 
 @pathdispatch
-async def read_byte_range(path: Union[BasePath, BlobPath, str], byte_range: OptByteRange) -> bytes:
+async def read_byte_range(path: BasePath | BlobPath | str, byte_range: OptByteRange) -> bytes:
     """Read the content of ``path`` in the given byte range.
 
     :param path: The path to read from.
@@ -91,7 +91,7 @@ async def _local_read_byte_range(path: LocalPath, byte_range: OptByteRange) -> b
 
 
 @pathdispatch
-async def read_single(path: Union[BasePath, BlobPath, str]) -> bytes:
+async def read_single(path: BasePath | BlobPath | str) -> bytes:
     """Read the content of ``path``.
 
     :param path: The path to read from.
@@ -118,7 +118,7 @@ async def _local_read_single(path: LocalPath) -> bytes:
 
 @pathdispatch
 async def read_stream(
-    path: Union[BasePath, BlobPath, str], executor: BoostExecutor, size: Optional[int] = None
+    path: BasePath | BlobPath | str, executor: BoostExecutor, size: int | None = None
 ) -> BoostUnderlying[bytes]:
     """Read the content of ``path``.
 
@@ -133,7 +133,7 @@ async def read_stream(
 
 @read_stream.register  # type: ignore
 async def _cloud_read_stream(
-    path: CloudPath, executor: BoostExecutor, size: Optional[int] = None
+    path: CloudPath, executor: BoostExecutor, size: int | None = None
 ) -> OrderedMappingBoostable[Any, bytes]:
     if size is None:
         size = await getsize(path)
@@ -153,7 +153,7 @@ async def _cloud_read_stream(
 
 @read_stream.register  # type: ignore
 async def _local_read_stream(
-    path: LocalPath, executor: BoostExecutor, size: Optional[int] = None
+    path: LocalPath, executor: BoostExecutor, size: int | None = None
 ) -> Iterator[bytes]:
     def iterator() -> Iterator[bytes]:
         with open(path, "rb") as f:
@@ -173,8 +173,8 @@ async def _local_read_stream(
 
 @pathdispatch
 async def read_stream_unordered(
-    path: Union[CloudPath, str], executor: BoostExecutor, size: Optional[int] = None
-) -> UnorderedMappingBoostable[Any, Tuple[bytes, ByteRange]]:
+    path: CloudPath | str, executor: BoostExecutor, size: int | None = None
+) -> UnorderedMappingBoostable[Any, tuple[bytes, ByteRange]]:
     assert isinstance(path, CloudPath)
 
     if size is None:
@@ -186,7 +186,7 @@ async def read_stream_unordered(
         fillvalue=size,
     )
 
-    async def read_byte_range_wrapper(byte_range: ByteRange) -> Tuple[bytes, ByteRange]:
+    async def read_byte_range_wrapper(byte_range: ByteRange) -> tuple[bytes, ByteRange]:
         chunk = await read_byte_range(path, byte_range)
         return (chunk, byte_range)
 
@@ -199,7 +199,7 @@ async def read_stream_unordered(
 # ==============================
 
 
-def byte_range_to_str(byte_range: OptByteRange) -> Optional[str]:
+def byte_range_to_str(byte_range: OptByteRange) -> str | None:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-the-range-header-for-blob-service-operations
     # https://cloud.google.com/storage/docs/xml-api/get-object-download
     # oddly range requests are not mentioned in JSON API, only in the XML API

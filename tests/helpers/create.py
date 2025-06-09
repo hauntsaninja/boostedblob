@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Optional
 
 import blobfile
 
@@ -15,7 +14,7 @@ def create_file(path: BasePath, contents: bytes = b"asdf") -> None:
         f.write(contents)
 
 
-def unsafe_create_file(path: BasePath, contents: Optional[bytes] = None) -> asyncio.Task[None]:
+def unsafe_create_file(path: BasePath, contents: bytes | None = None) -> asyncio.Task[None]:
     if contents is None:
         n = random.randrange(1, 512)
         contents = random.getrandbits(n * 8).to_bytes(n, "little")
