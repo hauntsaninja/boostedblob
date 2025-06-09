@@ -9,7 +9,7 @@ import os
 import re
 import time
 import urllib.parse
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .xml import etree
 
@@ -25,7 +25,7 @@ OAUTH_TOKEN = "oauth_token"
 SHARED_KEY = "shared_key"
 
 
-def load_credentials() -> Dict[str, Any]:
+def load_credentials() -> dict[str, Any]:
     # When AZURE_USE_IDENTITY=1, boostedblob will use the azure-identity package to retrieve AAD access tokens
     if os.getenv("AZURE_USE_IDENTITY", "0") == "1":
         return {"_azure_auth": "azure-identity"}
@@ -127,7 +127,7 @@ def load_credentials() -> Dict[str, Any]:
     )
 
 
-def load_stored_subscription_ids() -> List[str]:
+def load_stored_subscription_ids() -> list[str]:
     """Return a list of subscription ids from the local azure profile.
 
     The default subscription will appear first in the list.
@@ -146,7 +146,7 @@ def load_stored_subscription_ids() -> List[str]:
     return [sub["id"] for sub in subscriptions]
 
 
-async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
+async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, float]:
     account, container = cache_key
     now = time.time()
     creds = load_credentials()
@@ -263,7 +263,7 @@ async def get_access_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, f
     )
 
 
-async def can_access_account(account: str, container: Optional[str], auth: Tuple[str, str]) -> bool:
+async def can_access_account(account: str, container: str | None, auth: tuple[str, str]) -> bool:
     from .request import Request, azure_auth_req
 
     if not container:
@@ -343,8 +343,8 @@ def create_access_token_request(
 
 
 async def get_storage_account_id_with_subscription(
-    subscription_id: str, account: str, auth: Tuple[str, str]
-) -> Optional[str]:
+    subscription_id: str, account: str, auth: tuple[str, str]
+) -> str | None:
     from .request import Request, azure_auth_req
 
     req = Request(
@@ -393,7 +393,7 @@ async def get_storage_account_id_with_subscription(
     return None
 
 
-async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optional[str]:
+async def get_storage_account_id(account: str, auth: tuple[str, str]) -> str | None:
     from .request import Request, azure_auth_req
 
     stored_subscription_ids = load_stored_subscription_ids()
@@ -432,8 +432,8 @@ async def get_storage_account_id(account: str, auth: Tuple[str, str]) -> Optiona
 
 
 async def get_storage_account_key(
-    account: str, creds: Mapping[str, Any], container_hint: Optional[str] = None
-) -> Optional[Tuple[Any, float]]:
+    account: str, creds: Mapping[str, Any], container_hint: str | None = None
+) -> tuple[Any, float] | None:
     from .request import Request, azure_auth_req
 
     # get an access token for the management service
@@ -524,7 +524,7 @@ def sign_request_with_shared_key(request: RawRequest, key: str) -> str:
     return f"SharedKey {storage_account}:{signature}"
 
 
-async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, float]:
+async def get_sas_token(cache_key: tuple[str, str | None]) -> tuple[Any, float]:
     from .globals import config
     from .request import Request, azure_auth_req
 
@@ -573,7 +573,7 @@ async def get_sas_token(cache_key: Tuple[str, Optional[str]]) -> Tuple[Any, floa
     return user_delegation_key, time.time() + AZURE_SAS_TOKEN_EXPIRATION_SECONDS
 
 
-async def generate_signed_url(path: AzurePath) -> Tuple[str, datetime.datetime]:
+async def generate_signed_url(path: AzurePath) -> tuple[str, datetime.datetime]:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/delegate-access-with-shared-access-signature
     # https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas
     # https://docs.microsoft.com/en-us/rest/api/storageservices/service-sas-examples

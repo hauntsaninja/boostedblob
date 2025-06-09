@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional, TypeVar, cast
+from typing import Any, AsyncIterator, Callable, Coroutine, Optional, TypeVar, cast
 
 import boostedblob as bbb
 
@@ -156,7 +156,7 @@ async def lstree(
 
 @sync_with_session
 async def _dud1(path: str) -> None:
-    sizes: Dict[bbb.BasePath, int] = {}
+    sizes: dict[bbb.BasePath, int] = {}
 
     total_count = 0
 
@@ -231,7 +231,7 @@ async def cat(path: str, concurrency: int = DEFAULT_CONCURRENCY) -> None:
 
 @sync_with_session
 async def cp(
-    srcs: List[str], dst: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY
+    srcs: list[str], dst: str, quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY
 ) -> None:
     dst_obj = bbb.BasePath.from_str(dst)
     dst_is_dirlike = dst_obj.is_directory_like() or await bbb.isdir(dst_obj)
@@ -270,7 +270,7 @@ async def cptree(
 
 
 @sync_with_session
-async def rm(paths: List[str], quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
+async def rm(paths: list[str], quiet: bool = False, concurrency: int = DEFAULT_CONCURRENCY) -> None:
     async with bbb.BoostExecutor(concurrency) as executor:
 
         async def remove_wrapper(path: str) -> None:
@@ -404,7 +404,7 @@ complete -o nospace -F _bbb_complete bbb
 
 
 @sync_with_session
-async def complete_command(shell: str, index: int, partial_command: List[str]) -> None:
+async def complete_command(shell: str, index: int, partial_command: list[str]) -> None:
     if shell == "bash":
         # the entire command is passed as a single argument and index is an index into that string
         assert len(partial_command) == 1
@@ -451,12 +451,12 @@ async def complete_command(shell: str, index: int, partial_command: List[str]) -
             raise
 
 
-def parse_options(args: List[str]) -> argparse.Namespace:
+def parse_options(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version=f"boostedblob {bbb.__version__}")
     subparsers = parser.add_subparsers(required=True)
 
-    concurrency_kwargs: Dict[str, Any] = dict(
+    concurrency_kwargs: dict[str, Any] = dict(
         type=int,
         metavar="N",
         default=DEFAULT_CONCURRENCY,
@@ -787,7 +787,7 @@ eval "$(bbb complete init zsh)"
     return parser.parse_args(args)
 
 
-def run_bbb(argv: List[str]) -> None:
+def run_bbb(argv: list[str]) -> None:
     try:
         args = parse_options(argv)
         command = args.__dict__.pop("command")
