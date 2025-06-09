@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Any, AsyncIterable, AsyncIterator, Awaitable, Callable, Dict, List
+from typing import Any, AsyncIterable, AsyncIterator, Awaitable, Callable
 
 import pytest
 
@@ -14,7 +14,7 @@ async def pause():
     await asyncio.sleep(EPSILON)
 
 
-def get_futures_fn(futures: Dict[int, asyncio.Future[int]]) -> Callable[[int], Awaitable[int]]:
+def get_futures_fn(futures: dict[int, asyncio.Future[int]]) -> Callable[[int], Awaitable[int]]:
     """Return a function that we can control the completion of each invocation of."""
     loop = asyncio.get_running_loop()
 
@@ -32,7 +32,7 @@ async def identity(x: int) -> int:
     return x
 
 
-async def collect(it: AsyncIterable[int], results: List[int]) -> None:
+async def collect(it: AsyncIterable[int], results: list[int]) -> None:
     """Collect the results of ``it`` in the ``results`` list."""
     async for i in it:
         results.append(i)

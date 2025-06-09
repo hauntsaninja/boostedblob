@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from typing import (
     Any,
     AsyncIterable,
@@ -8,14 +9,8 @@ from typing import (
     Awaitable,
     Callable,
     Collection,
-    Deque,
     Generic,
     Iterator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
     Union,
 )
@@ -76,10 +71,10 @@ class BoostExecutor:
         # like unnecessary blocking. We could also do something complicated using contextvars, but
         # that would have to be something complicated and would have to use contextvars.
         self.semaphore = asyncio.Semaphore(concurrency - 1)
-        self.boostables: Deque[Boostable[Any]] = Deque()
+        self.boostables: deque[Boostable[Any]] = deque()
 
-        self.waiter: Optional[asyncio.Future[None]] = None
-        self.runner: Optional[asyncio.Task[None]] = None
+        self.waiter: asyncio.Future[None] | None = None
+        self.runner: asyncio.Task[None] | None = None
         self.shutdown: bool = False
 
     async def __aenter__(self) -> BoostExecutor:
@@ -87,7 +82,7 @@ class BoostExecutor:
         return self
 
     async def __aexit__(
-        self, exc_type: Optional[Type[BaseException]], exc_value: Any, traceback: Any
+        self, exc_type: type[BaseException] | None, exc_value: Any, traceback: Any
     ) -> None:
         self.shutdown = True
         if exc_type:
@@ -129,7 +124,7 @@ class BoostExecutor:
         return ret
 
     def filter(
-        self, filter_fn: Optional[Callable[[T], bool]], iterable: BoostUnderlying[T]
+        self, filter_fn: Callable[[T], bool] | None, iterable: BoostUnderlying[T]
     ) -> FilterBoostable[T]:
         ret = FilterBoostable(filter_fn, iterable, self)
         self.boostables.appendleft(ret)
@@ -142,8 +137,8 @@ class BoostExecutor:
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
-        exhausted_boostables: List[Boostable[Any]] = []
-        not_ready_boostables: Deque[Boostable[Any]] = Deque()
+        exhausted_boostables: list[Boostable[Any]] = []
+        not_ready_boostables: deque[Boostable[Any]] = deque()
 
         MIN_TIMEOUT = 0.01
         MAX_TIMEOUT = 0.1
@@ -173,7 +168,7 @@ class BoostExecutor:
                     break
             else:
                 self.boostables = not_ready_boostables
-                not_ready_boostables = Deque()
+                not_ready_boostables = deque()
 
             if self.semaphore.locked():
                 # If we broke out of the inner loop due to a lack of available concurrency, go to
@@ -233,7 +228,7 @@ class Boostable(Generic[T_co]):
     def __init__(self, executor: BoostExecutor) -> None:
         self.executor = executor
 
-    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+    def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         """Start an asyncio task to help speed up this boostable.
 
         Returns NotReady if we can't make use of a boost currently.
@@ -252,7 +247,7 @@ class Boostable(Generic[T_co]):
         """
         pass
 
-    def dequeue(self) -> Union[NotReady, Exhausted, T_co]:
+    def dequeue(self) -> NotReady | Exhausted | T_co:
         """Non-blockingly dequeue a result we have ready.
 
         Returns NotReady if it's not ready to dequeue.
@@ -329,7 +324,7 @@ class MappingBoostable(Boostable[T], Generic[A, T]):
         if self.buffer:
             await asyncio.wait(self.buffer)
 
-    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+    def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         if not self.executor.shutdown and len(self.buffer) > 2 * self.executor.concurrency:
             # if we have a lot of stuff ready to go, apply backpressure by not accepting the boost
             # the main effect of this is to reduce memory usage
@@ -361,14 +356,14 @@ class OrderedMappingBoostable(MappingBoostable[A, T]):
         executor: BoostExecutor,
     ) -> None:
         super().__init__(func, iterable, executor)
-        self.buffer: Deque[asyncio.Task[T]] = Deque()
+        self.buffer: deque[asyncio.Task[T]] = deque()
 
     def enqueue(self, arg: A) -> asyncio.Task[T]:
         task = asyncio.create_task(self.func(arg))
         self.buffer.append(task)
         return task
 
-    def dequeue(self) -> Union[NotReady, T]:
+    def dequeue(self) -> NotReady | T:
         if not self.buffer or not self.buffer[0].done():
             return NotReady()
         task = self.buffer.popleft()
@@ -396,8 +391,8 @@ class UnorderedMappingBoostable(MappingBoostable[A, T]):
         executor: BoostExecutor,
     ) -> None:
         super().__init__(func, iterable, executor)
-        self.buffer: Set[asyncio.Task[T]] = set()
-        self.waiter: Optional[asyncio.Future[asyncio.Task[T]]] = None
+        self.buffer: set[asyncio.Task[T]] = set()
+        self.waiter: asyncio.Future[asyncio.Task[T]] | None = None
 
     def done_callback(self, task: asyncio.Task[T]) -> None:
         if self.waiter and not self.waiter.done():
@@ -409,7 +404,7 @@ class UnorderedMappingBoostable(MappingBoostable[A, T]):
         task.add_done_callback(self.done_callback)
         return task
 
-    def dequeue(self, hint: Optional[asyncio.Task[T]] = None) -> Union[NotReady, T]:
+    def dequeue(self, hint: asyncio.Task[T] | None = None) -> NotReady | T:
         # hint is a task that we suspect is dequeuable, which allows us to skip the linear check
         # against all outstanding tasks in the happy case.
         if hint is not None and hint in self.buffer and hint.done():
@@ -443,7 +438,7 @@ class UnorderedMappingBoostable(MappingBoostable[A, T]):
 class FilterBoostable(Boostable[T]):
     def __init__(
         self,
-        filter_fn: Optional[Callable[[T], bool]],
+        filter_fn: Callable[[T], bool] | None,
         inner: BoostUnderlying[T],
         executor: BoostExecutor,
     ):
@@ -451,12 +446,12 @@ class FilterBoostable(Boostable[T]):
         self.filter_fn = filter_fn or bool
         self.inner = inner
 
-    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+    def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         if isinstance(self.inner, Boostable):
             return self.inner.provide_boost()
         return Exhausted()
 
-    def dequeue(self) -> Union[NotReady, Exhausted, T]:
+    def dequeue(self) -> NotReady | Exhausted | T:
         while True:
             ret = dequeue_underlying(self.inner)
             if isinstance(ret, (NotReady, Exhausted)) or self.filter_fn(ret):
@@ -469,18 +464,18 @@ class FilterBoostable(Boostable[T]):
                 return ret
 
 
-class EnumerateBoostable(Boostable[Tuple[int, T]]):
+class EnumerateBoostable(Boostable[tuple[int, T]]):
     def __init__(self, inner: BoostUnderlying[T], executor: BoostExecutor):
         super().__init__(executor)
         self.inner = inner
         self.index = 0
 
-    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+    def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         if isinstance(self.inner, Boostable):
             return self.inner.provide_boost()
         return Exhausted()
 
-    def dequeue(self) -> Union[NotReady, Exhausted, Tuple[int, T]]:
+    def dequeue(self) -> NotReady | Exhausted | tuple[int, T]:
         inner_ret = dequeue_underlying(self.inner)
         if isinstance(inner_ret, (NotReady, Exhausted)):
             return inner_ret
@@ -488,7 +483,7 @@ class EnumerateBoostable(Boostable[Tuple[int, T]]):
         self.index += 1
         return ret
 
-    async def blocking_dequeue(self) -> Tuple[int, T]:
+    async def blocking_dequeue(self) -> tuple[int, T]:
         inner_ret = await blocking_dequeue_underlying(self.inner)
         ret = (self.index, inner_ret)
         self.index += 1
@@ -499,15 +494,15 @@ class EageriseBoostable(Boostable[T]):
     def __init__(self, iterable: AsyncIterator[T], executor: BoostExecutor) -> None:
         super().__init__(executor)
         self.iterable = iterable
-        self.buffer: Deque[asyncio.Task[T]] = Deque()
+        self.buffer: deque[asyncio.Task[T]] = deque()
         self.done: bool = False
 
-        self.waiter_buffer: Optional[asyncio.Future[None]] = None
-        self.waiter_backpressure: Optional[asyncio.Future[None]] = None
+        self.waiter_buffer: asyncio.Future[None] | None = None
+        self.waiter_backpressure: asyncio.Future[None] | None = None
 
         self.buffer_task = asyncio.create_task(self.eagerly_buffer())
 
-    def provide_boost(self) -> Union[NotReady, Exhausted, asyncio.Task[Any]]:
+    def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         # If we always returned Exhausted, that would cause MappingBoostable to in turn return
         # Exhausted, if it couldn't currently make use of a boost.
         return Exhausted() if self.done else NotReady()
@@ -515,7 +510,7 @@ class EageriseBoostable(Boostable[T]):
     async def wait(self) -> None:
         await self.buffer_task
 
-    def dequeue(self) -> Union[NotReady, Exhausted, T]:
+    def dequeue(self) -> NotReady | Exhausted | T:
         if not self.buffer:
             return Exhausted() if self.done else NotReady()
 
@@ -577,7 +572,7 @@ class EageriseBoostable(Boostable[T]):
 BoostUnderlying = Union[Iterator[T], Boostable[T]]
 
 
-def dequeue_underlying(iterable: BoostUnderlying[T]) -> Union[NotReady, Exhausted, T]:
+def dequeue_underlying(iterable: BoostUnderlying[T]) -> NotReady | Exhausted | T:
     """Like ``dequeue``, but abstracts over a BoostUnderlying."""
     if isinstance(iterable, Boostable):
         return iterable.dequeue()

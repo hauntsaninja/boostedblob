@@ -1,3 +1,42 @@
+[project]
+name = "boostedblob"
+version = "0.15.6"
+description = "Command line tool and async library to perform basic file operations on local paths, Google Cloud Storage paths and Azure Blob Storage paths."
+authors = [{ name = "Shantanu Jain", email = "hauntsaninja@gmail.com" }]
+requires-python = ">=3.9"
+readme = "README.md"
+license = "MIT"
+dependencies = [
+    "aiohttp>=3.7.2",
+    "lxml>=4.9.1",
+    "pycryptodomex>=3.9",
+    "uvloop>=0.16.0 ; sys_platform != 'win32'",
+]
+
+[project.scripts]
+bbb = "boostedblob.__main__:main"
+
+[dependency-groups]
+test = [
+    "pytest>=7.2.0",
+    "pytest-asyncio>=0.20.1",
+    "pytest-cov>=4.0.0",
+    "blobfile>=2.0.0",
+    "urllib3",
+    "filelock",
+]
+lint = [
+    "ipdb",
+    "black>=25,<26",
+    "isort>=5.11.1,<6",
+    "ruff>=0.11",
+]
+type = ["mypy==1.16.0"]
+
+[build-system]
+requires = ["flit_core>=3.4"]
+build-backend = "flit_core.buildapi"
+
 [tool.black]
 line-length = 100
 skip-magic-trailing-comma = true
@@ -21,7 +60,7 @@ skip_gitignore = true
 [tool.mypy]
 strict = true
 no_warn_return_any = true
-python_version = "3.8"
+python_version = "3.9"
 show_error_codes = true
 enable_error_code = ["redundant-expr", "truthy-bool"]
 
@@ -38,48 +77,3 @@ follow_imports = "skip"
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "C4", "PIE", "PLE"]
 ignore = ["E2", "E501", "E741", "C408", "PIE790"]
-
-[tool.poetry]
-name = "boostedblob"
-version = "0.15.6"
-description = """
-Command line tool and async library to perform basic file operations on local \
-paths, Google Cloud Storage paths and Azure Blob Storage paths.\
-"""
-authors = ["Shantanu Jain <hauntsaninja@gmail.com>"]
-license = "MIT"
-readme = "README.md"
-include = ["boostedblob/py.typed"]
-
-[tool.poetry.dependencies]
-python = ">=3.8"
-aiohttp = ">=3.7.2"
-lxml = ">=4.9.1"
-pycryptodomex = ">=3.9"
-# uvloop is not strictly necessary
-uvloop = { version = ">=0.16.0", markers = "sys_platform != 'win32'" }
-
-[tool.poetry.group.test.dependencies]
-pytest = ">=7.2.0"
-pytest-asyncio = ">=0.20.1"
-pytest-cov = ">=4.0.0"
-blobfile = ">=2.0.0"
-# poetry fails to resolve blobfile's dependencies
-urllib3 = "*"
-filelock = "*"
-
-[tool.poetry.group.lint.dependencies]
-ipdb = "*"
-black = ">=24.2.0,<25"
-isort = "^5.11.1"
-ruff = "^0.2.2"
-
-[tool.poetry.group.type.dependencies]
-mypy = "==1.8.0"
-
-[tool.poetry.scripts]
-bbb = 'boostedblob.__main__:main'
-
-[build-system]
-requires = ["poetry-core>=1.1"]
-build-backend = "poetry.core.masonry.api"

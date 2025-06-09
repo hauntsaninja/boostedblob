@@ -10,18 +10,7 @@ import sys
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Dict,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-)
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 
 import aiohttp
 
@@ -178,7 +167,7 @@ class Request:
 
 
 class RequestFailure(Exception):
-    def __init__(self, reason: str, request: Request, status: Optional[int] = None):
+    def __init__(self, reason: str, request: Request, status: int | None = None):
         self.reason = reason
         self.request = request
         self.status = status
@@ -221,7 +210,7 @@ async def execute_retrying_read(request: Request) -> bytes:
 # ==============================
 
 
-async def azure_auth_req(request: Request, *, auth: Optional[Tuple[str, str]] = None) -> RawRequest:
+async def azure_auth_req(request: Request, *, auth: tuple[str, str] | None = None) -> RawRequest:
     """Return a Request that can be submitted to Azure Blob."""
     u = urllib.parse.urlparse(request.url)
     account = u.netloc.split(".")[0]
@@ -262,7 +251,7 @@ async def azure_auth_req(request: Request, *, auth: Optional[Tuple[str, str]] = 
     return result
 
 
-async def google_auth_req(request: Request, *, access_token: Optional[str] = None) -> RawRequest:
+async def google_auth_req(request: Request, *, access_token: str | None = None) -> RawRequest:
     """Return a Request that can be submitted to GCS."""
     if access_token is None:
         access_token = await config.google_access_token_manager.get_token(key="")
@@ -304,7 +293,7 @@ async def xml_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
         params["marker"] = next_marker
 
 
-async def json_token_page_iterator(request: Request) -> AsyncIterator[Dict[str, Any]]:
+async def json_token_page_iterator(request: Request) -> AsyncIterator[dict[str, Any]]:
     params = dict(request.params)
     while True:
         request = Request(
@@ -351,7 +340,7 @@ def exponential_sleep_generator(
         base = min(base, maximum)
 
 
-_hostname_check_cache: Dict[str, Tuple[float, bool]] = {}
+_hostname_check_cache: dict[str, tuple[float, bool]] = {}
 
 
 async def _bad_hostname_check(hostname: str) -> bool:

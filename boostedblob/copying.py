@@ -3,7 +3,7 @@ import itertools
 import os
 import shutil
 import sys
-from typing import Any, AsyncIterator, Dict, Optional, Tuple, TypeVar, Union
+from typing import Any, AsyncIterator, Optional, TypeVar, Union
 
 from . import azure_auth
 from .boost import BoostExecutor, consume
@@ -212,7 +212,7 @@ async def _azure_cloud_copyfile_via_block_urls(
     upload_id = get_upload_id()
     max_block_index = -1
 
-    async def upload_chunk(index_byte_range: Tuple[int, ByteRange]) -> None:
+    async def upload_chunk(index_byte_range: tuple[int, ByteRange]) -> None:
         unordered_index, byte_range = index_byte_range
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
         assert unordered_index < AZURE_BLOCK_COUNT_LIMIT
@@ -316,7 +316,7 @@ async def _google_cloud_copyfile(
     if not overwrite:
         if await exists(dst):
             raise FileExistsError(dst)
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
 
     sleep = exponential_sleep_generator(
         initial=config.backoff_initial,

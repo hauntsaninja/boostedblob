@@ -1,10 +1,10 @@
-from typing import Any, Dict, Type
+from typing import Any
 
 import pytest
 
 from boostedblob.path import AzurePath, BasePath, GooglePath, LocalPath
 
-PATHS: Dict[Type[BasePath], Any] = {
+PATHS: dict[type[BasePath], Any] = {
     AzurePath: AzurePath("shantanutest", "container", "blob"),
     GooglePath: GooglePath("shantanutest", "blob"),
     LocalPath: LocalPath("blob"),
