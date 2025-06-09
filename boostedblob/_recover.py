@@ -26,7 +26,7 @@ def _xml_to_dict(element: etree.Element) -> Any:
 
 
 async def _listtree_versions_snapshots(
-    prefix: Union[str, AzurePath]
+    prefix: Union[str, AzurePath],
 ) -> dict[AzurePath, list[dict[str, Any]]]:
     if isinstance(prefix, str):
         prefix = AzurePath.from_str(prefix)
