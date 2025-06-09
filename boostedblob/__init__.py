@@ -35,3 +35,9 @@ from .path import isdir as isdir
 from .path import isfile as isfile
 from .path import stat as stat
 from .syncing import sync as sync
+
+# isort: off
+from .path_registry import _register_plugins
+
+_register_plugins()
+# isort: on
