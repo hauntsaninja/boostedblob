@@ -3,12 +3,8 @@
 ## Setup
 
 To get started developing `boostedblob`:
-- Install [poetry](https://python-poetry.org/)
-    - https://github.com/python-poetry/poetry#installation
-    - Alternatively, `pipx install poetry` works well
-    - If you've already installed poetry, make sure you're using poetry 1.2 or newer
-- Run `poetry install`, to create a virtualenv with all the dependencies you need
-- Run `poetry shell` to get a shell with the virtualenv activated
+- Install [uv](https://docs.astral.sh/uv/)
+- Run `uv sync`
 
 ## Running tests
 
