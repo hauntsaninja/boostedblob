@@ -16,7 +16,7 @@ def _available_plugin_modules() -> Sequence[str]:
     # - it's a separate top-level package because namespace subpackages of non-namespace
     #   packages don't quite do what you want with editable installs
     try:
-        import boostedblob_ext
+        import boostedblob_ext  # type: ignore[import, unused-ignore]
     except ImportError:
         return []
 
