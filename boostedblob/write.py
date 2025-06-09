@@ -289,7 +289,7 @@ async def _azure_write_stream_unordered(
     block_list = []
 
     async def upload_chunk(
-        index_chunk_byte_range: tuple[int, tuple[bytes | bytearray | memoryview, ByteRange]]
+        index_chunk_byte_range: tuple[int, tuple[bytes | bytearray | memoryview, ByteRange]],
     ) -> None:
         unordered_index, (chunk, byte_range) = index_chunk_byte_range
         # https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-list#remarks
