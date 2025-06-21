@@ -18,6 +18,9 @@ from .globals import config
 from .xml import dict_to_xml, etree
 
 
+class HostNotFoundError(FileNotFoundError): ...
+
+
 @dataclass(frozen=True)
 class RawRequest:
     method: str
