@@ -223,7 +223,7 @@ def _create_session() -> aiohttp.ClientSession:
     # While the sleep suggested doesn't work, it does indicate that this is a problem for
     # aiohttp in general.
     connector = aiohttp.TCPConnector(limit=1024, ttl_dns_cache=60)
-    return aiohttp.ClientSession(connector=connector)
+    return aiohttp.ClientSession(connector=connector, trust_env=True)
 
 
 @contextlib.asynccontextmanager
