@@ -100,6 +100,27 @@ def test_path_methods():
                 assert not subsubpath.is_relative_to(other_path)
 
 
+def test_azure_path_concat():
+    path = AzurePath.from_str("az://a") / "container"
+    assert path.container == "container"
+    assert str(path) == "az://a/container/"
+
+    path = AzurePath.from_str("az://a") / "container/blob"
+    assert path.container == "container"
+    assert path.blob == "blob"
+    assert str(path) == "az://a/container/blob"
+
+    path = AzurePath.from_str("az://a/container") / "blob"
+    assert path.container == "container"
+    assert path.blob == "blob"
+    assert str(path) == "az://a/container/blob"
+
+    path = AzurePath.from_str("az://a/container/blob") / ""
+    assert path.container == "container"
+    assert path.blob == "blob/"
+    assert str(path) == "az://a/container/blob/"
+
+
 def test_local_path_parent():
     assert LocalPath("asdf").parent == LocalPath(".")
     assert LocalPath(".").parent == LocalPath(".")
