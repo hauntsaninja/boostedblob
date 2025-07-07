@@ -187,6 +187,9 @@ class AzurePath(CloudPath):
         )
 
     def __truediv__(self, relative_path: str) -> AzurePath:
+        if not self.container and not self.blob:
+            container, _, blob = relative_path.partition("/")
+            return AzurePath(self.account, container, blob)
         return AzurePath(self.account, self.container, os.path.join(self.blob, relative_path))
 
     def __str__(self) -> str:
