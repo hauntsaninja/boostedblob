@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.16.0]
+
+- Plugin support
+- Respect proxy env vars
+- Improve join logic for Azure paths
+- Drop support for Python 3.8
+- Improve type annotations
+- Various changes to development
+
 ## [v0.15.6]
 - Treat `EAI_NODATA` similarly to `EAI_NONAME` in DNS retry logic
 - Use rename when writing to token cache

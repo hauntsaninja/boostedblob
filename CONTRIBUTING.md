@@ -42,5 +42,7 @@ To make a new release for `boostedblob`:
 - Update the changelog
 - Update the version in `pyproject.toml`
 - Update the version in `boostedblob/__init__.py`
-- Run `poetry publish --build`
+- Run `rm -rf build dist`
+- Run `uv build`
+- Run `uvx twine upload dist/*` (or `uv publish`)
 - Tag the release on Github

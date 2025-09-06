@@ -1,6 +1,6 @@
 [project]
 name = "boostedblob"
-version = "0.15.6"
+version = "0.16.0"
 description = "Command line tool and async library to perform basic file operations on local paths, Google Cloud Storage paths and Azure Blob Storage paths."
 authors = [{ name = "Shantanu Jain", email = "hauntsaninja@gmail.com" }]
 requires-python = ">=3.9"
