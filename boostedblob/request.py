@@ -176,7 +176,14 @@ class RequestFailure(Exception):
         return f"Reason: {self.reason}\nRequest: {self.request}\nStatus: {self.status}"
 
 
-async def execute_retrying_read(request: Request) -> bytes:
+async def execute_retrying_read(request: Request) -> tuple[aiohttp.ClientResponse, bytes]:
+    """Executes the request and reads the full body, retrying if needed.
+
+    This helper method ensures that we retry any errors that might occur while
+    reading the body using exponential backoff with jitter.
+
+    Returns (response object, full content of the body).
+    """
     # Retrying aiohttp.ServerTimeoutError is pretty straightforward
     # ClientPayloadError might be an aiohttp bug, see:
     # https://github.com/aio-libs/aiohttp/issues/4581
@@ -190,7 +197,8 @@ async def execute_retrying_read(request: Request) -> bytes:
     ):
         try:
             async with request.execute() as resp:
-                return await resp.read()
+                body = await resp.read()
+                return resp, body
         except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError) as error:
             if attempt >= config.retry_limit:
                 raise
@@ -282,7 +290,7 @@ async def xml_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
             failure_exceptions=request.failure_exceptions,
             auth=request.auth,
         )
-        body = await execute_retrying_read(request)
+        _, body = await execute_retrying_read(request)
 
         result = etree.fromstring(body)
         yield result

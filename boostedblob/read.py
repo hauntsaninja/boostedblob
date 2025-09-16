@@ -42,12 +42,20 @@ async def read_byte_range(path: BasePath | BlobPath | str, byte_range: OptByteRa
     raise ValueError(f"Unsupported path: {path}")
 
 
-@read_byte_range.register  # type: ignore
-async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
+def _azure_get_blob_request(
+    path: AzurePath, byte_range: OptByteRange, speculative: bool = False
+) -> Request:
     range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
-    success_codes = (206,) if range_header else (200,)
-    request = Request(
+    success_codes = [200]
+    if range_header:
+        success_codes.append(206)
+    if speculative:
+        # We're not sure if the ranged read will succeed; if we have a zero-byte
+        # blob we'll get a 416 Range Not Satisfiable error.
+        assert range_header, "Speculative read must have a range header"
+        success_codes.append(416)
+    return Request(
         method="GET",
         url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
         headers=range_header,
@@ -55,7 +63,13 @@ async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> b
         failure_exceptions={404: FileNotFoundError(path)},
         auth=azure_auth_req,
     )
-    return await execute_retrying_read(request)
+
+
+@read_byte_range.register  # type: ignore
+async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
+    request = _azure_get_blob_request(path, byte_range)
+    _, body = await execute_retrying_read(request)
+    return body
 
 
 @read_byte_range.register  # type: ignore
@@ -72,7 +86,8 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
         failure_exceptions={404: FileNotFoundError(path)},
         auth=google_auth_req,
     )
-    return await execute_retrying_read(request)
+    _, body = await execute_retrying_read(request)
+    return body
 
 
 @read_byte_range.register  # type: ignore
@@ -149,6 +164,36 @@ async def _cloud_read_stream(
     # Doing that would stream data as we needed it, which is a little too lazy for our purposes
     chunks = executor.map_ordered(lambda byte_range: read_byte_range(path, byte_range), byte_ranges)
     return chunks
+
+
+@read_stream.register  # type: ignore
+async def _azure_read_stream(
+    path: AzurePath, executor: BoostExecutor, size: int | None = None
+) -> BoostUnderlying[bytes]:
+    chunk_size = config.chunk_size
+    request = _azure_get_blob_request(path, (None, chunk_size), speculative=True)
+    resp, first_chunk = await execute_retrying_read(request)
+    if resp.status == 416:
+        # If the file is completely empty, we'll get HTTP 416 Range Not
+        # Satisfiable.
+        return iter([])
+
+    size = int(resp.headers["Content-Range"].split("/")[1])
+
+    if len(first_chunk) == size:
+        return iter([first_chunk])
+
+    assert len(first_chunk) < size
+    byte_ranges = itertools.zip_longest(
+        range(0, size, chunk_size), range(chunk_size, size, chunk_size), fillvalue=size
+    )
+
+    async def _read_chunk(byte_range: ByteRange) -> bytes:
+        if byte_range[0] == 0:
+            return first_chunk
+        return await read_byte_range(path, byte_range)
+
+    return executor.map_ordered(_read_chunk, byte_ranges)
 
 
 @read_stream.register  # type: ignore
