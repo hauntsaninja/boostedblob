@@ -33,3 +33,22 @@ def test_xml():
         b"<?xml version='1.0' encoding='utf-8'?>\n"
         b"<KeyInfo><Start>2022-09-02</Start><Expiry>2022-09-08</Expiry></KeyInfo>"
     )
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_default_user_agent() -> None:
+    session = bbb.globals.config.session
+    assert session.headers["User-Agent"] == bbb.globals._default_user_agent()
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_user_agent_configurable() -> None:
+    custom = "custom-agent"
+    with bbb.globals.configure(user_agent=custom):
+        session = bbb.globals.config.session
+        assert session.headers["User-Agent"] == custom
+
+    session = bbb.globals.config.session
+    assert session.headers["User-Agent"] == bbb.globals._default_user_agent()

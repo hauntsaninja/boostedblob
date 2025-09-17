@@ -5,6 +5,7 @@ import contextlib
 import functools
 import json
 import os
+import platform
 import sys
 import time
 import uuid
@@ -14,7 +15,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, T
 
 import aiohttp
 
-from . import azure_auth, google_auth
+from . import __version__, azure_auth, google_auth
 
 MB = 2**20
 
@@ -111,6 +112,13 @@ class TokenManager(Generic[T]):
                 print(f"[boostedblob] Error while dumping token cache: {e}", file=sys.stderr)
 
 
+def _default_user_agent() -> str:
+    return (
+        f"boostedblob/{__version__} "
+        f"(Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
+    )
+
+
 @dataclass
 class Config:
     # Avoid the default executor because https://bugs.python.org/issue35279
@@ -120,6 +128,8 @@ class Config:
     storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
 
     chunk_size: int = 16 * MB
+
+    user_agent: str | None = field(default_factory=_default_user_agent)
 
     connect_timeout: float = 20.0
     read_timeout: float = 60.0
@@ -223,7 +233,10 @@ def _create_session() -> aiohttp.ClientSession:
     # While the sleep suggested doesn't work, it does indicate that this is a problem for
     # aiohttp in general.
     connector = aiohttp.TCPConnector(limit=1024, ttl_dns_cache=60)
-    return aiohttp.ClientSession(connector=connector, trust_env=True)
+    headers = None
+    if config.user_agent is not None:
+        headers = {"User-Agent": config.user_agent}
+    return aiohttp.ClientSession(connector=connector, trust_env=True, headers=headers)
 
 
 @contextlib.asynccontextmanager
