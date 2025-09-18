@@ -48,6 +48,21 @@ async def test_read_write_many_chunks(any_dir):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
+async def test_read_write_empty(any_dir):
+    with bbb.globals.configure(chunk_size=1024):
+        async with bbb.BoostExecutor(10) as e:
+            # test reading and writing an empty stream
+            await bbb.write.write_stream(any_dir / "empty", iter([]), e)
+            stream = await bbb.read.read_stream(any_dir / "empty", e)
+            read_chunks = []
+            async for buf in bbb.boost.iter_underlying(stream):
+                read_chunks.append(buf)
+            assert len(read_chunks) == 0
+            assert b"".join(read_chunks) == b""
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
 async def test_concurrent_write(any_dir):
     async with bbb.BoostExecutor(10) as e:
         contents = [b"abcd" * 64 * 1024, b"efgh" * 64 * 1024, b"ijkl" * 64 * 1024]
