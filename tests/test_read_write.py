@@ -48,17 +48,13 @@ async def test_read_write_many_chunks(any_dir):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_read_write_empty(any_dir):
-    with bbb.globals.configure(chunk_size=1024):
-        async with bbb.BoostExecutor(10) as e:
-            # test reading and writing an empty stream
-            await bbb.write.write_stream(any_dir / "empty", iter([]), e)
-            stream = await bbb.read.read_stream(any_dir / "empty", e)
+async def test_read_not_found(any_dir):
+    async with bbb.BoostExecutor(10) as e:
+        with pytest.raises(FileNotFoundError):
+            stream = await bbb.read.read_stream(any_dir / "not_found", e)
             read_chunks = []
             async for buf in bbb.boost.iter_underlying(stream):
                 read_chunks.append(buf)
-            assert len(read_chunks) == 0
-            assert b"".join(read_chunks) == b""
 
 
 @pytest.mark.asyncio
