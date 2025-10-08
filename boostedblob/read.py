@@ -173,8 +173,11 @@ async def _cloud_read_stream(
 async def _azure_read_stream(
     path: AzurePath, executor: BoostExecutor, size: int | None = None
 ) -> BoostUnderlying[bytes]:
-    chunk_size = config.chunk_size
-    request = _azure_get_blob_request(path, (None, chunk_size), speculative=True)
+    # The implementation of _cloud_read_stream actually works perfectly fine for Azure
+    # However, as an optimisation, we can skip the initial request for the size of the blob by
+    # speculatively reading the first chunk and checking the header size. This happens to also make
+    # Azure much happier.
+    request = _azure_get_blob_request(path, (0, config.chunk_size), speculative=True)
     resp, first_chunk = await execute_retrying_read_with_response(request)
     if resp.status == 416:
         # If the file is completely empty, we'll get HTTP 416 Range Not
@@ -188,15 +191,18 @@ async def _azure_read_stream(
 
     assert len(first_chunk) < size
     byte_ranges = itertools.zip_longest(
-        range(0, size, chunk_size), range(chunk_size, size, chunk_size), fillvalue=size
+        range(0, size, config.chunk_size),
+        range(config.chunk_size, size, config.chunk_size),
+        fillvalue=size,
     )
 
-    async def _read_chunk(byte_range: ByteRange) -> bytes:
+    async def _maybe_read_byte_range(byte_range: ByteRange) -> bytes:
         if byte_range[0] == 0:
             return first_chunk
         return await read_byte_range(path, byte_range)
 
-    return executor.map_ordered(_read_chunk, byte_ranges)
+    chunks = executor.map_ordered(_maybe_read_byte_range, byte_ranges)
+    return chunks
 
 
 @read_stream.register  # type: ignore
