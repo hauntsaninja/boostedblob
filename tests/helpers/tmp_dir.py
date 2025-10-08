@@ -88,3 +88,9 @@ def any_dir(request):
 def other_any_dir(request):
     with tmp_dir(request.param) as any_dir:
         yield any_dir
+
+
+@pytest.fixture(params=["azure", "google"])
+def cloud_dir(request):
+    with tmp_dir(request.param) as cloud_dir:
+        yield cloud_dir

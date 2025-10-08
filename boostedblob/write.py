@@ -318,6 +318,33 @@ async def _google_write_stream_unordered(
 
 
 # ==============================
+# write_chunked
+# ==============================
+
+
+@pathdispatch
+async def write_chunked(
+    path: CloudPath,
+    data: bytes | bytearray | memoryview,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+) -> None:
+    """Write ``data`` to ``path`` using ``write_stream``.
+
+    :param path: The path to write to.
+    :param data: The data to write.
+    :param overwrite: If False, raises if the path already exists.
+
+    """
+    data_mv = memoryview(data)
+    stream = (
+        data_mv[offset : offset + config.chunk_size]
+        for offset in range(0, len(data_mv), config.chunk_size)
+    )
+    await write_stream(path, stream, executor, overwrite=overwrite)
+
+
+# ==============================
 # helpers
 # ==============================
 

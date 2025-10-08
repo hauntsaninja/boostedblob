@@ -59,7 +59,6 @@ async def test_read_write_many_chunks(any_dir):
         async with bbb.BoostExecutor(10) as e:
             # Google requires chunks to be multiples of 256 KB, except for the last chunk.
             contents = [os.urandom(256 * 1024), os.urandom(42)]
-            # test reading and writing an empty stream
             await bbb.write.write_stream(any_dir / "big", iter(contents), e)
             stream = await bbb.read.read_stream(any_dir / "big", e)
             read_chunks = []
@@ -67,6 +66,21 @@ async def test_read_write_many_chunks(any_dir):
                 read_chunks.append(buf)
             assert len(read_chunks) == 257
             assert b"".join(contents) == b"".join(read_chunks)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_read_write_chunked(cloud_dir):
+    with bbb.globals.configure(chunk_size=1024):
+        async with bbb.BoostExecutor(10) as e:
+            contents = os.urandom(256 * 1024 + 42)
+            await bbb.write.write_chunked(cloud_dir / "big", contents, e)
+            stream = await bbb.read.read_stream(cloud_dir / "big", e)
+            read_chunks = []
+            async for buf in bbb.boost.iter_underlying(stream):
+                read_chunks.append(buf)
+            assert len(read_chunks) == 257
+            assert contents == b"".join(read_chunks)
 
 
 @pytest.mark.asyncio
