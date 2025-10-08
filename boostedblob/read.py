@@ -49,7 +49,7 @@ async def read_byte_range(path: BasePath | BlobPath | str, byte_range: OptByteRa
 
 
 def _azure_get_blob_request(
-    path: AzurePath, byte_range: OptByteRange, speculative: bool = False
+    path: AzurePath, byte_range: OptByteRange, *, speculative: bool = False
 ) -> Request:
     range_str = byte_range_to_str(byte_range)
     range_header = {"Range": range_str} if range_str is not None else {}
