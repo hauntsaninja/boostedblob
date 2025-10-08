@@ -43,6 +43,8 @@ async def write_single(
 ) -> None:
     """Write ``data`` to ``path`` in a single request.
 
+    For anything not small, prefer using `write_chunked` instead.
+
     :param path: The path to write to.
     :param data: The data to write.
     :param overwrite: If False, raises if the path already exists.
@@ -55,6 +57,12 @@ async def write_single(
 async def _azure_write_single(
     path: AzurePath, data: bytes | bytearray | memoryview, overwrite: bool = False
 ) -> None:
+    if len(data) > 2**30:
+        raise ValueError(
+            f"Data is too large to write in a single request: {len(data):_} bytes. "
+            "Use `write_chunked` instead."
+        )
+
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
@@ -74,6 +82,12 @@ async def _azure_write_single(
 async def _google_write_single(
     path: GooglePath, data: bytes | bytearray | memoryview, overwrite: bool = False
 ) -> None:
+    if len(data) > 2**30:
+        raise ValueError(
+            f"Data is too large to write in a single request: {len(data):_} bytes. "
+            "Use `write_chunked` instead."
+        )
+
     if not overwrite:
         if await exists(path):
             raise FileExistsError(path)
