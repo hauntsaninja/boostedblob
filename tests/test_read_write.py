@@ -22,7 +22,6 @@ async def test_google_chunking():
 @bbb.ensure_session
 async def test_read_write_empty(any_dir):
     async with bbb.BoostExecutor(10) as e:
-        # test reading and writing an empty stream
         await bbb.write.write_stream(any_dir / "empty", iter([]), e)
         stream = await bbb.read.read_stream(any_dir / "empty", e)
         async for _ in bbb.boost.iter_underlying(stream):
@@ -37,6 +36,20 @@ async def test_read_not_found(any_dir):
             stream = await bbb.read.read_stream(any_dir / "not_found", e)
             async for _buf in bbb.boost.iter_underlying(stream):
                 pass
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_read_write_single_chunk(any_dir):
+    async with bbb.BoostExecutor(10) as e:
+        contents = [b"a"]
+        await bbb.write.write_stream(any_dir / "small", iter(contents), e)
+        stream = await bbb.read.read_stream(any_dir / "small", e)
+        chunks = []
+        async for buf in bbb.boost.iter_underlying(stream):
+            chunks.append(buf)
+        assert len(chunks) == 1
+        assert chunks[0] == b"a"
 
 
 @pytest.mark.asyncio
