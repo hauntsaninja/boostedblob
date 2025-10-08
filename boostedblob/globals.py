@@ -119,7 +119,7 @@ class Config:
     debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
     storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
 
-    chunk_size: int = 16 * MB
+    chunk_size: int = 32 * MB
 
     connect_timeout: float = 20.0
     read_timeout: float = 60.0
