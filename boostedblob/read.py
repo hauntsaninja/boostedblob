@@ -59,7 +59,6 @@ def _azure_get_blob_request(
     if speculative:
         # We're not sure if the ranged read will succeed; if we have a zero-byte
         # blob we'll get a 416 Range Not Satisfiable error.
-        assert range_header, "Speculative read must have a range header"
         success_codes.append(416)
     return Request(
         method="GET",
