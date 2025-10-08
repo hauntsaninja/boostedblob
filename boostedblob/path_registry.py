@@ -2,7 +2,7 @@ import functools
 import importlib
 import pkgutil
 import urllib.parse
-from typing import Optional, Sequence
+from typing import Sequence
 
 from .path import CloudPath
 
@@ -40,7 +40,7 @@ def _register_plugins() -> None:
             plugins.append(mod.ExportedCloudPath)
 
 
-def try_get_cloud_path_type(url: urllib.parse.ParseResult) -> Optional[type[CloudPath]]:
+def try_get_cloud_path_type(url: urllib.parse.ParseResult) -> type[CloudPath] | None:
     for plugin in plugins:
         if plugin.is_cloud_path(url):
             return plugin

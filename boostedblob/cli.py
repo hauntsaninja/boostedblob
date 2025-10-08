@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from typing import Any, AsyncIterator, Callable, Coroutine, Optional, TypeVar, cast
+from typing import Any, AsyncIterator, Callable, Coroutine, TypeVar, cast
 
 import boostedblob as bbb
 
@@ -55,7 +55,7 @@ def format_size(num: float, suffix: str = "B") -> str:
     return f"{num:.1f} Yi{suffix}"
 
 
-def format_path_relative(path: bbb.BasePath, relative_to: Optional[bbb.BasePath]) -> str:
+def format_path_relative(path: bbb.BasePath, relative_to: bbb.BasePath | None) -> str:
     if relative_to is None:
         return str(path)
     if relative_to == path:
@@ -64,7 +64,7 @@ def format_path_relative(path: bbb.BasePath, relative_to: Optional[bbb.BasePath]
 
 
 def format_long_entry(
-    entry: bbb.listing.DirEntry, human_readable: bool, relative_to: Optional[bbb.BasePath]
+    entry: bbb.listing.DirEntry, human_readable: bool, relative_to: bbb.BasePath | None
 ) -> str:
     size = (
         (format_size(entry.stat.size) if human_readable else entry.stat.size) if entry.stat else ""
@@ -75,9 +75,7 @@ def format_long_entry(
 
 
 async def print_long(
-    it: AsyncIterator[bbb.listing.DirEntry],
-    human_readable: bool,
-    relative_to: Optional[bbb.BasePath],
+    it: AsyncIterator[bbb.listing.DirEntry], human_readable: bool, relative_to: bbb.BasePath | None
 ) -> None:
     total = 0
     num_files = 0
@@ -329,7 +327,7 @@ async def sync(
     src: str,
     dst: str,
     delete: bool = False,
-    exclude: Optional[str] = None,
+    exclude: str | None = None,
     quiet: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:

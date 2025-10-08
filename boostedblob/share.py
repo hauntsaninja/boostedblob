@@ -1,13 +1,12 @@
 import datetime
 import os
-from typing import Optional, Union
 
 from . import azure_auth, google_auth
 from .path import AzurePath, BasePath, BlobPath, GooglePath, LocalPath, pathdispatch
 
 
 @pathdispatch
-async def get_url(path: Union[BasePath, BlobPath, str]) -> tuple[str, Optional[datetime.datetime]]:
+async def get_url(path: BasePath | BlobPath | str) -> tuple[str, datetime.datetime | None]:
     raise ValueError(f"Unsupported path: {path}")
 
 

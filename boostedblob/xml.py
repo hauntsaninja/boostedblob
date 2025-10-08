@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
     import xml.etree.ElementTree as _etree
@@ -12,7 +12,7 @@ def dict_to_xml(dictionary: Mapping[str, Any]) -> bytes:
     if len(dictionary) != 1:
         raise ValueError("Document must have exactly one root")
 
-    def inner(parent_key: str, value: Any, tree: Optional[etree.Element]) -> None:
+    def inner(parent_key: str, value: Any, tree: etree.Element | None) -> None:
         # Child is responsible for adding the parent tag to tree
         if isinstance(value, dict):
             current = root if tree is None else etree.SubElement(tree, parent_key)
