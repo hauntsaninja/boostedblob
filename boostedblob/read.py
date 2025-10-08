@@ -20,7 +20,13 @@ from .path import (
     getsize,
     pathdispatch,
 )
-from .request import Request, azure_auth_req, execute_retrying_read, google_auth_req
+from .request import (
+    Request,
+    azure_auth_req,
+    execute_retrying_read,
+    execute_retrying_read_with_response,
+    google_auth_req,
+)
 
 ByteRange = tuple[int, int]
 OptByteRange = tuple[Optional[int], Optional[int]]
@@ -68,8 +74,7 @@ def _azure_get_blob_request(
 @read_byte_range.register  # type: ignore
 async def _azure_read_byte_range(path: AzurePath, byte_range: OptByteRange) -> bytes:
     request = _azure_get_blob_request(path, byte_range)
-    _, body = await execute_retrying_read(request)
-    return body
+    return await execute_retrying_read(request)
 
 
 @read_byte_range.register  # type: ignore
@@ -86,8 +91,7 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
         failure_exceptions={404: FileNotFoundError(path)},
         auth=google_auth_req,
     )
-    _, body = await execute_retrying_read(request)
-    return body
+    return await execute_retrying_read(request)
 
 
 @read_byte_range.register  # type: ignore
@@ -172,7 +176,7 @@ async def _azure_read_stream(
 ) -> BoostUnderlying[bytes]:
     chunk_size = config.chunk_size
     request = _azure_get_blob_request(path, (None, chunk_size), speculative=True)
-    resp, first_chunk = await execute_retrying_read(request)
+    resp, first_chunk = await execute_retrying_read_with_response(request)
     if resp.status == 416:
         # If the file is completely empty, we'll get HTTP 416 Range Not
         # Satisfiable.
