@@ -29,7 +29,7 @@ async def test_isdir_isfile_exists(any_dir):
     helpers.create_file(any_dir / "alpha" / "bravo")
 
     assert (await bbb.isdir(any_dir / "alpha")) is True
-    assert (await bbb.isfile(any_dir / "alpgha")) is False
+    assert (await bbb.isfile(any_dir / "alpha")) is False
     assert (await bbb.exists(any_dir / "alpha")) is True
 
     assert (await bbb.isdir(any_dir / "alpha" / "bravo")) is False

@@ -176,7 +176,9 @@ class RequestFailure(Exception):
         return f"Reason: {self.reason}\nRequest: {self.request}\nStatus: {self.status}"
 
 
-async def execute_retrying_read(request: Request) -> bytes:
+async def execute_retrying_read_with_response(
+    request: Request,
+) -> tuple[aiohttp.ClientResponse, bytes]:
     # Retrying aiohttp.ServerTimeoutError is pretty straightforward
     # ClientPayloadError might be an aiohttp bug, see:
     # https://github.com/aio-libs/aiohttp/issues/4581
@@ -190,7 +192,8 @@ async def execute_retrying_read(request: Request) -> bytes:
     ):
         try:
             async with request.execute() as resp:
-                return await resp.read()
+                body = await resp.read()
+                return resp, body
         except (aiohttp.ServerTimeoutError, aiohttp.ClientPayloadError) as error:
             if attempt >= config.retry_limit:
                 raise
@@ -203,6 +206,11 @@ async def execute_retrying_read(request: Request) -> bytes:
                 )
             await asyncio.sleep(backoff)
     raise AssertionError
+
+
+async def execute_retrying_read(request: Request) -> bytes:
+    _, body = await execute_retrying_read_with_response(request)
+    return body
 
 
 # ==============================
