@@ -8,6 +8,7 @@ from .boost import (
     BoostUnderlying,
     OrderedMappingBoostable,
     UnorderedMappingBoostable,
+    iter_underlying,
 )
 from .globals import config
 from .path import (
@@ -246,6 +247,28 @@ async def read_stream_unordered(
 
     chunks = executor.map_unordered(read_byte_range_wrapper, byte_ranges)
     return chunks
+
+
+# ==============================
+# read_chunked
+# ==============================
+
+
+@pathdispatch
+async def read_chunked(path: CloudPath, executor: BoostExecutor, size: int | None = None) -> bytes:
+    """Read the content of ``path``.
+
+    :param path: The path to read from.
+    :param executor: An executor.
+    :param size: If specified, will save a network call.
+    :return: The bytes.
+
+    """
+    contents = []
+    stream = await read_stream(path, executor, size)
+    async for data in iter_underlying(stream):
+        contents.append(data)
+    return b"".join(contents)
 
 
 # ==============================
