@@ -1,7 +1,7 @@
 import asyncio
 import os
 import shutil
-from typing import AsyncIterator, Optional, Union
+from typing import AsyncIterator
 
 from .boost import BoostExecutor, consume
 from .listing import glob_scandir, listtree
@@ -24,7 +24,7 @@ from .request import Request, azure_auth_req, google_auth_req
 
 
 @pathdispatch
-async def remove(path: Union[BasePath, BlobPath, str]) -> BasePath:
+async def remove(path: BasePath | BlobPath | str) -> BasePath:
     """Delete the file ``path``.
 
     :param path: The path to delete.
@@ -83,7 +83,7 @@ async def _local_remove(path: LocalPath) -> LocalPath:
 
 
 async def glob_remove(
-    path: Union[BasePath, BlobPath, str], executor: BoostExecutor
+    path: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Delete all files that match the glob ``path``.
 
@@ -118,7 +118,7 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
     dirpath = path.ensure_directory_like()
 
     # listtree will not list the directory itself, so we need to remove the marker file if present
-    async def remove_directory_marker() -> Optional[BasePath]:
+    async def remove_directory_marker() -> BasePath | None:
         try:
             return await remove(dirpath)
         except (FileNotFoundError, IsADirectoryError, PermissionError):
@@ -140,7 +140,7 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
 
 
 @pathdispatch
-async def rmtree(path: Union[BasePath, BlobPath, str], executor: BoostExecutor) -> None:
+async def rmtree(path: BasePath | BlobPath | str, executor: BoostExecutor) -> None:
     """Delete the directory ``path``.
 
     :param path: The path to delete.

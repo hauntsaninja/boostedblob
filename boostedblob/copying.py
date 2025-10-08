@@ -3,7 +3,7 @@ import itertools
 import os
 import shutil
 import sys
-from typing import Any, AsyncIterator, Optional, TypeVar, Union
+from typing import Any, AsyncIterator, TypeVar
 
 from . import azure_auth
 from .boost import BoostExecutor, consume
@@ -41,11 +41,11 @@ from .write import (
 
 @pathdispatch
 async def copyfile(
-    src: Union[BasePath, BlobPath, str],
-    dst: Union[BasePath, BlobPath, str],
+    src: BasePath | BlobPath | str,
+    dst: BasePath | BlobPath | str,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     """Copy a file named ``src` to a file named ``dst``.
 
@@ -65,10 +65,10 @@ async def copyfile(
 @copyfile.register  # type: ignore
 async def _cloudpath_copyfile(
     src: CloudPath,
-    dst: Union[BasePath, BlobPath, str],
+    dst: BasePath | BlobPath | str,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
@@ -109,10 +109,10 @@ async def _cloudpath_copyfile(
 @copyfile.register  # type: ignore
 async def _localpath_copyfile(
     src: LocalPath,
-    dst: Union[BasePath, BlobPath, str],
+    dst: BasePath | BlobPath | str,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
@@ -151,7 +151,7 @@ async def cloud_copyfile(
     dst: CloudPathT,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     """Copy a file named ``src` to a file named ``dst`` within the same cloud.
 
@@ -189,7 +189,7 @@ async def _azure_cloud_copyfile_via_block_urls(
     dst: AzurePath,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     if overwrite:
         await prepare_block_blob_write(dst)
@@ -294,7 +294,7 @@ async def _azure_cloud_copyfile(
     dst: AzurePath,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     if src.account == dst.account:
         await _azure_cloud_copyfile_via_copy(src, dst, overwrite=overwrite)
@@ -310,7 +310,7 @@ async def _google_cloud_copyfile(
     dst: GooglePath,
     executor: BoostExecutor,
     overwrite: bool = False,
-    size: Optional[int] = None,
+    size: int | None = None,
 ) -> None:
     assert isinstance(dst, GooglePath)
     if not overwrite:
@@ -354,7 +354,7 @@ async def _google_cloud_copyfile(
 
 
 async def copytree_iterator(
-    src: BasePath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
+    src: BasePath, dst: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Copies the tree rooted at ``src`` to ``dst``.
 
@@ -390,9 +390,7 @@ async def copytree_iterator(
 
 @pathdispatch
 async def copytree(
-    src: Union[BasePath, BlobPath, str],
-    dst: Union[BasePath, BlobPath, str],
-    executor: BoostExecutor,
+    src: BasePath | BlobPath | str, dst: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> None:
     """Copies the tree rooted at ``src`` to ``dst``.
 
@@ -406,14 +404,14 @@ async def copytree(
 
 @copytree.register  # type: ignore
 async def _cloud_copytree(
-    src: CloudPath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
+    src: CloudPath, dst: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> None:
     await consume(copytree_iterator(src, dst, executor))
 
 
 @copytree.register  # type: ignore
 async def _local_copytree(
-    src: LocalPath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
+    src: LocalPath, dst: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> None:
     if isinstance(dst, str):
         dst = BasePath.from_str(dst)
@@ -431,7 +429,7 @@ async def _local_copytree(
 
 
 async def copyglob_iterator(
-    src: BasePath, dst: Union[BasePath, BlobPath, str], executor: BoostExecutor
+    src: BasePath, dst: BasePath | BlobPath | str, executor: BoostExecutor
 ) -> AsyncIterator[BasePath]:
     """Copies files matching the glob ``src`` into the directory ``dst``.
 
@@ -447,7 +445,7 @@ async def copyglob_iterator(
 
     dst = dst.ensure_directory_like()
 
-    async def copy_wrapper(entry: DirEntry) -> Optional[BasePath]:
+    async def copy_wrapper(entry: DirEntry) -> BasePath | None:
         assert isinstance(dst, BasePath)
         if entry.is_dir:
             # Skip directories (or marker files for directories)

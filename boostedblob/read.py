@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 
 from .boost import (
     BoostExecutor,
@@ -29,7 +29,7 @@ from .request import (
 )
 
 ByteRange = tuple[int, int]
-OptByteRange = tuple[Optional[int], Optional[int]]
+OptByteRange = tuple[int | None, int | None]
 
 # ==============================
 # read_byte_range

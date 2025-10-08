@@ -3,7 +3,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from typing import AsyncIterator, Iterator, Optional, Union
+from typing import AsyncIterator, Iterator
 
 from .boost import BoostExecutor
 from .copying import copyfile
@@ -19,7 +19,7 @@ class Action:
 
 @dataclass(frozen=True)
 class CopyAction(Action):
-    size: Optional[int]
+    size: int | None
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class DeleteAction(Action):
 
 
 async def sync_action_iterator(
-    src: BasePath, dst: BasePath, exclude: Optional[str] = None
+    src: BasePath, dst: BasePath, exclude: str | None = None
 ) -> Iterator[Action]:
     """Yields the actions to take to sync the tree rooted at ``src`` to ``dst``.
 
@@ -100,11 +100,11 @@ def sync_files_action_iterator(
 
 
 async def sync(
-    src: Union[str, BasePath],
-    dst: Union[str, BasePath],
+    src: str | BasePath,
+    dst: str | BasePath,
     executor: BoostExecutor,
     delete: bool = False,
-    exclude: Optional[str] = None,
+    exclude: str | None = None,
 ) -> AsyncIterator[BasePath]:
     """Syncs the tree rooted at ``src`` to ``dst``.
 
@@ -124,7 +124,7 @@ async def sync(
     if src_obj.is_relative_to(dst_obj) or dst_obj.is_relative_to(src_obj):
         raise ValueError("Cannot sync overlapping directories")
 
-    async def copy_wrapper(relpath: str, size: Optional[int]) -> Optional[BasePath]:
+    async def copy_wrapper(relpath: str, size: int | None) -> BasePath | None:
         src_file = src_obj / relpath
         dst_file = dst_obj / relpath
         try:
@@ -143,7 +143,7 @@ async def sync(
         await remove(dst_file)
         return dst_file
 
-    async def action_wrapper(action: Action) -> Optional[BasePath]:
+    async def action_wrapper(action: Action) -> BasePath | None:
         if isinstance(action, CopyAction):
             return await copy_wrapper(action.relpath, action.size)
         if isinstance(action, DeleteAction):
@@ -159,7 +159,7 @@ async def sync(
             yield path
 
 
-def should_copy(src_stat: Optional[Stat], dst_stat: Optional[Stat]) -> bool:
+def should_copy(src_stat: Stat | None, dst_stat: Stat | None) -> bool:
     if src_stat is None and dst_stat is None:
         return False
     if src_stat is None or dst_stat is None:

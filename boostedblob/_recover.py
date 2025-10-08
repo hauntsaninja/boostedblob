@@ -9,7 +9,7 @@ This has been used and should work, but isn't tested to the degree something lik
 import datetime
 import urllib.parse
 from collections import defaultdict
-from typing import Any, Union
+from typing import Any
 
 from .boost import BoostExecutor
 from .path import AzurePath
@@ -26,7 +26,7 @@ def _xml_to_dict(element: etree.Element) -> Any:
 
 
 async def _listtree_versions_snapshots(
-    prefix: Union[str, AzurePath],
+    prefix: str | AzurePath,
 ) -> dict[AzurePath, list[dict[str, Any]]]:
     if isinstance(prefix, str):
         prefix = AzurePath.from_str(prefix)
@@ -208,8 +208,8 @@ async def _determine_candidate_and_recover(
 
 
 async def _recoverprefix(
-    prefix: Union[str, AzurePath],
-    restore_dt: Union[str, datetime.datetime],
+    prefix: str | AzurePath,
+    restore_dt: str | datetime.datetime,
     executor: BoostExecutor,
     dry_run: bool = True,
 ) -> None:

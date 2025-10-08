@@ -12,7 +12,6 @@ from typing import (
     Generic,
     Iterator,
     TypeVar,
-    Union,
 )
 
 A = TypeVar("A")
@@ -569,7 +568,7 @@ class EageriseBoostable(Boostable[T]):
 
 
 # see docstring of Boostable
-BoostUnderlying = Union[Iterator[T], Boostable[T]]
+BoostUnderlying = Iterator[T] | Boostable[T]
 
 
 def dequeue_underlying(iterable: BoostUnderlying[T]) -> NotReady | Exhausted | T:
