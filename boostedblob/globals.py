@@ -122,7 +122,9 @@ class Config:
 
     chunk_size: int = 16 * MB
 
-    user_agent: str = f"boostedblob/{__version__} (Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
+    user_agent: str = (
+        f"boostedblob/{__version__} (Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
+    )
 
     connect_timeout: float = 20.0
     read_timeout: float = 60.0

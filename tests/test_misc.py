@@ -39,7 +39,10 @@ def test_xml():
 @bbb.ensure_session
 async def test_default_user_agent() -> None:
     session = bbb.globals.config.session
-    assert session.headers["User-Agent"] == bbb.globals.Config.__dataclass_fields__["user_agent"].default
+    assert (
+        session.headers["User-Agent"]
+        == bbb.globals.Config.__dataclass_fields__["user_agent"].default
+    )
 
 
 @pytest.mark.asyncio
@@ -51,4 +54,7 @@ async def test_user_agent_configurable() -> None:
         assert session.headers["User-Agent"] == custom
 
     session = bbb.globals.config.session
-    assert session.headers["User-Agent"] == bbb.globals.Config.__dataclass_fields__["user_agent"].default
+    assert (
+        session.headers["User-Agent"]
+        == bbb.globals.Config.__dataclass_fields__["user_agent"].default
+    )
