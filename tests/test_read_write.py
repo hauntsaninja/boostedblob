@@ -52,9 +52,8 @@ async def test_read_not_found(any_dir):
     async with bbb.BoostExecutor(10) as e:
         with pytest.raises(FileNotFoundError):
             stream = await bbb.read.read_stream(any_dir / "not_found", e)
-            read_chunks = []
-            async for buf in bbb.boost.iter_underlying(stream):
-                read_chunks.append(buf)
+            async for _buf in bbb.boost.iter_underlying(stream):
+                pass
 
 
 @pytest.mark.asyncio
