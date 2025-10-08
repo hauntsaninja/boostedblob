@@ -187,7 +187,10 @@ async def _azure_read_stream(
         # Satisfiable.
         return iter([])
 
-    size = int(resp.headers["Content-Range"].split("/")[1])
+    content_size = int(resp.headers["Content-Range"].split("/")[1])
+    if size is not None:
+        assert size == content_size
+    size = content_size
 
     if len(first_chunk) == size:
         return iter([first_chunk])
