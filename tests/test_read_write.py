@@ -73,14 +73,14 @@ async def test_read_write_many_chunks(any_dir):
 async def test_read_write_chunked(cloud_dir):
     with bbb.globals.configure(chunk_size=1024):
         async with bbb.BoostExecutor(10) as e:
-            contents = os.urandom(256 * 1024 + 42)
-            await bbb.write.write_chunked(cloud_dir / "big", contents, e)
-            stream = await bbb.read.read_stream(cloud_dir / "big", e)
-            read_chunks = []
-            async for buf in bbb.boost.iter_underlying(stream):
-                read_chunks.append(buf)
-            assert len(read_chunks) == 257
-            assert contents == b"".join(read_chunks)
+            original_contents = os.urandom(256 * 1024 + 42)
+            await bbb.write.write_chunked(cloud_dir / "chunk", original_contents, e)
+
+            contents = await bbb.read.read_chunked(cloud_dir / "chunk", e)
+            assert original_contents == contents
+
+            contents = await bbb.read.read_single(cloud_dir / "chunk")
+            assert original_contents == contents
 
 
 @pytest.mark.asyncio
