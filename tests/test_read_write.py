@@ -20,13 +20,23 @@ async def test_google_chunking():
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_read_write(any_dir):
+async def test_read_write_empty(any_dir):
     async with bbb.BoostExecutor(10) as e:
         # test reading and writing an empty stream
         await bbb.write.write_stream(any_dir / "empty", iter([]), e)
         stream = await bbb.read.read_stream(any_dir / "empty", e)
         async for _ in bbb.boost.iter_underlying(stream):
             raise AssertionError
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_read_not_found(any_dir):
+    async with bbb.BoostExecutor(10) as e:
+        with pytest.raises(FileNotFoundError):
+            stream = await bbb.read.read_stream(any_dir / "not_found", e)
+            async for _buf in bbb.boost.iter_underlying(stream):
+                pass
 
 
 @pytest.mark.asyncio
@@ -44,16 +54,6 @@ async def test_read_write_many_chunks(any_dir):
                 read_chunks.append(buf)
             assert len(read_chunks) == 257
             assert b"".join(contents) == b"".join(read_chunks)
-
-
-@pytest.mark.asyncio
-@bbb.ensure_session
-async def test_read_not_found(any_dir):
-    async with bbb.BoostExecutor(10) as e:
-        with pytest.raises(FileNotFoundError):
-            stream = await bbb.read.read_stream(any_dir / "not_found", e)
-            async for _buf in bbb.boost.iter_underlying(stream):
-                pass
 
 
 @pytest.mark.asyncio
