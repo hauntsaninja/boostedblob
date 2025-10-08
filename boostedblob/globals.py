@@ -5,6 +5,7 @@ import contextlib
 import functools
 import json
 import os
+import platform
 import sys
 import time
 import uuid
@@ -14,7 +15,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, T
 
 import aiohttp
 
-from . import azure_auth, google_auth
+from . import __version__, azure_auth, google_auth
 
 MB = 2**20
 
@@ -121,6 +122,10 @@ class Config:
 
     chunk_size: int = 32 * MB
 
+    user_agent: str = (
+        f"boostedblob/{__version__} (Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
+    )
+
     connect_timeout: float = 20.0
     read_timeout: float = 60.0
     backoff_initial: float = 0.1
@@ -223,7 +228,8 @@ def _create_session() -> aiohttp.ClientSession:
     # While the sleep suggested doesn't work, it does indicate that this is a problem for
     # aiohttp in general.
     connector = aiohttp.TCPConnector(limit=1024, ttl_dns_cache=60)
-    return aiohttp.ClientSession(connector=connector, trust_env=True)
+    headers = {"User-Agent": config.user_agent}
+    return aiohttp.ClientSession(connector=connector, trust_env=True, headers=headers)
 
 
 @contextlib.asynccontextmanager
