@@ -113,6 +113,8 @@ async def _local_read_byte_range(path: LocalPath, byte_range: OptByteRange) -> b
 async def read_single(path: BasePath | BlobPath | str) -> bytes:
     """Read the content of ``path``.
 
+    For anything not small, prefer using `read_chunked` instead.
+
     :param path: The path to read from.
 
     """
