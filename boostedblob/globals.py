@@ -112,13 +112,6 @@ class TokenManager(Generic[T]):
                 print(f"[boostedblob] Error while dumping token cache: {e}", file=sys.stderr)
 
 
-def _default_user_agent() -> str:
-    return (
-        f"boostedblob/{__version__} "
-        f"(Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
-    )
-
-
 @dataclass
 class Config:
     # Avoid the default executor because https://bugs.python.org/issue35279
@@ -129,7 +122,7 @@ class Config:
 
     chunk_size: int = 16 * MB
 
-    user_agent: str | None = field(default_factory=_default_user_agent)
+    user_agent: str = f"boostedblob/{__version__} (Python/{platform.python_version()} aiohttp/{aiohttp.__version__})"
 
     connect_timeout: float = 20.0
     read_timeout: float = 60.0
@@ -233,9 +226,7 @@ def _create_session() -> aiohttp.ClientSession:
     # While the sleep suggested doesn't work, it does indicate that this is a problem for
     # aiohttp in general.
     connector = aiohttp.TCPConnector(limit=1024, ttl_dns_cache=60)
-    headers = None
-    if config.user_agent is not None:
-        headers = {"User-Agent": config.user_agent}
+    headers = {"User-Agent": config.user_agent}
     return aiohttp.ClientSession(connector=connector, trust_env=True, headers=headers)
 
 
