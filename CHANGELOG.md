@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.0.0]
+
+- Add a `write_chunked` and `read_chunked` convenience functions
+- Explicitly error for large calls to `write_single`
+- Optimise `read_stream` on Azure to avoid the upfront call to get the blob size
+- Increase default chunk size to 32 MB
+- Set a more useful user agent by default
+- Drop support for Python 3.9
+
 ## [v0.16.0]
 
 - Plugin support
