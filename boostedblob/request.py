@@ -37,7 +37,7 @@ class RawRequest:
             params=self.params,
             data=self.data,
             headers=self.headers,
-            allow_redirects=False,
+            allow_redirects=config.allow_redirects,
             timeout=aiohttp.ClientTimeout(
                 connect=config.connect_timeout, sock_read=config.read_timeout
             ),

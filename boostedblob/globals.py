@@ -119,6 +119,7 @@ class Config:
 
     debug_mode: bool = bool(os.environ.get("BBB_DEBUG"))
     storage_account_key_fallback: bool = bool(os.environ.get("BBB_SA_KEY_FALLBACK"))
+    allow_redirects: bool = bool(os.environ.get("BBB_ALLOW_REDIRECTS"))
 
     chunk_size: int = 32 * MB
 
