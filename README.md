@@ -11,7 +11,7 @@ environment.
 
 ## Installation
 
-Just run `pip install boostedblob`. boostedblob requires Python 3.8 or better.
+Just run `pip install boostedblob`. boostedblob requires Python 3.10 or better.
 
 ## Usage
 
