@@ -75,6 +75,8 @@ def list_blobs(
 async def _azure_list_blobs(
     path: AzurePath, delimiter: str | None, allow_prefix: bool = False
 ) -> AsyncIterator[DirEntry]:
+    # This currently happens to return results in "sorted" order, for Azure's weird definition
+    # of sorted (big endian UTF-16). However, this is not guaranteed. Sort yourself in client code.
     prefix = path
     if not allow_prefix:
         _delimiter = delimiter or "/"
