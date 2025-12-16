@@ -395,19 +395,19 @@ def _azure_get_entries(account: str, container: str, result: etree.Element) -> I
     blobs = result.find("Blobs")
     assert blobs is not None
     blob: str
-    for bp in blobs.iterfind("BlobPrefix"):
-        blob = bp.findtext("Name")  # type: ignore
-        path = AzurePath(account, container, blob)
-        yield DirEntry.from_dirpath(path)
-    for b in blobs.iterfind("Blob"):
+
+    for b in blobs.iterchildren(("Blob", "BlobPrefix")):
         blob = b.findtext("Name")  # type: ignore
         path = AzurePath(account, container, blob)
-        if blob.endswith("/"):
+        if b.tag == "BlobPrefix":
             yield DirEntry.from_dirpath(path)
         else:
-            # this is much more efficient than doing repeated finds, even if we get extra fields
-            props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore
-            yield DirEntry.from_path_stat(path, AzureStat(props))
+            if blob.endswith("/"):
+                yield DirEntry.from_dirpath(path)
+            else:
+                # this is much more efficient than doing repeated finds, even if we get extra fields
+                props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore
+                yield DirEntry.from_path_stat(path, AzureStat(props))
 
 
 def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirEntry]:
