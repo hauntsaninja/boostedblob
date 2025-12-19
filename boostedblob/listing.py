@@ -398,8 +398,9 @@ def _azure_get_entries(account: str, container: str, result: etree.Element) -> I
     assert blobs is not None
     blob: str
 
-    for b in blobs.iterchildren(("Blob", "BlobPrefix")):
-        blob = b.findtext("Name")  # type: ignore
+    b: etree.Element
+    for b in blobs.iterchildren(("Blob", "BlobPrefix")):  # type: ignore[attr-defined]
+        blob = b.findtext("Name")  # type: ignore[assignment]
         path = AzurePath(account, container, blob)
         if b.tag == "BlobPrefix":
             yield DirEntry.from_dirpath(path)
@@ -408,7 +409,7 @@ def _azure_get_entries(account: str, container: str, result: etree.Element) -> I
                 yield DirEntry.from_dirpath(path)
             else:
                 # this is much more efficient than doing repeated finds, even if we get extra fields
-                props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore
+                props = {el.tag: el.text for el in b.find("Properties")}  # type: ignore[union-attr]
                 yield DirEntry.from_path_stat(path, AzureStat(props))
 
 
