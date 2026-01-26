@@ -575,7 +575,7 @@ async def _local_isfile(path: LocalPath) -> bool:
 
 
 @pathdispatch
-async def exists(path: BasePath | BlobPath | str) -> int:
+async def exists(path: BasePath | BlobPath | str) -> bool:
     raise ValueError(f"Unsupported path: {path}")
 
 
