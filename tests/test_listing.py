@@ -67,7 +67,9 @@ async def test_azure_list_containers():
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_empty_first_page_then_container(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_azure_list_containers_empty_first_page_then_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Verifies that container listing does not fail on an empty page when NextMarker is present.
     Ensures pagination continues and containers from subsequent pages are returned.
@@ -98,7 +100,9 @@ async def test_azure_list_containers_empty_first_page_then_container(monkeypatch
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_all_pages_empty_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_azure_list_containers_all_pages_empty_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Verifies that listing raises a clear ValueError when pagination completes without finding any containers.
     Confirms the “no containers found” error is deferred until all pages are exhausted.
@@ -127,7 +131,9 @@ async def test_azure_list_containers_all_pages_empty_raises(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_first_page_has_container(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_azure_list_containers_first_page_has_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Verifies the non-paginated success path where the first page already includes containers.
     Ensures those containers are returned without requiring continuation handling.
@@ -185,13 +191,16 @@ async def test_azure_list_containers_multiple_pages(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_account_level_listdir_uses_container_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_azure_account_level_listdir_uses_container_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Verifies that ``bbb.listdir`` on an account-level Azure path delegates to ``_azure_list_containers``.
     Confirms account-level listing returns container names from that code path.
     """
 
     containers = ["alpha", "bravo"]
+
     async def fake_list_containers(account: str):
         assert account == "acct"
         for container in containers:
