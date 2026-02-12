@@ -438,15 +438,18 @@ async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
             auth=azure_auth_req,
         )
     )
+    found_container = False
     async for result in it:
         containers = result.find("Containers")
         assert containers is not None
-        if len(containers) == 0:
-            raise ValueError(f"No containers found in storage account {account}")
 
         for container in containers.iterfind("Container"):
+            found_container = True
             name: str = container.find("Name").text  # type: ignore
             yield DirEntry(path=AzurePath(account, name, ""), is_dir=True, is_file=False, stat=None)
+
+    if not found_container:
+        raise ValueError(f"No containers found in storage account {account}")
 
 
 async def _google_list_buckets(project: str | None = None) -> AsyncIterator[DirEntry]:
