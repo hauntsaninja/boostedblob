@@ -67,7 +67,12 @@ async def test_azure_list_containers():
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_empty_first_page_then_container(monkeypatch):
+async def test_azure_list_containers_empty_first_page_then_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies that container listing does not fail on an empty page when NextMarker is present.
+    Ensures pagination continues and containers from subsequent pages are returned.
+    """
+
     page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers />
@@ -93,7 +98,12 @@ async def test_azure_list_containers_empty_first_page_then_container(monkeypatch
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_all_pages_empty_raises(monkeypatch):
+async def test_azure_list_containers_all_pages_empty_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies that listing raises a clear ValueError when pagination completes without finding any containers.
+    Confirms the “no containers found” error is deferred until all pages are exhausted.
+    """
+
     page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers />
@@ -117,7 +127,12 @@ async def test_azure_list_containers_all_pages_empty_raises(monkeypatch):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_first_page_has_container(monkeypatch):
+async def test_azure_list_containers_first_page_has_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies the non-paginated success path where the first page already includes containers.
+    Ensures those containers are returned without requiring continuation handling.
+    """
+
     page = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
@@ -137,7 +152,12 @@ async def test_azure_list_containers_first_page_has_container(monkeypatch):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_list_containers_multiple_pages(monkeypatch):
+async def test_azure_list_containers_multiple_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies that containers are accumulated across multiple paginated responses.
+    Ensures entries from both early and continued pages are yielded in order.
+    """
+
     page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
@@ -165,16 +185,22 @@ async def test_azure_list_containers_multiple_pages(monkeypatch):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_account_level_listdir_uses_container_listing(monkeypatch):
+async def test_azure_account_level_listdir_uses_container_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies that ``bbb.listdir`` on an account-level Azure path delegates to ``_azure_list_containers``.
+    Confirms account-level listing returns container names from that code path.
+    """
+
+    containers = ["alpha", "bravo"]
     async def fake_list_containers(account: str):
         assert account == "acct"
-        yield bbb.listing.DirEntry.from_dirpath(AzurePath("acct", "alpha", ""))
-        yield bbb.listing.DirEntry.from_dirpath(AzurePath("acct", "bravo", ""))
+        for container in containers:
+            yield bbb.listing.DirEntry.from_dirpath(AzurePath("acct", container, ""))
 
     monkeypatch.setattr(listing, "_azure_list_containers", fake_list_containers)
 
     paths = [p async for p in bbb.listdir(AzurePath("acct", "", ""))]
-    assert [p.name for p in paths] == ["alpha", "bravo"]
+    assert [p.name for p in paths] == containers
 
 
 @pytest.mark.asyncio
