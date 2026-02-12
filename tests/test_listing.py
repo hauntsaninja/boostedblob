@@ -91,8 +91,8 @@ async def test_azure_list_containers_empty_first_page_then_container(monkeypatch
 
     monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
 
-    paths = [p async for p in listing._azure_list_containers("acct")]
-    assert [p.name for p in paths] == ["foo"]
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["foo"]
 
 
 @pytest.mark.asyncio
@@ -141,8 +141,8 @@ async def test_azure_list_containers_first_page_has_container(monkeypatch):
 
     monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
 
-    paths = [p async for p in listing._azure_list_containers("acct")]
-    assert [p.name for p in paths] == ["foo"]
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["foo"]
 
 
 @pytest.mark.asyncio
@@ -173,8 +173,8 @@ async def test_azure_list_containers_multiple_pages(monkeypatch):
 
     monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
 
-    paths = [p async for p in listing._azure_list_containers("acct")]
-    assert [p.name for p in paths] == ["alpha", "bravo"]
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["alpha", "bravo"]
 
 
 @pytest.mark.asyncio
