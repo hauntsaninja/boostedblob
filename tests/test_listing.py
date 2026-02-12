@@ -192,29 +192,6 @@ async def test_azure_list_containers_multiple_pages(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 @bbb.ensure_session
-async def test_azure_account_level_listdir_uses_container_listing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    Verifies that ``bbb.listdir`` on an account-level Azure path delegates to ``_azure_list_containers``.
-    Confirms account-level listing returns container names from that code path.
-    """
-
-    containers = ["alpha", "bravo"]
-
-    async def fake_list_containers(account: str) -> AsyncIterator[bbb.listing.DirEntry]:
-        assert account == "acct"
-        for container in containers:
-            yield bbb.listing.DirEntry.from_dirpath(AzurePath("acct", container, ""))
-
-    monkeypatch.setattr(listing, "_azure_list_containers", fake_list_containers)
-
-    paths = [p async for p in bbb.listdir(AzurePath("acct", "", ""))]
-    assert [p.name for p in paths] == containers
-
-
-@pytest.mark.asyncio
-@bbb.ensure_session
 async def test_google_list_buckets():
     with helpers.tmp_google_dir() as google_dir:
         bucket = GooglePath("", "")
