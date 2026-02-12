@@ -1,4 +1,5 @@
 import asyncio
+from typing import AsyncIterator
 
 import pytest
 
@@ -201,7 +202,7 @@ async def test_azure_account_level_listdir_uses_container_listing(
 
     containers = ["alpha", "bravo"]
 
-    async def fake_list_containers(account: str):
+    async def fake_list_containers(account: str) -> AsyncIterator[bbb.listing.DirEntry]:
         assert account == "acct"
         for container in containers:
             yield bbb.listing.DirEntry.from_dirpath(AzurePath("acct", container, ""))
