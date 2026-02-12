@@ -109,7 +109,8 @@ def load_credentials() -> dict[str, Any]:
             if best_token is not None:
                 return best_token
 
-    raise RuntimeError("""Azure credentials not found, please do one of the following:
+    raise RuntimeError(
+        """Azure credentials not found, please do one of the following:
 
 1) Log in with 'az login', boostedblob will use your default credentials to lookup your storage
    account key
@@ -122,7 +123,8 @@ def load_credentials() -> dict[str, Any]:
 4) Set the environment variable 'AZURE_STORAGE_ACCOUNT_KEY' to your storage account key which you
    can find by following this guide:
    https://docs.microsoft.com/en-us/azure/storage/common/storage-account-keys-manage
-""")
+"""
+    )
 
 
 def load_stored_subscription_ids() -> list[str]:
