@@ -1,9 +1,12 @@
 import asyncio
+from typing import AsyncIterator
 
 import pytest
 
 import boostedblob as bbb
+from boostedblob import listing
 from boostedblob.path import AzurePath, GooglePath
+from boostedblob.xml import etree
 
 from . import helpers
 
@@ -61,6 +64,144 @@ async def test_azure_list_containers():
     with helpers.tmp_azure_dir() as az_dir:
         account = AzurePath(az_dir.account, "", "")
         assert az_dir.container in [p.name async for p in bbb.listdir(account)]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_list_containers_empty_first_page_then_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies that container listing does not fail on an empty page when NextMarker is present.
+    Ensures pagination continues and containers from subsequent pages are returned.
+    """
+
+    page1 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers />
+  <NextMarker>/acct/$root</NextMarker>
+</EnumerationResults>"""
+    )
+    page2 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers>
+    <Container><Name>foo</Name></Container>
+  </Containers>
+  <NextMarker />
+</EnumerationResults>"""
+    )
+
+    async def fake_xml_page_iterator(_request):
+        yield page1
+        yield page2
+
+    monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
+
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["foo"]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_list_containers_all_pages_empty_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies that listing raises a clear ValueError when pagination completes without finding any containers.
+    Confirms the “no containers found” error is deferred until all pages are exhausted.
+    """
+
+    page1 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers />
+  <NextMarker>page2</NextMarker>
+</EnumerationResults>"""
+    )
+    page2 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers />
+  <NextMarker />
+</EnumerationResults>"""
+    )
+
+    async def fake_xml_page_iterator(_request):
+        yield page1
+        yield page2
+
+    monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
+
+    with pytest.raises(ValueError, match="No containers found in storage account acct"):
+        [p async for p in listing._azure_list_containers("acct")]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_list_containers_first_page_has_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the non-paginated success path where the first page already includes containers.
+    Ensures those containers are returned without requiring continuation handling.
+    """
+
+    page = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers>
+    <Container><Name>foo</Name></Container>
+  </Containers>
+  <NextMarker />
+</EnumerationResults>"""
+    )
+
+    async def fake_xml_page_iterator(_request):
+        yield page
+
+    monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
+
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["foo"]
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_azure_list_containers_multiple_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Verifies that containers are accumulated across multiple paginated responses.
+    Ensures entries from both early and continued pages are yielded in order.
+    """
+
+    page1 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers>
+    <Container><Name>alpha</Name></Container>
+  </Containers>
+  <NextMarker>page2</NextMarker>
+</EnumerationResults>"""
+    )
+    page2 = etree.fromstring(
+        b"""<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
+  <Containers>
+    <Container><Name>bravo</Name></Container>
+  </Containers>
+  <NextMarker />
+</EnumerationResults>"""
+    )
+
+    async def fake_xml_page_iterator(_request):
+        yield page1
+        yield page2
+
+    monkeypatch.setattr(listing, "xml_page_iterator", fake_xml_page_iterator)
+
+    entries = [p async for p in listing._azure_list_containers("acct")]
+    assert [p.path.name for p in entries] == ["alpha", "bravo"]
 
 
 @pytest.mark.asyncio
