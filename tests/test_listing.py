@@ -68,22 +68,18 @@ async def test_azure_list_containers():
 @pytest.mark.asyncio
 @bbb.ensure_session
 async def test_azure_list_containers_empty_first_page_then_container(monkeypatch):
-    page1 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+    page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers />
   <NextMarker>/acct/$root</NextMarker>
-</EnumerationResults>"""
-    )
-    page2 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+</EnumerationResults>""")
+    page2 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
     <Container><Name>foo</Name></Container>
   </Containers>
   <NextMarker />
-</EnumerationResults>"""
-    )
+</EnumerationResults>""")
 
     async def fake_xml_page_iterator(_request):
         yield page1
@@ -98,20 +94,16 @@ async def test_azure_list_containers_empty_first_page_then_container(monkeypatch
 @pytest.mark.asyncio
 @bbb.ensure_session
 async def test_azure_list_containers_all_pages_empty_raises(monkeypatch):
-    page1 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+    page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers />
   <NextMarker>page2</NextMarker>
-</EnumerationResults>"""
-    )
-    page2 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+</EnumerationResults>""")
+    page2 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers />
   <NextMarker />
-</EnumerationResults>"""
-    )
+</EnumerationResults>""")
 
     async def fake_xml_page_iterator(_request):
         yield page1
@@ -126,15 +118,13 @@ async def test_azure_list_containers_all_pages_empty_raises(monkeypatch):
 @pytest.mark.asyncio
 @bbb.ensure_session
 async def test_azure_list_containers_first_page_has_container(monkeypatch):
-    page = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+    page = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
     <Container><Name>foo</Name></Container>
   </Containers>
   <NextMarker />
-</EnumerationResults>"""
-    )
+</EnumerationResults>""")
 
     async def fake_xml_page_iterator(_request):
         yield page
@@ -148,24 +138,20 @@ async def test_azure_list_containers_first_page_has_container(monkeypatch):
 @pytest.mark.asyncio
 @bbb.ensure_session
 async def test_azure_list_containers_multiple_pages(monkeypatch):
-    page1 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+    page1 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
     <Container><Name>alpha</Name></Container>
   </Containers>
   <NextMarker>page2</NextMarker>
-</EnumerationResults>"""
-    )
-    page2 = etree.fromstring(
-        b"""<?xml version="1.0" encoding="utf-8"?>
+</EnumerationResults>""")
+    page2 = etree.fromstring(b"""<?xml version="1.0" encoding="utf-8"?>
 <EnumerationResults ServiceEndpoint="https://acct.blob.core.windows.net/">
   <Containers>
     <Container><Name>bravo</Name></Container>
   </Containers>
   <NextMarker />
-</EnumerationResults>"""
-    )
+</EnumerationResults>""")
 
     async def fake_xml_page_iterator(_request):
         yield page1
