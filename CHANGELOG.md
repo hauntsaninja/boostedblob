@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.1.0]
+
+- Fix pagination bug when listing Azure containers
+- Preserve order returned by the underlying Azure list requests
+- Fix return type annotation of `bbb.exists`
+- Add `BBB_ALLOW_REDIRECTS` env var to allow HTTP redirects
+
 ## [v1.0.0]
 
 - Add a `write_chunked` and `read_chunked` convenience functions
