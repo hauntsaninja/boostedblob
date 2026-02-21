@@ -27,7 +27,7 @@ test = [
 ]
 lint = [
     "ipdb",
-    "black>=25,<26",
+    "black>=26,<27",
     "isort>=6",
     "ruff>=0.14",
 ]
