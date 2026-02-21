@@ -1,5 +1,4 @@
 import asyncio
-from typing import AsyncIterator
 
 import pytest
 
