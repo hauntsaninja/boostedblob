@@ -12,7 +12,7 @@ from boostedblob import azure_auth
 from boostedblob.azure_cloud import (
     AZURE_PUBLIC_CLOUD,
     AZURE_US_GOV_CLOUD,
-    _build_arm_metadata_url,
+    _arm_endpoint_from_metadata_url,
     _cloud_config_from_metadata,
     _fetch_arm_cloud_metadata,
     _select_cloud_from_metadata,
@@ -43,24 +43,30 @@ SAMPLE_ARM_METADATA = [
 
 
 class TestAzureCloudHelpers:
-    def test_build_arm_metadata_url(self):
+    def test_arm_endpoint_from_metadata_url(self):
         assert (
-            _build_arm_metadata_url("https://management.azure.com")
-            == "https://management.azure.com/metadata/endpoints?api-version=2019-05-01"
+            _arm_endpoint_from_metadata_url(
+                "https://management.azure.com/metadata/endpoints?api-version=2019-05-01"
+            )
+            == "https://management.azure.com"
         )
         assert (
-            _build_arm_metadata_url("https://management.azure.com/")
-            == "https://management.azure.com/metadata/endpoints?api-version=2019-05-01"
+            _arm_endpoint_from_metadata_url(
+                "https://management.usgovcloudapi.net/metadata/endpoints?api-version=2019-05-01"
+            )
+            == "https://management.usgovcloudapi.net"
         )
 
-    def test_fetch_arm_cloud_metadata_uses_built_url(self):
+    def test_fetch_arm_cloud_metadata_uses_supplied_url(self):
         response = MagicMock()
         response.read.return_value = b'[{"name":"AzureCloud","authentication":{"loginEndpoint":"https://login.microsoftonline.com/"},"resourceManager":"https://management.azure.com/","suffixes":{"storage":"core.windows.net"}}]'
         response.__enter__.return_value = response
         response.__exit__.return_value = False
 
         with patch("urllib.request.urlopen", return_value=response) as mock_urlopen:
-            metadata = _fetch_arm_cloud_metadata("https://management.azure.com")
+            metadata = _fetch_arm_cloud_metadata(
+                "https://management.azure.com/metadata/endpoints?api-version=2019-05-01"
+            )
 
         request = mock_urlopen.call_args.args[0]
         assert request.full_url == (
@@ -125,6 +131,12 @@ class TestSelectCloudFromMetadata:
         entry = _select_cloud_from_metadata(SAMPLE_ARM_METADATA, None)
         assert entry["name"] == "AzureCloud"
 
+    def test_select_by_resource_manager_when_no_name(self):
+        entry = _select_cloud_from_metadata(
+            SAMPLE_ARM_METADATA, None, "https://management.usgovcloudapi.net/"
+        )
+        assert entry["name"] == "AzureUSGovernment"
+
     def test_raises_on_unknown_name(self):
         with pytest.raises(ValueError, match="not found in ARM metadata"):
             _select_cloud_from_metadata(SAMPLE_ARM_METADATA, "AzureNonExistent")
@@ -132,6 +144,15 @@ class TestSelectCloudFromMetadata:
     def test_raises_on_empty_metadata(self):
         with pytest.raises(ValueError, match="no cloud definitions"):
             _select_cloud_from_metadata([], None)
+
+    def test_raises_when_resource_manager_does_not_match(self):
+        with pytest.raises(
+            ValueError,
+            match="ARM endpoint 'https://management.example.com' not found in ARM metadata",
+        ):
+            _select_cloud_from_metadata(
+                SAMPLE_ARM_METADATA, None, "https://management.example.com/"
+            )
 
 
 class TestGetCloudConfig:
@@ -148,11 +169,11 @@ class TestGetCloudConfig:
             with pytest.raises(ValueError, match="Unknown cloud"):
                 get_cloud_config()
 
-    def test_arm_metadata_base_url_fetches_and_selects(self):
+    def test_arm_metadata_url_fetches_and_selects(self):
         with patch.dict(
             os.environ,
             {
-                "ARM_CLOUD_METADATA_URL": "https://management.example.com",
+                "ARM_CLOUD_METADATA_URL": "https://management.example.com/metadata/endpoints?api-version=2019-05-01",
                 "AZURE_CLOUD": "AzureUSGovernment",
             },
             clear=True,
@@ -163,7 +184,9 @@ class TestGetCloudConfig:
             ) as mock_fetch:
                 cloud = get_cloud_config()
 
-        mock_fetch.assert_called_once_with("https://management.example.com")
+        mock_fetch.assert_called_once_with(
+            "https://management.example.com/metadata/endpoints?api-version=2019-05-01"
+        )
         assert cloud == AZURE_US_GOV_CLOUD
 
     def test_arm_metadata_url_takes_priority_over_preset(self):
@@ -178,7 +201,7 @@ class TestGetCloudConfig:
         with patch.dict(
             os.environ,
             {
-                "ARM_CLOUD_METADATA_URL": "https://management.example.com",
+                "ARM_CLOUD_METADATA_URL": "https://management.example.com/metadata/endpoints?api-version=2019-05-01",
                 "AZURE_CLOUD": "AzureUSGovernment",
             },
             clear=True,
@@ -191,6 +214,43 @@ class TestGetCloudConfig:
 
         assert cloud.storage_endpoint_suffix == "custom.storage.example"
         assert cloud.login_endpoint == "https://custom.login.example"
+
+    def test_arm_metadata_url_matches_resource_manager_when_name_unset(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ARM_CLOUD_METADATA_URL": "https://management.usgovcloudapi.net/metadata/endpoints?api-version=2019-05-01"
+            },
+            clear=True,
+        ):
+            with patch(
+                "boostedblob.azure_cloud._fetch_arm_cloud_metadata",
+                return_value=SAMPLE_ARM_METADATA,
+            ) as mock_fetch:
+                cloud = get_cloud_config()
+
+        mock_fetch.assert_called_once_with(
+            "https://management.usgovcloudapi.net/metadata/endpoints?api-version=2019-05-01"
+        )
+        assert cloud == AZURE_US_GOV_CLOUD
+
+    def test_arm_metadata_url_without_matching_resource_manager_raises(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ARM_CLOUD_METADATA_URL": "https://management.example.com/metadata/endpoints?api-version=2019-05-01"
+            },
+            clear=True,
+        ):
+            with patch(
+                "boostedblob.azure_cloud._fetch_arm_cloud_metadata",
+                return_value=SAMPLE_ARM_METADATA,
+            ):
+                with pytest.raises(
+                    ValueError,
+                    match="ARM endpoint 'https://management.example.com' not found in ARM metadata",
+                ):
+                    get_cloud_config()
 
 
 class TestLazyConfigResolution:

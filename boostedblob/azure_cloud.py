@@ -4,12 +4,13 @@ Supports multiple Azure clouds (Public, US Government, airgapped) by discovering
 endpoints from the ARM cloud metadata endpoint, following the same pattern as
 azure-ai-ml's ARM_CLOUD_METADATA_URL.
 
-`ARM_CLOUD_METADATA_URL` is treated as the ARM base URL. boostedblob derives the
-metadata URL by appending `/metadata/endpoints?api-version=2019-05-01`.
+`ARM_CLOUD_METADATA_URL` is treated as the full metadata URL, for example:
+`https://management.usgovcloudapi.net/metadata/endpoints?api-version=2019-05-01`.
 
 Configuration resolution order:
     1. ARM_CLOUD_METADATA_URL env var set → fetch metadata, select cloud by AZURE_CLOUD
-    2. AZURE_CLOUD env var set (no ARM base URL) → use built-in preset
+       or by matching the metadata URL's ARM endpoint
+    2. AZURE_CLOUD env var set (no metadata URL) → use built-in preset
     3. Default → public cloud preset (no network call)
 """
 
@@ -55,9 +56,11 @@ def _strip_trailing_slash(url: str) -> str:
     return url.rstrip("/")
 
 
-def _build_arm_metadata_url(arm_endpoint: str) -> str:
-    arm_endpoint = _strip_trailing_slash(arm_endpoint)
-    return f"{arm_endpoint}/metadata/endpoints?api-version={ARM_METADATA_API_VERSION}"
+def _arm_endpoint_from_metadata_url(metadata_url: str) -> str:
+    parsed = urllib.parse.urlsplit(metadata_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid ARM metadata URL '{metadata_url}'")
+    return _strip_trailing_slash(f"{parsed.scheme}://{parsed.netloc}")
 
 
 # Built-in presets matching ARM metadata for known clouds
@@ -79,9 +82,8 @@ _CLOUD_PRESETS: dict[str, AzureCloudConfig] = {
 }
 
 
-def _fetch_arm_cloud_metadata(arm_endpoint: str) -> list[dict[str, Any]]:
+def _fetch_arm_cloud_metadata(metadata_url: str) -> list[dict[str, Any]]:
     """Fetch cloud definitions from the ARM metadata endpoint (no auth required)."""
-    metadata_url = _build_arm_metadata_url(arm_endpoint)
     req = urllib.request.Request(metadata_url, headers={"User-Agent": "boostedblob"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -120,9 +122,9 @@ def _cloud_config_from_metadata(cloud_entry: dict[str, Any]) -> AzureCloudConfig
 
 
 def _select_cloud_from_metadata(
-    metadata: list[dict[str, Any]], cloud_name: str | None
+    metadata: list[dict[str, Any]], cloud_name: str | None, arm_endpoint: str | None = None
 ) -> dict[str, Any]:
-    """Select a cloud entry from the metadata array by name."""
+    """Select a cloud entry from the metadata array by name or ARM endpoint."""
     if cloud_name:
         for entry in metadata:
             if entry.get("name") == cloud_name:
@@ -132,9 +134,28 @@ def _select_cloud_from_metadata(
             f"Cloud '{cloud_name}' not found in ARM metadata. "
             f"Available clouds: {available}"
         )
-    # Default to first entry
     if not metadata:
         raise ValueError("ARM metadata response contained no cloud definitions")
+
+    if arm_endpoint:
+        normalized_arm_endpoint = _strip_trailing_slash(arm_endpoint)
+        for entry in metadata:
+            resource_manager = entry.get("resourceManager")
+            if isinstance(resource_manager, str):
+                if _strip_trailing_slash(resource_manager) == normalized_arm_endpoint:
+                    return entry
+
+        available = [
+            _strip_trailing_slash(resource_manager)
+            for entry in metadata
+            if isinstance(resource_manager := entry.get("resourceManager"), str)
+        ]
+        raise ValueError(
+            f"ARM endpoint '{normalized_arm_endpoint}' not found in ARM metadata. "
+            f"Available resourceManager endpoints: {available}"
+        )
+
+    # Default to first entry
     return metadata[0]
 
 
@@ -142,17 +163,20 @@ def get_cloud_config() -> AzureCloudConfig:
     """Resolve cloud configuration from environment variables.
 
     Resolution order:
-        1. ARM_CLOUD_METADATA_URL set → treat as ARM base URL, fetch metadata,
-           and select by AZURE_CLOUD or first entry
-        2. AZURE_CLOUD set (no ARM base URL) → use built-in preset
+        1. ARM_CLOUD_METADATA_URL set → treat as metadata URL, fetch metadata,
+           and select by AZURE_CLOUD or matching resourceManager
+        2. AZURE_CLOUD set (no metadata URL) → use built-in preset
         3. Default → AZURE_PUBLIC_CLOUD
     """
-    arm_endpoint = os.environ.get("ARM_CLOUD_METADATA_URL")
+    metadata_url = os.environ.get("ARM_CLOUD_METADATA_URL")
     cloud_name = os.environ.get("AZURE_CLOUD")
 
-    if arm_endpoint:
-        metadata = _fetch_arm_cloud_metadata(arm_endpoint)
-        cloud_entry = _select_cloud_from_metadata(metadata, cloud_name)
+    if metadata_url:
+        metadata = _fetch_arm_cloud_metadata(metadata_url)
+        arm_endpoint = _arm_endpoint_from_metadata_url(metadata_url)
+        cloud_entry = _select_cloud_from_metadata(
+            metadata, cloud_name, arm_endpoint=arm_endpoint
+        )
         return _cloud_config_from_metadata(cloud_entry)
 
     if cloud_name:
