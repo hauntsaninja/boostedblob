@@ -23,6 +23,18 @@ AZURE_SAS_TOKEN_EXPIRATION_SECONDS = 60 * 60
 AZURE_SHARED_KEY_EXPIRATION_SECONDS = 24 * 60 * 60
 OAUTH_TOKEN = "oauth_token"
 SHARED_KEY = "shared_key"
+AzureCacheKey = tuple[str, str, str, str | None]
+
+
+def azure_cache_key(account: str, container: str | None) -> AzureCacheKey:
+    from .globals import config
+
+    return (
+        config.azure_cloud.login_endpoint,
+        config.azure_cloud.storage_endpoint_suffix,
+        account,
+        container,
+    )
 
 
 def load_credentials() -> dict[str, Any]:
@@ -144,8 +156,8 @@ def load_stored_subscription_ids() -> list[str]:
     return [sub["id"] for sub in subscriptions]
 
 
-async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, float]:
-    account, container = cache_key
+async def get_access_token(cache_key: AzureCacheKey) -> tuple[Any, float]:
+    _, _, account, container = cache_key
     now = time.time()
     creds = load_credentials()
 
@@ -163,7 +175,7 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
                 "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"
             ) from e
 
-        async with DefaultAzureCredential(authority=config.azure_cloud.login_endpoint) as cred:
+        async with DefaultAzureCredential(authority=config.azure_cloud.authority_host) as cred:
             token = await cred.get_token(config.azure_cloud.storage_scope())
         auth = (OAUTH_TOKEN, token.token)
         if await can_access_account(account, container, auth):
@@ -534,12 +546,12 @@ def sign_request_with_shared_key(request: RawRequest, key: str) -> str:
     return f"SharedKey {storage_account}:{signature}"
 
 
-async def get_sas_token(cache_key: tuple[str, str | None]) -> tuple[Any, float]:
+async def get_sas_token(cache_key: AzureCacheKey) -> tuple[Any, float]:
     from .globals import config
     from .request import Request, azure_auth_req
 
     auth = await config.azure_access_token_manager.get_token(key=cache_key)
-    account, container = cache_key
+    _, _, account, container = cache_key
 
     if auth[0] != OAUTH_TOKEN:
         cmd = (
@@ -589,7 +601,9 @@ async def generate_signed_url(path: AzurePath) -> tuple[str, datetime.datetime]:
     # https://docs.microsoft.com/en-us/rest/api/storageservices/service-sas-examples
     from .globals import config
 
-    key = await config.azure_sas_token_manager.get_token(key=(path.account, path.container or None))
+    key = await config.azure_sas_token_manager.get_token(
+        key=azure_cache_key(path.account, path.container or None)
+    )
     params = {
         "st": key["SignedStart"],
         "se": key["SignedExpiry"],

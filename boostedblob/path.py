@@ -130,19 +130,35 @@ class AzurePath(CloudPath):
     blob: str
 
     @staticmethod
+    def _is_https_blob_host_candidate(netloc: str) -> bool:
+        return ".blob." in netloc
+
+    @staticmethod
     def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
+        if url.scheme == "az":
+            return True
+        if url.scheme != "https":
+            return False
+        if not AzurePath._is_https_blob_host_candidate(url.netloc):
+            return False
+
         from .globals import config
 
         suffix = f".blob.{config.azure_cloud.storage_endpoint_suffix}"
-        return url.scheme == "az" or (url.scheme == "https" and url.netloc.endswith(suffix))
+        return url.netloc.endswith(suffix)
 
     @staticmethod
     def from_str(url: str) -> AzurePath:
-        from .globals import config
-
         parsed_url = urllib.parse.urlparse(url)
         if parsed_url.scheme == "https":
             account, host = parsed_url.netloc.split(".", maxsplit=1)
+            if not host.startswith("blob.") or not AzurePath._is_https_blob_host_candidate(
+                parsed_url.netloc
+            ):
+                raise ValueError(f"Invalid URL '{url}'; unexpected host '{host}'")
+
+            from .globals import config
+
             expected_host = f"blob.{config.azure_cloud.storage_endpoint_suffix}"
             if host != expected_host:
                 raise ValueError(f"Invalid URL '{url}'; unexpected host '{host}'")
