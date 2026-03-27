@@ -146,10 +146,11 @@ def test_path_directory_like():
     assert PATHS[GooglePath].parent.ensure_directory_like().blob == ""
 
 
-def test_azure_path_multi_cloud(monkeypatch):
-    """Test that AzurePath URL construction and parsing respects cloud config."""
+def test_azure_path_multi_cloud():
+    """Test that AzurePath URL construction and parsing respects the active cloud config."""
     from boostedblob.azure_cloud import AZURE_PUBLIC_CLOUD, AZURE_US_GOV_CLOUD
-    from boostedblob.globals import config
+    from boostedblob.globals import configure
+    import urllib.parse
 
     path = AzurePath("myacct", "mycontainer", "myblob")
 
@@ -160,33 +161,49 @@ def test_azure_path_multi_cloud(monkeypatch):
     assert path.account_url() == "https://myacct.blob.core.windows.net"
 
     # US Government cloud
-    monkeypatch.setattr(config, "azure_cloud", AZURE_US_GOV_CLOUD)
-    assert (
-        path.to_https_str()
-        == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
-    )
-    assert path.blob_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
-    assert path.container_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer"
-    assert path.account_url() == "https://myacct.blob.core.usgovcloudapi.net"
+    with configure(azure_cloud=AZURE_US_GOV_CLOUD):
+        assert (
+            path.to_https_str()
+            == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+        )
+        assert (
+            path.blob_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+        )
+        assert path.container_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer"
+        assert path.account_url() == "https://myacct.blob.core.usgovcloudapi.net"
 
-    # Parsing HTTPS URLs with US Gov suffix
-    parsed = AzurePath.from_str(
-        "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
-    )
-    assert parsed == path
+        parsed = AzurePath.from_str(
+            "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+        )
+        assert parsed == path
 
-    # is_cloud_path should recognize US Gov URLs
-    import urllib.parse
+        url = urllib.parse.urlparse(
+            "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+        )
+        assert AzurePath.is_cloud_path(url)
 
-    url = urllib.parse.urlparse(
-        "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
-    )
-    assert AzurePath.is_cloud_path(url)
-
-    # Back to public cloud — US Gov URL should not be recognized
-    monkeypatch.setattr(config, "azure_cloud", AZURE_PUBLIC_CLOUD)
-    url = urllib.parse.urlparse("https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob")
-    assert not AzurePath.is_cloud_path(url)
+    # Mismatched cloud should fail clearly
+    with configure(azure_cloud=AZURE_PUBLIC_CLOUD):
+        url = urllib.parse.urlparse("https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob")
+        assert not AzurePath.is_cloud_path(url)
+        with pytest.raises(ValueError, match="unexpected host"):
+            AzurePath.from_str("https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob")
 
     # az:// scheme works regardless of cloud config
     assert AzurePath.from_str("az://myacct/mycontainer/myblob") == path
+
+
+def test_non_azure_path_parsing_does_not_resolve_cloud(monkeypatch):
+    import boostedblob.globals as globals_mod
+
+    monkeypatch.setattr(globals_mod, "get_cloud_config", lambda: (_ for _ in ()).throw(AssertionError))
+    monkeypatch.setattr(globals_mod.config, "_azure_cloud_cache", None)
+    monkeypatch.setattr(globals_mod.config, "_azure_cloud_override", None)
+
+    assert BasePath.from_str("local.txt") == LocalPath("local.txt")
+    assert BasePath.from_str("gs://bucket/blob") == GooglePath("bucket", "blob")
+    assert BasePath.from_str("az://acct/container/blob") == AzurePath("acct", "container", "blob")
+    with pytest.raises(ValueError, match="Invalid path"):
+        BasePath.from_str("https://example.com")
+    with pytest.raises(ValueError, match="unexpected host"):
+        AzurePath.from_str("https://example.com")

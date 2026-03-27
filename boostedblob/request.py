@@ -221,12 +221,16 @@ async def execute_retrying_read(request: Request) -> bytes:
 
 async def azure_auth_req(request: Request, *, auth: tuple[str, str] | None = None) -> RawRequest:
     """Return a Request that can be submitted to Azure Blob."""
+    from .azure_auth import azure_cache_key
+
     u = urllib.parse.urlparse(request.url)
     account = u.netloc.split(".")[0]
     parts = u.path.split("/", maxsplit=2)
     container = parts[1] if len(parts) >= 2 else None
     if auth is None:
-        auth = await config.azure_access_token_manager.get_token(key=(account, container))
+        auth = await config.azure_access_token_manager.get_token(
+            key=azure_cache_key(account, container)
+        )
     assert auth is not None
     kind, token = auth
 

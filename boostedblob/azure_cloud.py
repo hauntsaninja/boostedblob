@@ -4,17 +4,24 @@ Supports multiple Azure clouds (Public, US Government, airgapped) by discovering
 endpoints from the ARM cloud metadata endpoint, following the same pattern as
 azure-ai-ml's ARM_CLOUD_METADATA_URL.
 
+`ARM_CLOUD_METADATA_URL` is treated as the ARM base URL. boostedblob derives the
+metadata URL by appending `/metadata/endpoints?api-version=2019-05-01`.
+
 Configuration resolution order:
     1. ARM_CLOUD_METADATA_URL env var set → fetch metadata, select cloud by AZURE_CLOUD
-    2. AZURE_CLOUD env var set (no metadata URL) → use built-in preset
+    2. AZURE_CLOUD env var set (no ARM base URL) → use built-in preset
     3. Default → public cloud preset (no network call)
 """
 
 from __future__ import annotations
 
 import json
+import os
+import urllib.parse
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from typing import Any
 
 # Storage OAuth audience is the same across all Azure clouds
 STORAGE_AUDIENCE = "https://storage.azure.com"
@@ -33,6 +40,11 @@ class AzureCloudConfig:
     def blob_endpoint_url(self, account: str) -> str:
         return f"https://{account}.blob.{self.storage_endpoint_suffix}"
 
+    @property
+    def authority_host(self) -> str:
+        parsed = urllib.parse.urlsplit(self.login_endpoint)
+        return (parsed.netloc or parsed.path).rstrip("/")
+
     def storage_scope(self, account: str | None = None) -> str:
         if account:
             return f"https://{account}.blob.{self.storage_endpoint_suffix}/.default"
@@ -41,6 +53,11 @@ class AzureCloudConfig:
 
 def _strip_trailing_slash(url: str) -> str:
     return url.rstrip("/")
+
+
+def _build_arm_metadata_url(arm_endpoint: str) -> str:
+    arm_endpoint = _strip_trailing_slash(arm_endpoint)
+    return f"{arm_endpoint}/metadata/endpoints?api-version={ARM_METADATA_API_VERSION}"
 
 
 # Built-in presets matching ARM metadata for known clouds
@@ -62,25 +79,49 @@ _CLOUD_PRESETS: dict[str, AzureCloudConfig] = {
 }
 
 
-def _fetch_arm_cloud_metadata(metadata_url: str) -> list[dict]:
+def _fetch_arm_cloud_metadata(arm_endpoint: str) -> list[dict[str, Any]]:
     """Fetch cloud definitions from the ARM metadata endpoint (no auth required)."""
+    metadata_url = _build_arm_metadata_url(arm_endpoint)
     req = urllib.request.Request(metadata_url, headers={"User-Agent": "boostedblob"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            metadata = json.loads(resp.read())
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Failed to fetch ARM cloud metadata from '{metadata_url}': {e}") from e
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"ARM cloud metadata from '{metadata_url}' was not valid JSON: {e}"
+        ) from e
+
+    if not isinstance(metadata, list):
+        raise RuntimeError(
+            f"ARM cloud metadata from '{metadata_url}' had unexpected type "
+            f"{type(metadata).__name__}; expected a list of cloud definitions"
+        )
+    return metadata
 
 
-def _cloud_config_from_metadata(cloud_entry: dict) -> AzureCloudConfig:
+def _cloud_config_from_metadata(cloud_entry: dict[str, Any]) -> AzureCloudConfig:
     """Extract an AzureCloudConfig from a single ARM metadata cloud entry."""
+    try:
+        storage_endpoint_suffix = cloud_entry["suffixes"]["storage"]
+        login_endpoint = cloud_entry["authentication"]["loginEndpoint"]
+        arm_endpoint = cloud_entry["resourceManager"]
+    except KeyError as e:
+        raise ValueError(
+            f"ARM metadata entry missing required field {e!s}: {cloud_entry!r}"
+        ) from e
+
     return AzureCloudConfig(
-        storage_endpoint_suffix=cloud_entry["suffixes"]["storage"],
-        login_endpoint=_strip_trailing_slash(cloud_entry["authentication"]["loginEndpoint"]),
-        arm_endpoint=_strip_trailing_slash(cloud_entry["resourceManager"]),
+        storage_endpoint_suffix=storage_endpoint_suffix,
+        login_endpoint=_strip_trailing_slash(login_endpoint),
+        arm_endpoint=_strip_trailing_slash(arm_endpoint),
     )
 
 
 def _select_cloud_from_metadata(
-    metadata: list[dict], cloud_name: str | None
-) -> dict:
+    metadata: list[dict[str, Any]], cloud_name: str | None
+) -> dict[str, Any]:
     """Select a cloud entry from the metadata array by name."""
     if cloud_name:
         for entry in metadata:
@@ -101,17 +142,16 @@ def get_cloud_config() -> AzureCloudConfig:
     """Resolve cloud configuration from environment variables.
 
     Resolution order:
-        1. ARM_CLOUD_METADATA_URL set → fetch metadata, select by AZURE_CLOUD or first entry
-        2. AZURE_CLOUD set (no metadata URL) → use built-in preset
+        1. ARM_CLOUD_METADATA_URL set → treat as ARM base URL, fetch metadata,
+           and select by AZURE_CLOUD or first entry
+        2. AZURE_CLOUD set (no ARM base URL) → use built-in preset
         3. Default → AZURE_PUBLIC_CLOUD
     """
-    import os
-
-    metadata_url = os.environ.get("ARM_CLOUD_METADATA_URL")
+    arm_endpoint = os.environ.get("ARM_CLOUD_METADATA_URL")
     cloud_name = os.environ.get("AZURE_CLOUD")
 
-    if metadata_url:
-        metadata = _fetch_arm_cloud_metadata(metadata_url)
+    if arm_endpoint:
+        metadata = _fetch_arm_cloud_metadata(arm_endpoint)
         cloud_entry = _select_cloud_from_metadata(metadata, cloud_name)
         return _cloud_config_from_metadata(cloud_entry)
 
