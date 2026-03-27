@@ -63,7 +63,7 @@ def _azure_get_blob_request(
         success_codes.append(416)
     return Request(
         method="GET",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         headers=range_header,
         success_codes=success_codes,
         failure_exceptions={404: FileNotFoundError(path)},

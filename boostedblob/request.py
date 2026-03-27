@@ -124,7 +124,8 @@ class Request:
                         # an invalid hostname from a network error
                         url = urllib.parse.urlparse(self.url)
                         hostname = url.hostname
-                        if hostname and hostname.endswith(".blob.core.windows.net"):
+                        suffix = f".blob.{config.azure_cloud.storage_endpoint_suffix}"
+                        if hostname and hostname.endswith(suffix):
                             if await _bad_hostname_check(hostname):
                                 raise FileNotFoundError(hostname) from None
                     error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)

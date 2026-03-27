@@ -16,6 +16,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, T
 import aiohttp
 
 from . import __version__, azure_auth, google_auth
+from .azure_cloud import AzureCloudConfig, get_cloud_config
 
 MB = 2**20
 
@@ -146,6 +147,8 @@ class Config:
     google_access_token_manager: TokenManager[str] = field(
         default_factory=lambda: TokenManager(google_auth.get_access_token)
     )
+
+    azure_cloud: AzureCloudConfig = field(default_factory=get_cloud_config)
 
     _sessions: dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
