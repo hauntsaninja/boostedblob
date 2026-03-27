@@ -131,16 +131,20 @@ class AzurePath(CloudPath):
 
     @staticmethod
     def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
-        return url.scheme == "az" or (
-            url.scheme == "https" and url.netloc.endswith(".blob.core.windows.net")
-        )
+        from .globals import config
+
+        suffix = f".blob.{config.azure_cloud.storage_endpoint_suffix}"
+        return url.scheme == "az" or (url.scheme == "https" and url.netloc.endswith(suffix))
 
     @staticmethod
     def from_str(url: str) -> AzurePath:
+        from .globals import config
+
         parsed_url = urllib.parse.urlparse(url)
         if parsed_url.scheme == "https":
             account, host = parsed_url.netloc.split(".", maxsplit=1)
-            if host != "blob.core.windows.net":
+            expected_host = f"blob.{config.azure_cloud.storage_endpoint_suffix}"
+            if host != expected_host:
                 raise ValueError(f"Invalid URL '{url}'; unexpected host '{host}'")
         elif parsed_url.scheme == "az":
             account = parsed_url.netloc
@@ -196,13 +200,41 @@ class AzurePath(CloudPath):
         return self.to_az_str()
 
     def to_https_str(self) -> str:
-        return f"https://{self.account}.blob.core.windows.net/{self.container}/{self.blob}"
+        from .globals import config
+
+        suffix = config.azure_cloud.storage_endpoint_suffix
+        return f"https://{self.account}.blob.{suffix}/{self.container}/{self.blob}"
 
     def to_az_str(self) -> str:
         return f"az://{self.account}/{self.container}/{self.blob}"
 
     def format_url(self, template: str) -> str:
         return url_format(template, account=self.account, container=self.container, blob=self.blob)
+
+    def blob_url(self) -> str:
+        from .globals import config
+
+        return url_format(
+            f"https://{{account}}.blob.{config.azure_cloud.storage_endpoint_suffix}/{{container}}/{{blob}}",
+            account=self.account,
+            container=self.container,
+            blob=self.blob,
+        )
+
+    def container_url(self) -> str:
+        from .globals import config
+
+        return url_format(
+            f"https://{{account}}.blob.{config.azure_cloud.storage_endpoint_suffix}/{{container}}",
+            account=self.account,
+            container=self.container,
+            blob=self.blob,
+        )
+
+    def account_url(self) -> str:
+        from .globals import config
+
+        return f"https://{self.account}.blob.{config.azure_cloud.storage_endpoint_suffix}"
 
 
 @dataclass(frozen=True)
@@ -410,7 +442,7 @@ async def _azure_stat(path: AzurePath) -> AzureStat:
         raise FileNotFoundError(path)
     request = Request(
         method="HEAD",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         failure_exceptions={404: FileNotFoundError(path)},
         auth=azure_auth_req,
     )
@@ -477,7 +509,7 @@ async def _azure_isdir(path: AzurePath) -> bool:
             it = xml_page_iterator(
                 Request(
                     method="GET",
-                    url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
+                    url=path.container_url(),
                     params=dict(
                         comp="list",
                         restype="container",
@@ -498,7 +530,7 @@ async def _azure_isdir(path: AzurePath) -> bool:
         else:
             request = Request(
                 method="GET",
-                url=path.format_url("https://{account}.blob.core.windows.net/{container}"),
+                url=path.container_url(),
                 params=dict(restype="container"),
                 failure_exceptions={404: FileNotFoundError()},
                 auth=azure_auth_req,

@@ -149,6 +149,8 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
     now = time.time()
     creds = load_credentials()
 
+    from .globals import config
+
     # If opted into using azure-identity, use DefaultAzureCredential to get a token
     # This enables the use of Managed Identity, Workload Identity, and other auth methods not implemented here
     if creds["_azure_auth"] == "azure-identity":
@@ -161,8 +163,8 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
                 "When setting AZURE_USE_IDENTITY=1, you must also install the azure-identity package"
             ) from e
 
-        async with DefaultAzureCredential() as cred:
-            token = await cred.get_token("https://storage.azure.com/.default")
+        async with DefaultAzureCredential(authority=config.azure_cloud.login_endpoint) as cred:
+            token = await cred.get_token(config.azure_cloud.storage_scope())
         auth = (OAUTH_TOKEN, token.token)
         if await can_access_account(account, container, auth):
             return (auth, token.expires_on)
@@ -187,7 +189,7 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
         # we have a refresh token, convert it into an access token for this account
         req = create_access_token_request(
             creds=creds,
-            scope=f"https://{account}.blob.core.windows.net/.default",
+            scope=config.azure_cloud.storage_scope(account),
             success_codes=(200, 400),
         )
 
@@ -226,7 +228,7 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
 
     if creds["_azure_auth"] == "svcact":
         # we have a service principal, get an oauth token
-        req = create_access_token_request(creds=creds, scope="https://storage.azure.com/.default")
+        req = create_access_token_request(creds=creds, scope=config.azure_cloud.storage_scope())
 
         async with req.execute() as resp:
             result = await resp.json()
@@ -246,7 +248,7 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
         # Managed Service Identity
         req = create_access_token_request(
             creds=creds,
-            scope=f"https://{account}.blob.core.windows.net/.default",
+            scope=config.azure_cloud.storage_scope(account),
             success_codes=(200,),
         )
 
@@ -264,13 +266,14 @@ async def get_access_token(cache_key: tuple[str, str | None]) -> tuple[Any, floa
 
 
 async def can_access_account(account: str, container: str | None, auth: tuple[str, str]) -> bool:
+    from .globals import config
     from .request import Request, azure_auth_req
 
     if not container:
         # if a container isn't specified, check that we can list the storage account
         req = Request(
             method="GET",
-            url=f"https://{account}.blob.core.windows.net",
+            url=config.azure_cloud.blob_endpoint_url(account),
             params={"comp": "list", "maxresults": "1"},
             success_codes=(200, 403),
             auth=functools.partial(azure_auth_req, auth=auth),
@@ -293,7 +296,7 @@ async def can_access_account(account: str, container: str | None, auth: tuple[st
     # https://myaccount.blob.core.windows.net/mycontainer?restype=container&comp=list
     req = Request(
         method="GET",
-        url=f"https://{account}.blob.core.windows.net/{container}",
+        url=f"{config.azure_cloud.blob_endpoint_url(account)}/{container}",
         params={"restype": "container", "comp": "list", "maxresults": "1"},
         success_codes=(200, 403),
         auth=functools.partial(azure_auth_req, auth=auth),
@@ -305,6 +308,7 @@ async def can_access_account(account: str, container: str | None, auth: tuple[st
 def create_access_token_request(
     creds: Mapping[str, str], scope: str, success_codes: Sequence[int] = (200,)
 ) -> Request:
+    from .globals import config
     from .request import Request
 
     if creds["_azure_auth"] == "refresh":
@@ -315,7 +319,7 @@ def create_access_token_request(
             "scope": scope,
         }
         tenant_id = "common"
-        url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        url = f"{config.azure_cloud.login_endpoint}/{tenant_id}/oauth2/v2.0/token"
     elif creds["_azure_auth"] == "svcact":
         # https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-client-creds-grant-flow#first-case-access-token-request-with-a-shared-secret
         data = {
@@ -325,7 +329,7 @@ def create_access_token_request(
             "scope": scope,
         }
         tenant_id = creds["tenant_id"]
-        url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        url = f"{config.azure_cloud.login_endpoint}/{tenant_id}/oauth2/v2.0/token"
     elif creds["_azure_auth"] == "msi":
         url = creds["msi_endpoint"]
         data = {"resource": scope}
@@ -345,11 +349,13 @@ def create_access_token_request(
 async def get_storage_account_id_with_subscription(
     subscription_id: str, account: str, auth: tuple[str, str]
 ) -> str | None:
+    from .globals import config
     from .request import Request, azure_auth_req
 
+    arm = config.azure_cloud.arm_endpoint
     req = Request(
         method="GET",
-        url=f"https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
+        url=f"{arm}/subscriptions/{subscription_id}/providers/Microsoft.Storage/storageAccounts",
         params={"api-version": "2019-04-01"},
         success_codes=(200, 401, 403, 429),
         auth=functools.partial(azure_auth_req, auth=auth),
@@ -394,6 +400,7 @@ async def get_storage_account_id_with_subscription(
 
 
 async def get_storage_account_id(account: str, auth: tuple[str, str]) -> str | None:
+    from .globals import config
     from .request import Request, azure_auth_req
 
     stored_subscription_ids = load_stored_subscription_ids()
@@ -404,9 +411,10 @@ async def get_storage_account_id(account: str, auth: tuple[str, str]) -> str | N
         if storage_account_id:
             return storage_account_id
 
+    arm = config.azure_cloud.arm_endpoint
     req = Request(
         method="GET",
-        url="https://management.azure.com/subscriptions",
+        url=f"{arm}/subscriptions",
         params={"api-version": "2020-01-01"},
         auth=functools.partial(azure_auth_req, auth=auth),
     )
@@ -434,10 +442,12 @@ async def get_storage_account_id(account: str, auth: tuple[str, str]) -> str | N
 async def get_storage_account_key(
     account: str, creds: Mapping[str, Any], container_hint: str | None = None
 ) -> tuple[Any, float] | None:
+    from .globals import config
     from .request import Request, azure_auth_req
 
     # get an access token for the management service
-    req = create_access_token_request(creds=creds, scope="https://management.azure.com/.default")
+    arm = config.azure_cloud.arm_endpoint
+    req = create_access_token_request(creds=creds, scope=f"{arm}/.default")
 
     async with req.execute() as resp:
         result = await resp.json()
@@ -449,7 +459,7 @@ async def get_storage_account_key(
 
     req = Request(
         method="POST",
-        url=f"https://management.azure.com{storage_account_id}/listKeys",
+        url=f"{arm}{storage_account_id}/listKeys",
         params={"api-version": "2019-04-01"},
         auth=functools.partial(azure_auth_req, auth=auth),
     )
@@ -552,7 +562,7 @@ async def get_sas_token(cache_key: tuple[str, str | None]) -> tuple[Any, float]:
     expiration = now + datetime.timedelta(days=6)
     expiry = expiration.strftime("%Y-%m-%dT%H:%M:%SZ")
     req = Request(
-        url=f"https://{account}.blob.core.windows.net/",
+        url=f"{config.azure_cloud.blob_endpoint_url(account)}/",
         method="POST",
         params=dict(restype="service", comp="userdelegationkey"),
         data={"KeyInfo": {"Start": start, "Expiry": expiry}},
@@ -635,5 +645,5 @@ async def generate_signed_url(path: AzurePath) -> tuple[str, datetime.datetime]:
     query = urllib.parse.urlencode({k: v for k, v in params.items() if v != ""})
 
     expiry = datetime.datetime.strptime(key["SignedExpiry"], "%Y-%m-%dT%H:%M:%SZ")
-    url = path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
+    url = path.blob_url()
     return url + "?" + query, expiry

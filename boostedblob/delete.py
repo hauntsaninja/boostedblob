@@ -37,7 +37,7 @@ async def remove(path: BasePath | BlobPath | str) -> BasePath:
 async def _azure_remove(path: AzurePath) -> AzurePath:
     request = Request(
         method="DELETE",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         success_codes=(202,),
         failure_exceptions={404: FileNotFoundError(path)},
         auth=azure_auth_req,

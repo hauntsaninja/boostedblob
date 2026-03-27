@@ -144,3 +144,49 @@ def test_path_directory_like():
     assert PATHS[GooglePath].parent.blob == ""
     assert PATHS[GooglePath].parent.is_directory_like()
     assert PATHS[GooglePath].parent.ensure_directory_like().blob == ""
+
+
+def test_azure_path_multi_cloud(monkeypatch):
+    """Test that AzurePath URL construction and parsing respects cloud config."""
+    from boostedblob.azure_cloud import AZURE_PUBLIC_CLOUD, AZURE_US_GOV_CLOUD
+    from boostedblob.globals import config
+
+    path = AzurePath("myacct", "mycontainer", "myblob")
+
+    # Default (public cloud)
+    assert path.to_https_str() == "https://myacct.blob.core.windows.net/mycontainer/myblob"
+    assert path.blob_url() == "https://myacct.blob.core.windows.net/mycontainer/myblob"
+    assert path.container_url() == "https://myacct.blob.core.windows.net/mycontainer"
+    assert path.account_url() == "https://myacct.blob.core.windows.net"
+
+    # US Government cloud
+    monkeypatch.setattr(config, "azure_cloud", AZURE_US_GOV_CLOUD)
+    assert (
+        path.to_https_str()
+        == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+    )
+    assert path.blob_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+    assert path.container_url() == "https://myacct.blob.core.usgovcloudapi.net/mycontainer"
+    assert path.account_url() == "https://myacct.blob.core.usgovcloudapi.net"
+
+    # Parsing HTTPS URLs with US Gov suffix
+    parsed = AzurePath.from_str(
+        "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+    )
+    assert parsed == path
+
+    # is_cloud_path should recognize US Gov URLs
+    import urllib.parse
+
+    url = urllib.parse.urlparse(
+        "https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob"
+    )
+    assert AzurePath.is_cloud_path(url)
+
+    # Back to public cloud — US Gov URL should not be recognized
+    monkeypatch.setattr(config, "azure_cloud", AZURE_PUBLIC_CLOUD)
+    url = urllib.parse.urlparse("https://myacct.blob.core.usgovcloudapi.net/mycontainer/myblob")
+    assert not AzurePath.is_cloud_path(url)
+
+    # az:// scheme works regardless of cloud config
+    assert AzurePath.from_str("az://myacct/mycontainer/myblob") == path
