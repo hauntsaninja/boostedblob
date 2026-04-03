@@ -26,6 +26,27 @@ def run_bbb(argv: list[Any]) -> str:
     return output.getvalue()
 
 
+def test_help_includes_alias_and_private_commands(capsys: pytest.CaptureFixture[str]):
+    with pytest.raises(SystemExit) as exc_info:
+        boostedblob.cli.parse_options(["-h"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "ll                  List contents of a directory with size and mtime" in output
+    assert "llr (du)            List all files in a directory tree with size and mtime" in output
+    assert "_dud1               Summarize recursive size usage" in output
+    assert "_xrp                EXPERIMENTAL: recover Azure blobs under a prefix" in output
+
+
+def test_xrp_help_documents_dry_run(capsys: pytest.CaptureFixture[str]):
+    with pytest.raises(SystemExit) as exc_info:
+        boostedblob.cli.parse_options(["_xrp", "-h"])
+
+    assert exc_info.value.code == 0
+    output = " ".join(capsys.readouterr().out.split())
+    assert "Preview recoveries without applying them; pass false to mutate blobs" in output
+
+
 def test_cli():
     with helpers.tmp_local_dir() as local_dir:
         with helpers.tmp_azure_dir() as remote_dir:

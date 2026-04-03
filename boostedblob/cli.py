@@ -608,7 +608,10 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser(
-        "ll", formatter_class=argparse.RawDescriptionHelpFormatter, description=ls_desc
+        "ll",
+        help="List contents of a directory with size and mtime",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=ls_desc,
     )
     subparser.set_defaults(command=functools.partial(ls, long=True))
     subparser.add_argument("path", help="Path of directory to list")
@@ -637,6 +640,7 @@ eval "$(bbb complete init zsh)"
     subparser = subparsers.add_parser(
         "llr",
         aliases=["du"],
+        help="List all files in a directory tree with size and mtime",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=lstree_desc,
     )
@@ -647,7 +651,10 @@ eval "$(bbb complete init zsh)"
     )
     subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
-    subparser = subparsers.add_parser("_dud1")
+    subparser = subparsers.add_parser(
+        "_dud1",
+        help="Summarize recursive size usage for each immediate child path",
+    )
     subparser.set_defaults(command=_dud1)
     subparser.add_argument("path", help="Path of directory to list")
 
@@ -751,11 +758,19 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("-q", "--quiet", action="store_true")
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
-    subparser = subparsers.add_parser("_xrp")
+    subparser = subparsers.add_parser(
+        "_xrp",
+        help="EXPERIMENTAL: recover Azure blobs under a prefix to prior versions/snapshots",
+    )
     subparser.set_defaults(command=_xxx_recoverprefix)
     subparser.add_argument("prefix", help="Prefix of globs to recover")
     subparser.add_argument("restore_dt", help="GMT datetime to recover to")
-    subparser.add_argument("--dry-run", type=lambda x: not x or x[0].lower() != "f", default=True)
+    subparser.add_argument(
+        "--dry-run",
+        type=lambda x: not x or x[0].lower() != "f",
+        default=True,
+        help="Preview recoveries without applying them; pass false to mutate blobs",
+    )
 
     subparser = subparsers.add_parser(
         "complete",
