@@ -652,8 +652,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("-s", "--relative", action="store_true", help="Show relative paths")
 
     subparser = subparsers.add_parser(
-        "_dud1",
-        help="Summarize recursive size usage for each immediate child path",
+        "_dud1", help="Summarize recursive size usage for each immediate child path (experimental)"
     )
     subparser.set_defaults(command=_dud1)
     subparser.add_argument("path", help="Path of directory to list")
@@ -759,8 +758,7 @@ eval "$(bbb complete init zsh)"
     subparser.add_argument("--concurrency", **concurrency_kwargs)
 
     subparser = subparsers.add_parser(
-        "_xrp",
-        help="EXPERIMENTAL: recover Azure blobs under a prefix to prior versions/snapshots",
+        "_xrp", help="Recover Azure blobs under a prefix to prior versions/snapshots (experimental)"
     )
     subparser.set_defaults(command=_xxx_recoverprefix)
     subparser.add_argument("prefix", help="Prefix of globs to recover")
@@ -769,7 +767,7 @@ eval "$(bbb complete init zsh)"
         "--dry-run",
         type=lambda x: not x or x[0].lower() != "f",
         default=True,
-        help="Preview recoveries without applying them; pass false to mutate blobs",
+        help="Preview recoveries without applying them; pass false to mutate blob storage",
     )
 
     subparser = subparsers.add_parser(
