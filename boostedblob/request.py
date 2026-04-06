@@ -47,10 +47,10 @@ class RawRequest:
         )
         if config.debug_mode:
             print(f"[boostedblob] Making request: {self}", file=sys.stderr)
-            now = time.time()
+            now = time.monotonic()
         async with ctx as resp:
             if config.debug_mode:
-                duration = time.time() - now
+                duration = time.monotonic() - now
                 print(
                     f"[boostedblob] Completed request, took {duration:.3f}s: {self}",
                     file=sys.stderr,
@@ -106,7 +106,7 @@ class Request:
                 jitter_fraction=config.backoff_jitter_fraction,
             )
         ):
-            now = time.time()
+            now = time.monotonic()
             if (now - last_auth_t) > config.request_reauth_seconds:
                 if self.auth is not None:
                     rreq = await self.auth(self)
@@ -130,6 +130,11 @@ class Request:
                     error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
                 else:
                     if resp.status in self.success_codes:
+                        url = urllib.parse.urlparse(self.url)
+                        hostname = url.hostname
+                        if hostname:
+                            _hostname_check_cache[hostname] = (now + 300, False)
+
                         yield resp
                         return
 
@@ -385,7 +390,7 @@ async def _bad_hostname_check(hostname: str) -> bool:
             return True
 
     # maybe this cache is a little bit overkill...
-    now = time.time()
+    now = time.monotonic()
     if hostname in _hostname_check_cache and _hostname_check_cache[hostname][0] >= now:
         return _hostname_check_cache[hostname][1]
     ret = await inner(hostname)
