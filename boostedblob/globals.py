@@ -11,7 +11,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, TextIO, TypeVar
 
 import aiohttp
 
@@ -252,7 +252,8 @@ def ensure_session(fn: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
-def set_event_loop_exception_handler() -> None:
+# Capture sys.stderr in locals so things work if this gets run during interpreter shutdown
+def set_event_loop_exception_handler(stderr: TextIO = sys.stderr) -> None:
     loop = asyncio.get_running_loop()
 
     def handler(
@@ -261,7 +262,7 @@ def set_event_loop_exception_handler() -> None:
         message = context["message"]
         exception = context.get("exception", Exception)
 
-        print(f"ERROR (from event loop): {type(exception).__name__}: {message}", file=sys.stderr)
+        print(f"ERROR (from event loop): {type(exception).__name__}: {message}", file=stderr)
         if loop.get_debug():
             loop.default_exception_handler(context)
 
