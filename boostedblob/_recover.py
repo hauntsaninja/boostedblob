@@ -43,7 +43,7 @@ async def _listtree_versions_snapshots(
     it = xml_page_iterator(
         Request(
             method="GET",
-            url=prefix.format_url("https://{account}.blob.core.windows.net/{container}"),
+            url=prefix.container_url(),
             params=dict(
                 comp="list",
                 restype="container",
@@ -68,7 +68,7 @@ async def _listtree_versions_snapshots(
 async def _undelete(path: AzurePath) -> AzurePath:
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         params=dict(comp="undelete"),
         success_codes=(200,),
         auth=azure_auth_req,
@@ -84,7 +84,7 @@ async def _promote_candidate(path: AzurePath, candidate: dict[str, Any]) -> None
         source = "versionid=" + urllib.parse.quote(candidate["VersionId"])
     else:
         raise AssertionError
-    url = path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
+    url = path.blob_url()
     request = Request(
         method="PUT",
         url=url,
@@ -100,7 +100,7 @@ async def _promote_candidate(path: AzurePath, candidate: dict[str, Any]) -> None
 async def _delete_snapshot(path: AzurePath, snapshot: str) -> None:
     request = Request(
         method="DELETE",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         params={"snapshot": snapshot},
         success_codes=(202,),
         auth=azure_auth_req,

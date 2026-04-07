@@ -69,7 +69,7 @@ async def _azure_write_single(
 
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         data=data,
         headers={"x-ms-blob-type": "BlockBlob"},
         success_codes=(201,),
@@ -377,7 +377,7 @@ def get_block_id(upload_id: int, index: int) -> str:
 async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False) -> None:
     request = Request(
         method="GET",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         params=dict(comp="blocklist"),
         success_codes=(200, 404, 400),
         auth=azure_auth_req,
@@ -411,7 +411,7 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
     # Make sure to preserve metadata for the file
     request = Request(
         method="HEAD",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         failure_exceptions={404: FileNotFoundError(path)},
         auth=azure_auth_req,
     )
@@ -432,7 +432,7 @@ async def prepare_block_blob_write(path: AzurePath, _always_clear: bool = False)
 
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         headers={**headers, "If-Match": metadata["etag"]},
         params=dict(comp="blocklist"),
         data={"BlockList": {"Latest": blocks}},
@@ -447,7 +447,7 @@ async def _azure_put_block(
 ) -> None:
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         params=dict(comp="block", blockid=block_id),
         data=chunk,
         success_codes=(201,),
@@ -463,7 +463,7 @@ async def azure_put_block_list(
         headers = {}
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         headers=headers,
         params=dict(comp="blocklist"),
         data={"BlockList": {"Latest": block_list}},

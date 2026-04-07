@@ -175,7 +175,7 @@ async def _azure_put_block_from_url(
     assert range_str is not None
     request = Request(
         method="PUT",
-        url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=path.blob_url(),
         headers={"x-ms-copy-source": copy_source, "x-ms-source-range": range_str},
         params=dict(comp="block", blockid=block_id),
         success_codes=(201,),
@@ -238,12 +238,12 @@ async def _azure_cloud_copyfile_via_copy(
             raise FileExistsError(dst)
 
     if src.account == dst.account:
-        copy_source = src.format_url("https://{account}.blob.core.windows.net/{container}/{blob}")
+        copy_source = src.blob_url()
     else:
         copy_source, _ = await azure_auth.generate_signed_url(src)
     request = Request(
         method="PUT",
-        url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+        url=dst.blob_url(),
         headers={"x-ms-copy-source": copy_source},
         success_codes=(202,),
         failure_exceptions={404: FileNotFoundError(src)},
@@ -267,7 +267,7 @@ async def _azure_cloud_copyfile_via_copy(
             await asyncio.sleep(next(sleep))
             request = Request(
                 method="GET",
-                url=dst.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
+                url=dst.blob_url(),
                 auth=azure_auth_req,
             )
             async with request.execute() as resp:

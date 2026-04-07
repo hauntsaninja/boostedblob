@@ -96,7 +96,7 @@ async def _azure_list_blobs(
     it = xml_page_iterator(
         Request(
             method="GET",
-            url=prefix.format_url("https://{account}.blob.core.windows.net/{container}"),
+            url=prefix.container_url(),
             params=dict(comp="list", restype="container", prefix=prefix.blob, **params),
             auth=azure_auth_req,
         )
@@ -429,10 +429,12 @@ def _google_get_entries(bucket: str, result: Mapping[str, Any]) -> Iterator[DirE
 
 
 async def _azure_list_containers(account: str) -> AsyncIterator[DirEntry]:
+    from .globals import config
+
     it = xml_page_iterator(
         Request(
             method="GET",
-            url=f"https://{account}.blob.core.windows.net/",
+            url=f"{config.azure_cloud.blob_endpoint_url(account)}/",
             params=dict(comp="list"),
             failure_exceptions={404: FileNotFoundError(AzurePath(account, "", ""))},
             auth=azure_auth_req,
