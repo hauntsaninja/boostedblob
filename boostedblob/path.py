@@ -455,12 +455,10 @@ async def getsize(path: BasePath | BlobPath | str) -> int:
 
 
 @pathdispatch
-async def isdir(path: BasePath | BlobPath | str, raise_on_missing: bool = False) -> bool:
+async def isdir(path: BasePath | BlobPath | str) -> bool:
     """Check whether ``path`` is a directory.
 
     :param path: The path that could be a directory.
-    :param raise_on_missing: If True, raise FileNotFoundError if ``path`` does not exist. Otherwise,
-        return False.
 
     """
     raise ValueError(f"Unsupported path: {path}")
