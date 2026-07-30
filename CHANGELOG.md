@@ -4,8 +4,10 @@
 
 - Fix pagination bug when listing Azure containers
 - Preserve order returned by the underlying Azure list requests
-- Fix return type annotation of `bbb.exists`
 - Add `BBB_ALLOW_REDIRECTS` env var to allow HTTP redirects
+- Fix premature exhaustion issue in composed mappings
+- Fix return type annotation of `bbb.exists`
+- Remove unused parameter in `isdir` stub
 
 ## [v1.0.0]
 
