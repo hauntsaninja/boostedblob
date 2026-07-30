@@ -16,6 +16,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Iterator, T
 import aiohttp
 
 from . import __version__, azure_auth, google_auth
+from .azure_cloud import AzureCloudConfig, get_cloud_config
 
 MB = 2**20
 
@@ -137,15 +138,18 @@ class Config:
     token_early_expiration_seconds: int = 300
     request_reauth_seconds: int = 300
 
-    azure_access_token_manager: TokenManager[tuple[str, str | None]] = field(
+    azure_access_token_manager: TokenManager[azure_auth.AzureCacheKey] = field(
         default_factory=lambda: TokenManager(azure_auth.get_access_token)
     )
-    azure_sas_token_manager: TokenManager[tuple[str, str | None]] = field(
+    azure_sas_token_manager: TokenManager[azure_auth.AzureCacheKey] = field(
         default_factory=lambda: TokenManager(azure_auth.get_sas_token)
     )
     google_access_token_manager: TokenManager[str] = field(
         default_factory=lambda: TokenManager(google_auth.get_access_token)
     )
+
+    _azure_cloud_override: AzureCloudConfig | None = field(default=None, init=False, repr=False)
+    _azure_cloud_cache: AzureCloudConfig | None = field(default=None, init=False, repr=False)
 
     _sessions: dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = field(
         default_factory=dict, init=False
@@ -195,6 +199,18 @@ class Config:
         )
         self._set_session(session)
 
+    @property
+    def azure_cloud(self) -> AzureCloudConfig:
+        if self._azure_cloud_override is not None:
+            return self._azure_cloud_override
+        if self._azure_cloud_cache is None:
+            self._azure_cloud_cache = get_cloud_config()
+        return self._azure_cloud_cache
+
+    @azure_cloud.setter
+    def azure_cloud(self, cloud: AzureCloudConfig) -> None:
+        self._azure_cloud_override = cloud
+
 
 config: Config = Config()
 
@@ -202,9 +218,17 @@ config: Config = Config()
 @contextlib.contextmanager
 def configure(**kwargs: Any) -> Iterator[None]:
     old_session = None
-    if "session" in kwargs:
-        old_session = config._get_session()
+    session_overridden = "session" in kwargs
+    if session_overridden:
+        try:
+            old_session = config._get_session()
+        except RuntimeError:
+            old_session = None
         config._set_session(kwargs.pop("session"))
+
+    old_azure_cloud_override = config._azure_cloud_override
+    if "azure_cloud" in kwargs:
+        config.azure_cloud = kwargs.pop("azure_cloud")
 
     original = {k: getattr(config, k) for k in kwargs}
     config.__dict__.update(**kwargs)
@@ -212,7 +236,12 @@ def configure(**kwargs: Any) -> Iterator[None]:
         yield
     finally:
         config.__dict__.update(**original)
-        config._set_session(old_session)
+        config._azure_cloud_override = old_azure_cloud_override
+        if session_overridden:
+            try:
+                config._set_session(old_session)
+            except RuntimeError:
+                pass
 
 
 def _create_session() -> aiohttp.ClientSession:

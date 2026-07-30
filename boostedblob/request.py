@@ -124,7 +124,8 @@ class Request:
                         # an invalid hostname from a network error
                         url = urllib.parse.urlparse(self.url)
                         hostname = url.hostname
-                        if hostname and hostname.endswith(".blob.core.windows.net"):
+                        suffix = f".blob.{config.azure_cloud.storage_endpoint_suffix}"
+                        if hostname and hostname.endswith(suffix):
                             if await _bad_hostname_check(hostname):
                                 raise FileNotFoundError(hostname) from None
                     error = RequestFailure(reason=type(e).__name__ + ": " + str(e), request=self)
@@ -220,12 +221,16 @@ async def execute_retrying_read(request: Request) -> bytes:
 
 async def azure_auth_req(request: Request, *, auth: tuple[str, str] | None = None) -> RawRequest:
     """Return a Request that can be submitted to Azure Blob."""
+    from .azure_auth import azure_cache_key
+
     u = urllib.parse.urlparse(request.url)
     account = u.netloc.split(".")[0]
     parts = u.path.split("/", maxsplit=2)
     container = parts[1] if len(parts) >= 2 else None
     if auth is None:
-        auth = await config.azure_access_token_manager.get_token(key=(account, container))
+        auth = await config.azure_access_token_manager.get_token(
+            key=azure_cache_key(account, container)
+        )
     assert auth is not None
     kind, token = auth
 
