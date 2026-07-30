@@ -371,8 +371,15 @@ class OrderedMappingBoostable(MappingBoostable[A, T]):
     async def blocking_dequeue(self) -> T:
         while True:
             if not self.buffer:
-                arg = await blocking_dequeue_underlying(self.iterable)
-                self.enqueue(arg)
+                try:
+                    arg = await blocking_dequeue_underlying(self.iterable)
+                except StopAsyncIteration:
+                    # provide_boost() may have populated our buffer while
+                    # blocking_dequeue_underlying() was suspended.
+                    if not self.buffer:
+                        raise
+                else:
+                    self.enqueue(arg)
             ret = self.dequeue()
             if not isinstance(ret, NotReady):
                 return ret
@@ -421,8 +428,15 @@ class UnorderedMappingBoostable(MappingBoostable[A, T]):
         loop = asyncio.get_running_loop()
         while True:
             if not self.buffer:
-                arg = await blocking_dequeue_underlying(self.iterable)
-                task = self.enqueue(arg)
+                try:
+                    arg = await blocking_dequeue_underlying(self.iterable)
+                except StopAsyncIteration:
+                    # provide_boost() may have populated our buffer while
+                    # blocking_dequeue_underlying() was suspended.
+                    if not self.buffer:
+                        raise
+                else:
+                    task = self.enqueue(arg)
             ret = self.dequeue(hint=task)
             if not isinstance(ret, NotReady):
                 return ret
