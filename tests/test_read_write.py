@@ -1,11 +1,66 @@
 import asyncio
+import contextlib
 import os
+from types import SimpleNamespace
 
 import pytest
 
 import boostedblob as bbb
+from boostedblob.request import RequestFailure
 
 from . import helpers
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["single", "stream", "unordered"])
+@pytest.mark.parametrize("overwrite", [False, True])
+@pytest.mark.parametrize("collision", [None, 409, 412])
+async def test_azure_writes_use_if_none_match_unless_overwriting(
+    monkeypatch, operation, overwrite, collision
+):
+    requests = []
+
+    @contextlib.asynccontextmanager
+    async def fake_execute(request):
+        async def read():
+            return b""
+
+        status = collision if collision and request.params.get("comp") != "block" else 201
+        yield SimpleNamespace(status=status, reason="Precondition Failed", headers={}, read=read)
+
+    async def fake_auth(request):
+        requests.append(request)
+        return SimpleNamespace(raw_execute=lambda: fake_execute(request))
+
+    async def nonexistent(_path):
+        return False
+
+    async def prepare(_path):
+        return None
+
+    monkeypatch.setattr(bbb.write, "azure_auth_req", fake_auth)
+    monkeypatch.setattr(bbb.write, "exists", nonexistent)
+    monkeypatch.setattr(bbb.write, "prepare_block_blob_write", prepare)
+
+    path = bbb.AzurePath("account", "container", "blob")
+    expectation = (
+        pytest.raises(FileExistsError if not overwrite else RequestFailure)
+        if collision
+        else contextlib.nullcontext()
+    )
+    with expectation:
+        async with bbb.BoostExecutor(2) as executor:
+            if operation == "single":
+                await bbb.write.write_single(path, b"data", overwrite=overwrite)
+            elif operation == "stream":
+                await bbb.write.write_stream(path, iter([b"data"]), executor, overwrite=overwrite)
+            else:
+                await bbb.write.write_stream_unordered(
+                    path, iter([(b"data", (0, 4))]), executor, overwrite=overwrite
+                )
+
+    assert requests[-1].headers.get("If-None-Match") == (None if overwrite else "*")
+    assert all("If-None-Match" not in request.headers for request in requests[:-1])
 
 
 @pytest.mark.asyncio

@@ -71,8 +71,11 @@ async def _azure_write_single(
         method="PUT",
         url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
         data=data,
-        headers={"x-ms-blob-type": "BlockBlob"},
+        headers={"x-ms-blob-type": "BlockBlob", **({} if overwrite else {"If-None-Match": "*"})},
         success_codes=(201,),
+        failure_exceptions=(
+            {} if overwrite else {409: FileExistsError(path), 412: FileExistsError(path)}
+        ),
         auth=azure_auth_req,
     )
     await request.execute_reponseless()
@@ -177,6 +180,8 @@ async def _azure_write_stream(
     # azure does not calculate md5s for us, we have to do that manually
     # https://blogs.msdn.microsoft.com/windowsazurestorage/2011/02/17/windows-azure-blob-md5-overview/
     headers = {"x-ms-blob-content-md5": base64.b64encode(md5.digest()).decode("utf8")}
+    if not overwrite:
+        headers["If-None-Match"] = "*"
     blocklist = [get_block_id(upload_id, i) for i in range(max_block_index + 1)]
     await azure_put_block_list(path, blocklist, headers=headers)
 
@@ -318,7 +323,11 @@ async def _azure_write_stream_unordered(
 
     # sort by start byte so the blocklist is ordered correctly
     block_list.sort()
-    await azure_put_block_list(path, [get_block_id(upload_id, index) for _, index in block_list])
+    await azure_put_block_list(
+        path,
+        [get_block_id(upload_id, index) for _, index in block_list],
+        headers=None if overwrite else {"If-None-Match": "*"},
+    )
 
 
 @write_stream_unordered.register  # type: ignore
@@ -468,6 +477,11 @@ async def azure_put_block_list(
         params=dict(comp="blocklist"),
         data={"BlockList": {"Latest": block_list}},
         success_codes=(201, 400),
+        failure_exceptions=(
+            {409: FileExistsError(path), 412: FileExistsError(path)}
+            if headers.get("If-None-Match") == "*"
+            else {}
+        ),
         auth=azure_auth_req,
     )
 
