@@ -7,6 +7,8 @@ import os
 import random
 from typing import Mapping
 
+import aiohttp
+
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
 from .globals import config
@@ -72,13 +74,12 @@ async def _azure_write_single(
         url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
         data=data,
         headers={"x-ms-blob-type": "BlockBlob", **({} if overwrite else {"If-None-Match": "*"})},
-        success_codes=(201,),
-        failure_exceptions=(
-            {} if overwrite else {409: FileExistsError(path), 412: FileExistsError(path)}
-        ),
+        success_codes=(201,) if overwrite else (201, 409, 412),
         auth=azure_auth_req,
     )
-    await request.execute_reponseless()
+    async with request.execute() as resp:
+        if resp.status != 201:
+            await _raise_azure_write_error(path, request, resp)
 
 
 @write_single.register  # type: ignore
@@ -465,6 +466,24 @@ async def _azure_put_block(
     await request.execute_reponseless()
 
 
+async def _raise_azure_write_error(
+    path: AzurePath, request: Request, response: aiohttp.ClientResponse
+) -> None:
+    if (response.status, response.headers.get("x-ms-error-code")) in (
+        (409, "BlobAlreadyExists"),
+        (412, "ConditionNotMet"),
+    ):
+        raise FileExistsError(path)
+    raise RequestFailure(
+        reason=(
+            f"{response.reason!r}\nBody:\n{(await response.read()).decode('utf-8')}\n"
+            f"Headers:\n{response.headers}"
+        ),
+        request=request,
+        status=response.status,
+    )
+
+
 async def azure_put_block_list(
     path: AzurePath, block_list: list[str], headers: Mapping[str, str] | None = None
 ) -> None:
@@ -476,12 +495,7 @@ async def azure_put_block_list(
         headers=headers,
         params=dict(comp="blocklist"),
         data={"BlockList": {"Latest": block_list}},
-        success_codes=(201, 400),
-        failure_exceptions=(
-            {409: FileExistsError(path), 412: FileExistsError(path)}
-            if headers.get("If-None-Match") == "*"
-            else {}
-        ),
+        success_codes=(201, 400, 409, 412) if headers.get("If-None-Match") == "*" else (201, 400),
         auth=azure_auth_req,
     )
 
@@ -495,6 +509,8 @@ async def azure_put_block_list(
         async with request.execute() as resp:
             if resp.status == 201:
                 return
+            if resp.status in (409, 412):
+                await _raise_azure_write_error(path, request, resp)
 
             assert resp.status == 400
             data = await resp.read()
