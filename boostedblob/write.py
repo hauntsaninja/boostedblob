@@ -72,13 +72,23 @@ async def _azure_write_single(
         url=path.format_url("https://{account}.blob.core.windows.net/{container}/{blob}"),
         data=data,
         headers={"x-ms-blob-type": "BlockBlob", **({} if overwrite else {"If-None-Match": "*"})},
-        success_codes=(201,),
-        failure_exceptions=(
-            {} if overwrite else {409: FileExistsError(path), 412: FileExistsError(path)}
-        ),
+        success_codes=(201,) if overwrite else (201, 409, 412),
         auth=azure_auth_req,
     )
-    await request.execute_reponseless()
+    async with request.execute() as resp:
+        if resp.status == 201:
+            return
+        body = await resp.read()
+        if (resp.status, etree.fromstring(body).findtext("Code")) in (
+            (409, "BlobAlreadyExists"),
+            (412, "ConditionNotMet"),
+        ):
+            raise FileExistsError(path)
+        raise RequestFailure(
+            reason=f"{resp.reason!r}\nBody:\n{body.decode('utf-8')}\nHeaders:\n{resp.headers}",
+            request=request,
+            status=resp.status,
+        )
 
 
 @write_single.register  # type: ignore
@@ -476,12 +486,7 @@ async def azure_put_block_list(
         headers=headers,
         params=dict(comp="blocklist"),
         data={"BlockList": {"Latest": block_list}},
-        success_codes=(201, 400),
-        failure_exceptions=(
-            {409: FileExistsError(path), 412: FileExistsError(path)}
-            if headers.get("If-None-Match") == "*"
-            else {}
-        ),
+        success_codes=(201, 400, 409, 412) if headers.get("If-None-Match") == "*" else (201, 400),
         auth=azure_auth_req,
     )
 
@@ -496,10 +501,14 @@ async def azure_put_block_list(
             if resp.status == 201:
                 return
 
-            assert resp.status == 400
             data = await resp.read()
             result = etree.fromstring(data)
-            if result.findtext("Code") == "InvalidBlockList":
+            if (resp.status, result.findtext("Code")) in (
+                (409, "BlobAlreadyExists"),
+                (412, "ConditionNotMet"),
+            ):
+                raise FileExistsError(path)
+            if resp.status == 400 and result.findtext("Code") == "InvalidBlockList":
                 if attempt >= 3:
                     raise RuntimeError(
                         f"Invalid block list, most likely due to concurrent writes to {path}"
@@ -510,7 +519,10 @@ async def azure_put_block_list(
                 await asyncio.sleep(backoff)
                 continue
 
-            raise RequestFailure(reason=str(resp.reason), request=request, status=resp.status)
+            reason = str(resp.reason)
+            if resp.status != 400:
+                reason = f"{resp.reason!r}\nBody:\n{data.decode('utf-8')}\nHeaders:\n{resp.headers}"
+            raise RequestFailure(reason=reason, request=request, status=resp.status)
 
 
 async def _google_start_resumable_upload(path: GooglePath) -> str:
