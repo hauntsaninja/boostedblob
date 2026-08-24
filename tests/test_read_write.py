@@ -114,6 +114,22 @@ async def test_prepare_block_blob_write():
 
 @pytest.mark.asyncio
 @bbb.ensure_session
+async def test_azure_write_stream_does_not_overwrite_concurrent_write():
+    with helpers.tmp_azure_dir() as azure_dir:
+        async with bbb.BoostExecutor(10) as e:
+            path = azure_dir / "blob"
+
+            def competing_stream():
+                helpers.create_file(path, b"original")
+                yield b"replacement"
+
+            with pytest.raises(FileExistsError):
+                await bbb.write.write_stream(path, competing_stream(), e)
+            assert b"original" == await bbb.read.read_single(path)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
 async def test_azure_write_unordered():
     with helpers.tmp_azure_dir() as azure_dir:
         async with bbb.BoostExecutor(10) as e:
