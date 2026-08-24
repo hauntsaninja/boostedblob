@@ -79,7 +79,7 @@ async def _azure_write_single(
         if resp.status == 201:
             return
         body = await resp.read()
-        if (resp.status, etree.fromstring(body).findtext("Code")) in (
+        if resp.status in (409, 412) and (resp.status, etree.fromstring(body).findtext("Code")) in (
             (409, "BlobAlreadyExists"),
             (412, "ConditionNotMet"),
         ):
@@ -503,7 +503,7 @@ async def azure_put_block_list(
 
             data = await resp.read()
             result = etree.fromstring(data)
-            if (resp.status, result.findtext("Code")) in (
+            if resp.status in (409, 412) and (resp.status, result.findtext("Code")) in (
                 (409, "BlobAlreadyExists"),
                 (412, "ConditionNotMet"),
             ):
