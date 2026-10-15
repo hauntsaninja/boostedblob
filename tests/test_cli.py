@@ -139,6 +139,19 @@ def test_cli():
                 run_bbb(["lstree", remote_dir])
 
 
+def test_cat_ignores_broken_pipe_error_message(tmp_path, capsys):
+    path = tmp_path / "file"
+    path.write_bytes(b"contents")
+
+    output = io.StringIO()
+    output.buffer = MagicMock()  # type: ignore
+    output.buffer.write = MagicMock(side_effect=BrokenPipeError())
+    with contextlib.redirect_stdout(output), pytest.raises(BrokenPipeError):
+        boostedblob.cli.run_bbb(["cat", str(path)])
+
+    assert capsys.readouterr().err == ""
+
+
 def test_complete():
     with helpers.tmp_azure_dir() as azure_dir:
         helpers.create_file(azure_dir / "somefile")

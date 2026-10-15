@@ -803,6 +803,8 @@ def run_bbb(argv: list[str]) -> None:
         args = parse_options(argv)
         command = args.__dict__.pop("command")
         command(**args.__dict__)
+    except BrokenPipeError:
+        raise
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         raise
