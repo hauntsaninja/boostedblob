@@ -451,6 +451,25 @@ async def test_map_eagerise_slow():
 # ==============================
 
 
+@pytest.mark.parametrize("outer_map", ["map_ordered", "map_unordered"])
+@pytest.mark.asyncio
+async def test_composition_does_not_exhaust_with_buffered_results(outer_map):
+    async def step(value: int) -> int:
+        await asyncio.sleep(0)
+        return value
+
+    async def upload(item: tuple[int, int]) -> tuple[int, int]:
+        await asyncio.sleep(0)
+        return item
+
+    async with bbb.BoostExecutor(2) as executor:
+        inner = executor.map_unordered(step, iter(range(2)))
+        outer = getattr(executor, outer_map)(upload, executor.enumerate(inner))
+        results = [result async for result in outer]
+
+    assert sorted(value for _, value in results) == [0, 1]
+
+
 @pytest.mark.asyncio
 async def test_composition_ordered_ordered():
     N = 500
