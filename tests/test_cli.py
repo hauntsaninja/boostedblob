@@ -139,17 +139,29 @@ def test_cli():
                 run_bbb(["lstree", remote_dir])
 
 
-def test_cat_ignores_broken_pipe_error_message(tmp_path, capsys):
+def assert_quiet_broken_pipe(*args: str) -> None:
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    with os.fdopen(write_fd, "wb") as stdout:
+        result = subprocess.run(
+            [sys.executable, "-E", "-m", "boostedblob", *args],
+            stdout=stdout,
+            stderr=subprocess.PIPE,
+        )
+
+    assert result.returncode == 141  # 128 + SIGPIPE
+    assert result.stderr == b""
+
+
+@pytest.mark.parametrize("size", [8, 100_000])
+def test_cat_exits_quietly_on_broken_pipe(tmp_path, size):
     path = tmp_path / "file"
-    path.write_bytes(b"contents")
+    path.write_bytes(b"x" * size)
+    assert_quiet_broken_pipe("cat", str(path))
 
-    output = io.StringIO()
-    output.buffer = MagicMock()  # type: ignore
-    output.buffer.write = MagicMock(side_effect=BrokenPipeError())
-    with contextlib.redirect_stdout(output), pytest.raises(BrokenPipeError):
-        boostedblob.cli.run_bbb(["cat", str(path)])
 
-    assert capsys.readouterr().err == ""
+def test_help_exits_quietly_on_broken_pipe():
+    assert_quiet_broken_pipe("--help")
 
 
 def test_complete():

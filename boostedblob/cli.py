@@ -808,3 +808,5 @@ def run_bbb(argv: list[str]) -> None:
     except Exception as e:
         print(f"ERROR: {type(e).__name__}: {e}", file=sys.stderr)
         raise
+    finally:
+        sys.stdout.flush()
