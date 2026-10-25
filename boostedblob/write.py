@@ -5,8 +5,10 @@ import base64
 import hashlib
 import os
 import random
-from typing import Mapping
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Mapping
 
+from . import _s3
 from .boost import BoostExecutor, BoostUnderlying, consume, iter_underlying
 from .delete import remove
 from .globals import config
@@ -17,6 +19,7 @@ from .path import (
     CloudPath,
     GooglePath,
     LocalPath,
+    S3Path,
     exists,
     pathdispatch,
 )
@@ -28,7 +31,7 @@ from .request import (
     exponential_sleep_generator,
     google_auth_req,
 )
-from .xml import etree
+from .xml import dict_to_xml, etree
 
 AZURE_BLOCK_COUNT_LIMIT = 50_000
 
@@ -100,6 +103,27 @@ async def _google_write_single(
         data=data,
         headers={"Content-Type": "application/octet-stream"},
         auth=google_auth_req,
+    )
+    await request.execute_reponseless()
+
+
+@write_single.register  # type: ignore
+async def _s3_write_single(
+    path: S3Path, data: bytes | bytearray | memoryview, overwrite: bool = False
+) -> None:
+    if len(data) > _s3.MAX_PART_SIZE:
+        raise ValueError(
+            f"Data is too large to write in a single request: {len(data):_} bytes"
+            "Use `write_chunked` instead."
+        )
+    if not path.blob:
+        raise IsADirectoryError(path)
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError(path)
+
+    request = await _s3.request(
+        "PUT", path, data=bytes(data), headers={} if overwrite else {"If-None-Match": "*"}
     )
     await request.execute_reponseless()
 
@@ -243,6 +267,94 @@ async def _google_write_stream(
         await _google_finalise_upload(upload_url, total_size=offset)
 
 
+@asynccontextmanager
+async def multipart_upload(
+    path: S3Path, overwrite: bool
+) -> AsyncIterator[tuple[str, list[dict[str, Any]]]]:
+    create = await _s3.request(
+        "POST", path, params={"uploads": ""}, headers={"x-amz-checksum-algorithm": "CRC32"}
+    )
+    upload_id = (await _s3.xml_result(create)).findtext("{*}UploadId")
+    assert upload_id
+    params = {"uploadId": upload_id}
+    parts: list[dict[str, Any]] = []
+    try:
+        yield upload_id, parts
+        complete = await _s3.request(
+            "POST",
+            path,
+            params=params,
+            data=dict_to_xml({"CompleteMultipartUpload": {"Part": parts}}),
+            headers={} if overwrite else {"If-None-Match": "*"},
+        )
+        await _s3.xml_result(complete)
+    except BaseException:
+        abort = await _s3.request("DELETE", path, params=params, success_codes=(204, 404))
+        await abort.execute_reponseless()
+        raise
+
+
+async def _s3_upload_part(path: S3Path, upload_id: str, number: int, data: bytes) -> dict[str, Any]:
+    from botocore.httpchecksum import Crc32Checksum  # type: ignore[import-untyped]
+
+    if not 1 <= number <= _s3.MAX_PARTS:
+        raise ValueError("S3 upload exceeds 10,000 parts. Increase config.chunk_size.")
+    checksum = Crc32Checksum().handle(data)
+    request = await _s3.request(
+        "PUT",
+        path,
+        params={"uploadId": upload_id, "partNumber": str(number)},
+        data=data,
+        headers={"x-amz-checksum-crc32": checksum},
+    )
+    async with request.execute() as response:
+        return {"PartNumber": number, "ETag": response.headers["ETag"], "ChecksumCRC32": checksum}
+
+
+async def _s3_parts(
+    stream: BoostUnderlying[bytes | bytearray | memoryview], part_size: int
+) -> AsyncIterator[bytes]:
+    # Callers may supply arbitrarily small chunks. Only the final S3 part can be under 5 MiB.
+    pending = bytearray()
+    async for chunk in iter_underlying(stream):
+        view = memoryview(chunk)
+        while view:
+            take = min(part_size - len(pending), len(view))
+            pending.extend(view[:take])
+            view = view[take:]
+            if len(pending) == part_size:
+                yield bytes(pending)
+                pending.clear()
+    if pending:
+        yield bytes(pending)
+
+
+@write_stream.register  # type: ignore
+async def _s3_write_stream(
+    path: S3Path,
+    stream: BoostUnderlying[bytes | bytearray | memoryview],
+    executor: BoostExecutor,
+    overwrite: bool = False,
+) -> None:
+    part_size = min(_s3.MAX_PART_SIZE, max(config.chunk_size, _s3.MIN_PART_SIZE))
+    chunks = _s3_parts(stream, part_size)
+    chunk = await anext(chunks, b"")
+    if len(chunk) < part_size:
+        await write_single(path, chunk, overwrite=overwrite)
+        return
+
+    if not path.blob:
+        raise IsADirectoryError(path)
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError(path)
+
+    async with multipart_upload(path, overwrite) as (upload_id, parts):
+        while chunk:
+            parts.append(await _s3_upload_part(path, upload_id, len(parts) + 1, chunk))
+            chunk = await anext(chunks, b"")
+
+
 @write_stream.register  # type: ignore
 async def _local_write_stream(
     path: LocalPath,
@@ -278,7 +390,8 @@ async def write_stream_unordered(
     :param path: The path to write to.
     :param executor: An executor.
     :param stream: The stream of bytes to write, along with what range of bytes each chunk
-        corresponds to. Note the chunking of stream also determines how we chunk the writes.
+        corresponds to. For S3, use chunks aligned to config.chunk_size (5 MiB to 5 GiB).
+        Only the final chunk may be shorter.
     :param overwrite: If False, raises if the path already exists.
 
     """
@@ -319,6 +432,48 @@ async def _azure_write_stream_unordered(
     # sort by start byte so the blocklist is ordered correctly
     block_list.sort()
     await azure_put_block_list(path, [get_block_id(upload_id, index) for _, index in block_list])
+
+
+@write_stream_unordered.register  # type: ignore
+async def _s3_write_stream_unordered(
+    path: S3Path,
+    stream: BoostUnderlying[tuple[bytes | bytearray | memoryview, ByteRange]],
+    executor: BoostExecutor,
+    overwrite: bool = False,
+) -> None:
+    part_size = config.chunk_size
+    if not _s3.MIN_PART_SIZE <= part_size <= _s3.MAX_PART_SIZE:
+        raise ValueError("Unordered S3 writes require config.chunk_size between 5 MiB and 5 GiB")
+    if not path.blob:
+        raise IsADirectoryError(path)
+    if not overwrite:
+        if await exists(path):
+            raise FileExistsError(path)
+
+    async with multipart_upload(path, overwrite) as (upload_id, parts):
+
+        async def upload(
+            item: tuple[bytes | bytearray | memoryview, ByteRange],
+        ) -> tuple[int, dict[str, Any]]:
+            chunk, (start, end) = item
+            if (
+                start < 0
+                or start % part_size
+                or end != start + len(chunk)
+                or not 0 < len(chunk) <= part_size
+            ):
+                raise ValueError("Unordered S3 chunks must align to config.chunk_size")
+            part = await _s3_upload_part(path, upload_id, start // part_size + 1, bytes(chunk))
+            return len(chunk), part
+
+        uploaded = [result async for result in executor.map_unordered(upload, stream)]
+        uploaded.sort(key=lambda result: result[1]["PartNumber"])
+        for number, (length, part) in enumerate(uploaded, start=1):
+            if part["PartNumber"] != number or (number < len(uploaded) and length != part_size):
+                raise ValueError("Unordered S3 chunks must cover a contiguous range from zero")
+            parts.append(part)
+        if not parts:
+            parts.append(await _s3_upload_part(path, upload_id, 1, b""))
 
 
 @write_stream_unordered.register  # type: ignore

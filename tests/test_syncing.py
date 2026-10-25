@@ -31,7 +31,7 @@ async def test_sync(any_dir, other_any_dir):
     async with bbb.BoostExecutor(100) as e:
         # sleep since if we run sync too soon, we run into limits of mtime accuracy and end up
         # syncing more than what we need...
-        await asyncio.sleep(1)
+        await asyncio.sleep(1.5)
         await bbb.boost.consume(bbb.sync(any_dir, other_any_dir, e))
         assert await _listtree(any_dir, any_dir) == await _listtree(other_any_dir, other_any_dir)
 

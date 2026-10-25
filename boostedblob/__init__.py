@@ -29,6 +29,7 @@ from .path import BlobPath as BlobPath
 from .path import CloudPath as CloudPath
 from .path import GooglePath as GooglePath
 from .path import LocalPath as LocalPath
+from .path import S3Path as S3Path
 from .path import exists as exists
 from .path import getsize as getsize
 from .path import isdir as isdir

@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 from typing import Any, Iterator
 
+from . import _s3
 from .boost import (
     BoostExecutor,
     BoostUnderlying,
@@ -18,6 +19,7 @@ from .path import (
     CloudPath,
     GooglePath,
     LocalPath,
+    S3Path,
     getsize,
     pathdispatch,
 )
@@ -90,6 +92,20 @@ async def _google_read_byte_range(path: GooglePath, byte_range: OptByteRange) ->
         success_codes=success_codes,
         failure_exceptions={404: FileNotFoundError(path)},
         auth=google_auth_req,
+    )
+    return await execute_retrying_read(request)
+
+
+@read_byte_range.register  # type: ignore
+async def _s3_read_byte_range(path: S3Path, byte_range: OptByteRange) -> bytes:
+    if not path.blob:
+        raise FileNotFoundError(path)
+    range_str = byte_range_to_str(byte_range)
+    request = await _s3.request(
+        "GET",
+        path,
+        headers={"Range": range_str} if range_str else {},
+        success_codes=(206,) if range_str else (200,),
     )
     return await execute_retrying_read(request)
 

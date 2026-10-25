@@ -4,8 +4,9 @@ import os
 import shutil
 import sys
 from typing import Any, AsyncIterator, TypeVar
+from urllib.parse import quote
 
-from . import azure_auth
+from . import _s3, azure_auth
 from .boost import BoostExecutor, consume
 from .globals import config
 from .listing import DirEntry, glob_scandir, scantree
@@ -16,9 +17,11 @@ from .path import (
     CloudPath,
     GooglePath,
     LocalPath,
+    S3Path,
     exists,
     getsize,
     pathdispatch,
+    stat,
     url_format,
 )
 from .read import ByteRange, byte_range_to_str, read_single, read_stream, read_stream_unordered
@@ -28,6 +31,7 @@ from .write import (
     azure_put_block_list,
     get_block_id,
     get_upload_id,
+    multipart_upload,
     prepare_block_blob_write,
     write_single,
     write_stream,
@@ -346,6 +350,67 @@ async def _google_cloud_copyfile(
             return
         params["rewriteToken"] = result["rewriteToken"]
         await asyncio.sleep(next(sleep))
+
+
+@cloud_copyfile.register  # type: ignore
+async def _s3_cloud_copyfile(
+    src: S3Path,
+    dst: S3Path,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: int | None = None,
+) -> None:
+    assert isinstance(dst, S3Path)
+    if not dst.blob:
+        raise IsADirectoryError(dst)
+    if not overwrite:
+        if await exists(dst):
+            raise FileExistsError(dst)
+
+    source_etag = None
+    if size is None or size > _s3.MAX_PART_SIZE:
+        source_stat = await stat(src)
+        size = source_stat.size
+        source_etag = source_stat.version
+    source = quote(f"/{src.bucket}/{src.blob}")
+    if size <= _s3.MAX_PART_SIZE:
+        headers = {"x-amz-copy-source": source}
+        if not overwrite:
+            headers["If-None-Match"] = "*"
+        request = await _s3.request("PUT", dst, headers=headers, missing=src)
+        await _s3.xml_result(request)
+        return
+
+    # Round up so even large objects fit in the 10,000 available part numbers.
+    assert source_etag is not None
+    part_size = min(
+        _s3.MAX_PART_SIZE, max(config.chunk_size, _s3.MIN_PART_SIZE, -(-size // _s3.MAX_PARTS))
+    )
+    async with multipart_upload(dst, overwrite) as (upload_id, parts):
+
+        async def copy_part(index: int) -> dict[str, Any]:
+            start = index * part_size
+            end = min(start + part_size, size)
+            request = await _s3.request(
+                "PUT",
+                dst,
+                params={"uploadId": upload_id, "partNumber": str(index + 1)},
+                headers={
+                    "x-amz-copy-source": source,
+                    "x-amz-copy-source-range": f"bytes={start}-{end - 1}",
+                    "x-amz-copy-source-if-match": source_etag,
+                },
+                missing=src,
+            )
+            part = await _s3.xml_result(request)
+            return {
+                "PartNumber": index + 1,
+                "ETag": part.findtext("{*}ETag"),
+                "ChecksumCRC32": part.findtext("{*}ChecksumCRC32"),
+            }
+
+        async for part in executor.map_ordered(copy_part, iter(range(-(-size // part_size)))):
+            parts.append(part)
 
 
 # ==============================

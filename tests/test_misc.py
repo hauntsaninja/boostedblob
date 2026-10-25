@@ -47,6 +47,14 @@ async def test_default_user_agent() -> None:
 
 @pytest.mark.asyncio
 @bbb.ensure_session
+async def test_configure_chunk_size_preserves_session() -> None:
+    with bbb.globals.configure(chunk_size=1024):
+        session = bbb.globals.config.session
+    assert bbb.globals.config.session is session
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
 async def test_user_agent_configurable() -> None:
     custom = "custom-agent"
     with bbb.globals.configure(user_agent=custom):

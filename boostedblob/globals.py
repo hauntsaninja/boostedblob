@@ -202,6 +202,7 @@ config: Config = Config()
 @contextlib.contextmanager
 def configure(**kwargs: Any) -> Iterator[None]:
     old_session = None
+    restore_session = "session" in kwargs or "user_agent" in kwargs
     if "session" in kwargs:
         old_session = config._get_session()
         config._set_session(kwargs.pop("session"))
@@ -212,7 +213,8 @@ def configure(**kwargs: Any) -> Iterator[None]:
         yield
     finally:
         config.__dict__.update(**original)
-        config._set_session(old_session)
+        if restore_session:
+            config._set_session(old_session)
 
 
 def _create_session() -> aiohttp.ClientSession:

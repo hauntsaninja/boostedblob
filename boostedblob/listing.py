@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import configparser
+import datetime
 import os
 import re
 from typing import Any, AsyncIterator, Iterator, Mapping, NamedTuple
+from urllib.parse import unquote_plus
 
-from . import google_auth
+from . import _s3, google_auth
 from .path import (
     AzurePath,
     AzureStat,
@@ -16,6 +18,8 @@ from .path import (
     GoogleStat,
     LocalPath,
     LocalStat,
+    S3Path,
+    S3Stat,
     Stat,
     isfile,
     pathdispatch,
@@ -139,6 +143,52 @@ async def _google_list_blobs(
             yield entry
 
 
+@list_blobs.register  # type: ignore
+async def _s3_list_blobs(
+    path: S3Path, delimiter: str | None, allow_prefix: bool = False
+) -> AsyncIterator[DirEntry]:
+    if not allow_prefix:
+        assert not path.blob or path.blob.endswith(delimiter or "/")
+    bucket = S3Path(path.bucket, "")
+    if not path.bucket:
+        if delimiter != "/":
+            raise ValueError("Cannot list blobs across buckets")
+        request = await _s3.request("GET", bucket, params={"max-buckets": "1000"})
+        async for page in xml_page_iterator(
+            request, next_marker="{*}ContinuationToken", marker_param="continuation-token"
+        ):
+            for name in page.findall("{*}Buckets/{*}Bucket/{*}Name"):
+                assert name.text is not None
+                yield DirEntry.from_dirpath(S3Path(name.text, ""))
+        return
+
+    # URL encoding preserves keys containing characters that cannot appear in XML.
+    params = {"list-type": "2", "encoding-type": "url", "prefix": path.blob}
+    if delimiter is not None:
+        params["delimiter"] = delimiter
+    request = await _s3.request("GET", bucket, params=params)
+    async for page in xml_page_iterator(
+        request, next_marker="{*}NextContinuationToken", marker_param="continuation-token"
+    ):
+        for prefix in page.findall("{*}CommonPrefixes/{*}Prefix"):
+            assert prefix.text is not None
+            yield DirEntry.from_dirpath(S3Path(path.bucket, unquote_plus(prefix.text)))
+        for item in page.findall("{*}Contents"):
+            entry = S3Path(path.bucket, unquote_plus(item.findtext("{*}Key", "")))
+            if entry.is_directory_like():
+                yield DirEntry.from_dirpath(entry)
+            else:
+                mtime = datetime.datetime.fromisoformat(
+                    item.findtext("{*}LastModified", "").replace("Z", "+00:00")
+                )
+                stat = S3Stat.from_values(
+                    int(item.findtext("{*}Size", "")),
+                    mtime.timestamp(),
+                    item.findtext("{*}ETag", ""),
+                )
+                yield DirEntry.from_path_stat(entry, stat)
+
+
 # ==============================
 # scandir
 # ==============================
@@ -167,7 +217,7 @@ async def _cloud_scandir(path: CloudPath) -> AsyncIterator[DirEntry]:
     # If we find nothing, then run some checks so we throw the appropriate error.
     # Doing this means we avoid extra requests in the happy path.
     if not subpath_exists:
-        if isinstance(path, AzurePath) and not path.blob:
+        if isinstance(path, (AzurePath, S3Path)) and not path.blob:
             # Special case empty containers (at this point we're guaranteed the container exists)
             # TODO: double check this when anonymous containers work
             return
@@ -247,6 +297,8 @@ async def _cloud_scantree(path: CloudPath) -> AsyncIterator[DirEntry]:
     # If we find nothing, then run some checks so we throw the appropriate error.
     # Doing this means we avoid extra requests in the happy path.
     if not subpath_exists:
+        if isinstance(path, S3Path) and not path.blob:
+            return
         if not await isfile(path):
             raise FileNotFoundError(path)
         raise NotADirectoryError(path)
@@ -347,15 +399,16 @@ async def _azure_glob_scandir(path: AzurePath) -> AsyncIterator[DirEntry]:
             yield entry
 
 
-@glob_scandir.register  # type: ignore
-async def _google_glob_scandir(path: GooglePath) -> AsyncIterator[DirEntry]:
-    if "*" in path.bucket:
+@glob_scandir.register(S3Path)  # type: ignore
+@glob_scandir.register(GooglePath)  # type: ignore
+async def _bucket_glob_scandir(path: GooglePath | S3Path) -> AsyncIterator[DirEntry]:
+    if not path.bucket or "*" in path.bucket:
         if path.blob:
             raise ValueError("Currently only supports wildcards inside the filename")
-        pattern = _glob_to_regex(path.bucket)
-        async for entry in _google_list_buckets():
+        pattern = _glob_to_regex(path.bucket or "*")
+        async for entry in list_blobs(type(path)("", ""), delimiter="/"):
             assert isinstance(entry.path, type(path))
-            if re.match(pattern, entry.path.bucket):
+            if re.match(pattern, entry.path.name):
                 yield entry
         return
     if "*" in os.path.dirname(path.blob):
@@ -365,7 +418,7 @@ async def _google_glob_scandir(path: GooglePath) -> AsyncIterator[DirEntry]:
     pattern = _glob_to_regex(path.name)
 
     blob_prefix = path.blob.split("*", maxsplit=1)[0]
-    prefix = GooglePath(bucket=path.bucket, blob=blob_prefix)
+    prefix = type(path)(bucket=path.bucket, blob=blob_prefix)
     async for entry in list_blobs(prefix, delimiter="/", allow_prefix=True):
         assert isinstance(entry.path, type(path))
         if entry.path == path.parent.ensure_directory_like():

@@ -29,10 +29,11 @@ def _available_plugin_modules() -> Sequence[str]:
 
 @functools.cache
 def _register_plugins() -> None:
-    from .path import AzurePath, GooglePath
+    from .path import AzurePath, GooglePath, S3Path
 
     plugins.append(AzurePath)
     plugins.append(GooglePath)
+    plugins.append(S3Path)
 
     for mod_name in _available_plugin_modules():
         mod = importlib.import_module(mod_name)

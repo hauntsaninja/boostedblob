@@ -2,11 +2,12 @@ from typing import Any
 
 import pytest
 
-from boostedblob.path import AzurePath, BasePath, GooglePath, LocalPath
+from boostedblob.path import AzurePath, BasePath, GooglePath, LocalPath, S3Path
 
 PATHS: dict[type[BasePath], Any] = {
     AzurePath: AzurePath("shantanutest", "container", "blob"),
     GooglePath: GooglePath("shantanutest", "blob"),
+    S3Path: S3Path("shantanutest", "blob"),
     LocalPath: LocalPath("blob"),
 }
 
@@ -14,6 +15,7 @@ PATHS: dict[type[BasePath], Any] = {
 def test_path_str():
     assert str(PATHS[AzurePath]) == "az://shantanutest/container/blob"
     assert str(PATHS[GooglePath]) == "gs://shantanutest/blob"
+    assert str(PATHS[S3Path]) == "s3://shantanutest/blob"
     assert str(PATHS[LocalPath]) == "blob"
 
 
@@ -23,7 +25,16 @@ def test_path_from_str():
         assert BasePath.from_str(str(BasePath.from_str(str(path)))) == path
 
     with pytest.raises(ValueError):
-        BasePath.from_str("s3://bucket/blob")
+        BasePath.from_str("unknown://bucket/blob")
+
+    assert S3Path.from_str("s3://bucket/a?#%/").blob == "a?#%/"
+    assert S3Path.from_str("s3://bucket") == S3Path("bucket", "")
+    root = S3Path.from_str("s3://")
+    assert str(root) == "s3://"
+    assert root / "bucket/key" == S3Path("bucket", "key")
+    assert (root / "bucket/key").relative_to(root) == "bucket/key"
+    with pytest.raises(ValueError):
+        S3Path.from_str("s3:///missing-bucket")
 
     for path_cls in PATHS.keys():
         for path in PATHS.values():
