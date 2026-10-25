@@ -4,7 +4,7 @@ import pytest
 
 import boostedblob as bbb
 from boostedblob import listing
-from boostedblob.path import AzurePath, GooglePath
+from boostedblob.path import AzurePath, GooglePath, S3Path
 from boostedblob.xml import etree
 
 from . import helpers
@@ -55,6 +55,15 @@ async def test_listtree(any_dir):
         [p.name async for p in bbb.listdir(any_dir / "alp")]
     with pytest.raises(NotADirectoryError):
         [p.name async for p in bbb.listdir(any_dir / "alpha")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", [AzurePath("account", "empty", ""), S3Path("empty", "")])
+async def test_scantree_empty_container(
+    path: AzurePath | S3Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(listing, "list_blobs", lambda *_: bbb.boost.iter_underlying(iter(())))
+    assert [entry async for entry in bbb.scantree(path)] == []
 
 
 @pytest.mark.asyncio

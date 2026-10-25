@@ -375,9 +375,11 @@ async def _s3_cloud_copyfile(
     source = quote(f"/{src.bucket}/{src.blob}")
     if size <= _s3.MAX_PART_SIZE:
         headers = {"x-amz-copy-source": source}
+        failures: dict[int, Exception] = {404: FileNotFoundError(src)}
         if not overwrite:
             headers["If-None-Match"] = "*"
-        request = await _s3.request("PUT", dst, headers=headers, missing=src)
+            failures[412] = FileExistsError(dst)
+        request = await _s3.request("PUT", dst, headers=headers, failure_exceptions=failures)
         await _s3.xml_result(request)
         return
 
@@ -391,16 +393,18 @@ async def _s3_cloud_copyfile(
         async def copy_part(index: int) -> dict[str, Any]:
             start = index * part_size
             end = min(start + part_size, size)
+            range_str = byte_range_to_str((start, end))
+            assert range_str is not None
             request = await _s3.request(
                 "PUT",
                 dst,
                 params={"uploadId": upload_id, "partNumber": str(index + 1)},
                 headers={
                     "x-amz-copy-source": source,
-                    "x-amz-copy-source-range": f"bytes={start}-{end - 1}",
+                    "x-amz-copy-source-range": range_str,
                     "x-amz-copy-source-if-match": source_etag,
                 },
-                missing=src,
+                failure_exceptions={404: FileNotFoundError(src)},
             )
             part = await _s3.xml_result(request)
             return {

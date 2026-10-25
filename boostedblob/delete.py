@@ -76,7 +76,13 @@ async def _s3_remove(path: S3Path) -> S3Path:
     try:
         if not path.blob:
             raise FileNotFoundError(path)
-        request = await _s3.request("DELETE", path, headers={"If-Match": "*"}, success_codes=(204,))
+        request = await _s3.request(
+            "DELETE",
+            path,
+            headers={"If-Match": "*"},
+            success_codes=(204,),
+            failure_exceptions={412: FileNotFoundError(path)},
+        )
         await request.execute_reponseless()
     except FileNotFoundError:
         if await isdir(path):

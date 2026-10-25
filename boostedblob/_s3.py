@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 from urllib.parse import quote, urlencode
@@ -77,7 +78,8 @@ class _Auth:
         )
         return endpoint.url.rstrip("/")
 
-    async def bucket_endpoint(self, bucket: str) -> tuple[str, str]:
+    async def bucket_endpoint(self, path: S3Path) -> tuple[str, str]:
+        bucket = path.bucket
         if bucket in self.buckets:
             return self.buckets[bucket]
         async with self.bucket_lock:
@@ -92,7 +94,7 @@ class _Auth:
                     url=url + "/",
                     auth=partial(self.sign, region=region),
                     success_codes=(200, 301, 307, 400, 403),
-                    failure_exceptions={404: FileNotFoundError(f"s3://{bucket}")},
+                    failure_exceptions={404: FileNotFoundError(path)},
                 )
                 async with head.execute() as response:
                     region = response.headers.get("x-amz-bucket-region", region)
@@ -144,18 +146,10 @@ async def request(
     headers: Mapping[str, str] | None = None,
     data: bytes | None = None,
     success_codes: Sequence[int] = (200,),
-    missing: S3Path | None = None,
+    failure_exceptions: Mapping[int, Exception] | None = None,
 ) -> Request:
     auth = _get_auth()
-    endpoint, region = await auth.bucket_endpoint(path.bucket)
-    failures: dict[int, Exception] = {
-        403: PermissionError(path),
-        404: FileNotFoundError(missing or path),
-    }
-    if headers and "If-Match" in headers and method == "DELETE":
-        failures[412] = FileNotFoundError(path)
-    elif headers and "If-None-Match" in headers:
-        failures[412] = FileExistsError(path)
+    endpoint, region = await auth.bucket_endpoint(path)
     return Request(
         method=method,
         url=endpoint + "/" + quote(path.blob),
@@ -163,20 +157,30 @@ async def request(
         headers=headers or {},
         data=data,
         success_codes=success_codes,
-        failure_exceptions=failures,
+        failure_exceptions={
+            403: PermissionError(path),
+            404: FileNotFoundError(path),
+            **(failure_exceptions or {}),
+        },
         auth=partial(auth.sign, region=region),
     )
 
 
-async def presign(path: S3Path, expires: int) -> str:
-    from botocore.auth import S3SigV4QueryAuth
+async def generate_signed_url(path: S3Path) -> tuple[str, datetime.datetime]:
+    from botocore.auth import SIGV4_TIMESTAMP, S3SigV4QueryAuth
     from botocore.awsrequest import AWSRequest
 
+    if not path.blob:
+        raise IsADirectoryError(path)
     auth = _get_auth()
-    endpoint, region = await auth.bucket_endpoint(path.bucket)
+    endpoint, region = await auth.bucket_endpoint(path)
     aws = AWSRequest(method="GET", url=endpoint + "/" + quote(path.blob))
+    expires = 3600
     S3SigV4QueryAuth(await auth.credentials(), "s3", region, expires=expires).add_auth(aws)
-    return aws.url
+    signed_at = datetime.datetime.strptime(aws.context["timestamp"], SIGV4_TIMESTAMP)
+    return aws.url, signed_at.replace(tzinfo=datetime.timezone.utc) + datetime.timedelta(
+        seconds=expires
+    )
 
 
 async def xml_result(request: Request) -> etree.Element:

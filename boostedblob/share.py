@@ -22,10 +22,7 @@ async def _google_get_url(path: GooglePath) -> tuple[str, datetime.datetime]:
 
 @get_url.register  # type: ignore
 async def _s3_get_url(path: S3Path) -> tuple[str, datetime.datetime]:
-    if not path.blob:
-        raise IsADirectoryError(path)
-    url = await _s3.presign(path, expires=3600)
-    return url, datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    return await _s3.generate_signed_url(path)
 
 
 @get_url.register  # type: ignore

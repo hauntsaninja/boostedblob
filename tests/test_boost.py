@@ -275,7 +275,7 @@ async def test_map_unordered_many_low_concurrency():
     results = []
     async with bbb.BoostExecutor(10) as e:
         it = e.map_unordered(get_futures_fn(futures), iter(range(N)))
-        asyncio.create_task(collect(it, results))
+        collector = asyncio.create_task(collect(it, results))
         await pause()
         for i in range(1, N):
             futures[i].set_result(None)
@@ -283,7 +283,7 @@ async def test_map_unordered_many_low_concurrency():
             await pause()
             assert len(results) == i
         futures[0].set_result(None)
-        await pause()
+        await asyncio.wait_for(collector, timeout=5)
         assert results == list(range(1, N)) + [0]
 
 
@@ -479,13 +479,19 @@ async def test_composition_ordered_ordered():
     async with bbb.BoostExecutor(N // 5) as e:
         inner_it = e.map_ordered(get_futures_fn(inner_futures), iter(range(N)))
         outer_it = e.map_ordered(get_futures_fn(outer_futures), inner_it)
-        asyncio.create_task(collect(outer_it, results))
-        await pause()
+        collector = asyncio.create_task(collect(outer_it, results))
 
-        while outer_futures or inner_futures:
-            futures = random.choice([fs for fs in (outer_futures, inner_futures) if fs])
-            futures[next(iter(futures))].set_result(None)
-            await pause()
+        async def finish():
+            while not collector.done():
+                ready = [
+                    f for fs in (outer_futures, inner_futures) for f in fs.values() if not f.done()
+                ]
+                if ready:
+                    random.choice(ready).set_result(None)
+                await pause()
+            await collector
+
+        await asyncio.wait_for(finish(), timeout=30)
         assert results == list(range(N))
 
 

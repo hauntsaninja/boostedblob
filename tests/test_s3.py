@@ -1,6 +1,8 @@
+import asyncio
 import gzip
 import os
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -47,10 +49,11 @@ async def test_s3_failed_stream_aborts_upload():
 
         def interrupted():
             yield b"x" * _s3.MIN_PART_SIZE
+            yield b"y" * _s3.MIN_PART_SIZE
             raise RuntimeError("interrupted stream")
 
         with bbb.globals.configure(chunk_size=_s3.MIN_PART_SIZE):
-            async with bbb.BoostExecutor(1) as executor:
+            async with bbb.BoostExecutor(2) as executor:
                 with pytest.raises(RuntimeError, match="interrupted stream"):
                     await bbb.write.write_stream(path, interrupted(), executor, overwrite=True)
         assert helpers.read_file(path) == b"original"
@@ -58,6 +61,127 @@ async def test_s3_failed_stream_aborts_upload():
             Bucket=path.bucket, Prefix=path.blob
         )
         assert not result.get("Uploads")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boosted", [False, True], ids=["iterator", "boostable"])
+async def test_s3_ordered_stream_parts(monkeypatch, boosted):
+    path = bbb.S3Path("bucket", "key")
+    parts = []
+    second_finished = asyncio.Event()
+    finished = []
+
+    @asynccontextmanager
+    async def multipart(path, overwrite):
+        yield "upload", parts
+
+    async def upload(path, upload_id, number, data):
+        if number == 1:
+            await asyncio.wait_for(second_finished.wait(), timeout=5)
+        if number == 2:
+            second_finished.set()
+        finished.append(number)
+        return {"PartNumber": number, "data": data}
+
+    async def source(data):
+        return data
+
+    marker = ContextVar("source", default="outside")
+    owner = asyncio.current_task()
+    inputs = [b"a", memoryview(b"bcd"), b"", bytearray(b"e")]
+
+    def chunks():
+        token = marker.set("inside")
+        try:
+            for chunk in inputs:
+                assert asyncio.current_task() is owner
+                yield chunk
+        finally:
+            marker.reset(token)
+
+    monkeypatch.setattr(_s3, "MIN_PART_SIZE", 2)
+    monkeypatch.setattr(bbb.write, "multipart_upload", multipart)
+    monkeypatch.setattr(bbb.write, "_s3_upload_part", upload)
+    with bbb.globals.configure(chunk_size=2):
+        async with bbb.BoostExecutor(2) as executor:
+            stream = executor.map_ordered(source, iter(inputs)) if boosted else chunks()
+            await bbb.write.write_stream(path, stream, executor, overwrite=True)
+    assert marker.get() == "outside"
+    assert finished == [2, 1, 3]
+    assert [(p["PartNumber"], p["data"]) for p in parts] == [(1, b"ab"), (2, b"cd"), (3, b"e")]
+
+
+@pytest.mark.asyncio
+async def test_s3_uploads_ready_part_before_waiting_for_input(monkeypatch):
+    first_uploaded = asyncio.Event()
+    parts = []
+
+    @asynccontextmanager
+    async def multipart(path, overwrite):
+        yield "upload", parts
+
+    async def upload(path, upload_id, number, data):
+        first_uploaded.set()
+        return data
+
+    async def source(data):
+        if data == b"cd":
+            await asyncio.wait_for(first_uploaded.wait(), timeout=5)
+        return data
+
+    monkeypatch.setattr(_s3, "MIN_PART_SIZE", 2)
+    monkeypatch.setattr(bbb.write, "multipart_upload", multipart)
+    monkeypatch.setattr(bbb.write, "_s3_upload_part", upload)
+    with bbb.globals.configure(chunk_size=2):
+        async with bbb.BoostExecutor(2) as executor:
+            stream = executor.map_ordered(source, iter([b"ab", b"cd"]))
+            await bbb.write.write_stream(
+                bbb.S3Path("bucket", "key"), stream, executor, overwrite=True
+            )
+    assert parts == [b"ab", b"cd"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [True, False], ids=["cancelled", "failed_part"])
+@bbb.ensure_session
+async def test_s3_interrupted_stream_aborts_upload(monkeypatch, s3_http, cancel):
+    started = asyncio.Event()
+    active = set()
+    calls = s3_http((200, {}, b"<Result><UploadId>upload</UploadId></Result>"), (204, {}, b""))
+
+    async def upload(path, upload_id, number, data):
+        active.add(number)
+        if len(active) == 2:
+            started.set()
+        try:
+            if number == 1 and not cancel:
+                await started.wait()
+                raise RuntimeError("failed part")
+            await asyncio.Future()
+        finally:
+            assert not any(method == "DELETE" for method, _, _ in calls)
+            active.remove(number)
+
+    monkeypatch.setattr(_s3, "MIN_PART_SIZE", 1)
+    monkeypatch.setattr(bbb.write, "_s3_upload_part", upload)
+    with bbb.globals.configure(chunk_size=1):
+        async with bbb.BoostExecutor(2) as executor:
+            write = asyncio.create_task(
+                bbb.write.write_stream(
+                    bbb.S3Path("bucket", "key"), iter([b"abc"]), executor, overwrite=True
+                )
+            )
+            await asyncio.wait_for(started.wait(), timeout=5)
+            if cancel:
+                write.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(write, timeout=5)
+            else:
+                with pytest.raises(RuntimeError, match="failed part"):
+                    await asyncio.wait_for(write, timeout=5)
+            assert not active
+    assert [method for method, _, _ in calls] == ["HEAD", "POST", "DELETE"]
+    assert calls[-1][1].query["uploadId"] == "upload"
 
 
 @pytest.mark.asyncio
@@ -103,9 +227,9 @@ def s3_http(monkeypatch):
     monkeypatch.delenv("AWS_ENDPOINT_URL_S3", raising=False)
     monkeypatch.setattr(bbb.globals.config, "backoff_initial", 0)
 
-    def stub(*responses):
+    def stub(*responses, head_status=403):
         # A GetObject-only caller can still discover the bucket region.
-        sequence = iter([(403, {"x-amz-bucket-region": "us-west-2"}, b""), *responses])
+        sequence = iter([(head_status, {"x-amz-bucket-region": "us-west-2"}, b""), *responses])
         calls = []
 
         @asynccontextmanager
@@ -123,6 +247,42 @@ def s3_http(monkeypatch):
         return calls
 
     return stub
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_s3_missing_bucket_reports_requested_path(s3_http):
+    path = bbb.S3Path("missing-bucket", "key")
+    s3_http(head_status=404)
+    with pytest.raises(FileNotFoundError) as exc:
+        await bbb.read.read_single(path)
+    assert exc.value.args == (path,)
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_s3_write_stream_existing_destination(s3_http):
+    path = bbb.S3Path("bucket", "existing")
+    s3_http(
+        (
+            200,
+            {
+                "Content-Length": "0",
+                "Last-Modified": "Sat, 24 Oct 2026 00:00:00 GMT",
+                "ETag": '"etag"',
+            },
+            b"",
+        )
+    )
+
+    def source():
+        raise AssertionError("the source should not be read")
+        yield b""
+
+    async with bbb.BoostExecutor(1) as executor:
+        with pytest.raises(FileExistsError) as exc:
+            await bbb.write.write_stream(path, source(), executor)
+    assert exc.value.args == (path,)
 
 
 @pytest.mark.asyncio
@@ -149,6 +309,21 @@ async def test_s3_paginated_listing(s3_http):
         assert headers["X-Amz-Security-Token"] == "session-token"
         assert "prefix=a%20%2B%25%2F" in str(url)
     assert "continuation-token=%2B%2F%3D" in str(calls[-1][1])
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
+async def test_s3_isdir_empty_first_page(s3_http):
+    path = bbb.S3Path("bucket", "dir")
+    s3_http(
+        (
+            200,
+            {},
+            b"<ListBucketResult><KeyCount>0</KeyCount><NextContinuationToken>next</NextContinuationToken></ListBucketResult>",
+        ),
+        (200, {}, b"<ListBucketResult><KeyCount>1</KeyCount></ListBucketResult>"),
+    )
+    assert await bbb.isdir(path)
 
 
 @pytest.mark.asyncio
@@ -180,8 +355,9 @@ async def test_s3_copy_embedded_error(s3_http):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streamed", [False, True], ids=["single", "stream"])
 @bbb.ensure_session
-async def test_s3_conditional_write(s3_http):
+async def test_s3_conditional_write(s3_http, streamed):
     path = bbb.S3Path("bucket", "dest")
     calls = s3_http(
         (404, {}, b""),
@@ -189,7 +365,11 @@ async def test_s3_conditional_write(s3_http):
         (412, {}, b""),
     )
     with pytest.raises(FileExistsError) as exc:
-        await bbb.write.write_single(path, b"new")
+        if streamed:
+            async with bbb.BoostExecutor(1) as executor:
+                await bbb.write.write_stream(path, iter([b"new"]), executor)
+        else:
+            await bbb.write.write_single(path, b"new")
     assert exc.value.args == (path,)
     method, _, headers = calls[-1]
     assert method == "PUT"

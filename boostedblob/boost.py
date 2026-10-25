@@ -116,8 +116,8 @@ class BoostExecutor:
         self.notify_runner()
         return ret
 
-    def enumerate(self, iterable: BoostUnderlying[T]) -> EnumerateBoostable[T]:
-        ret = EnumerateBoostable(iterable, self)
+    def enumerate(self, iterable: BoostUnderlying[T], start: int = 0) -> EnumerateBoostable[T]:
+        ret = EnumerateBoostable(iterable, self, start)
         self.boostables.appendleft(ret)
         self.notify_runner()
         return ret
@@ -357,6 +357,15 @@ class OrderedMappingBoostable(MappingBoostable[A, T]):
         super().__init__(func, iterable, executor)
         self.buffer: deque[asyncio.Task[T]] = deque()
 
+    async def aclose(self) -> None:
+        """Stop scheduling work and cancel any unconsumed calls before returning."""
+        self.iterable = iter(())
+        for task in self.buffer:
+            task.cancel()
+        if self.buffer:
+            await asyncio.gather(*self.buffer, return_exceptions=True)
+            self.buffer.clear()
+
     def enqueue(self, arg: A) -> asyncio.Task[T]:
         task = asyncio.create_task(self.func(arg))
         self.buffer.append(task)
@@ -478,10 +487,10 @@ class FilterBoostable(Boostable[T]):
 
 
 class EnumerateBoostable(Boostable[tuple[int, T]]):
-    def __init__(self, inner: BoostUnderlying[T], executor: BoostExecutor):
+    def __init__(self, inner: BoostUnderlying[T], executor: BoostExecutor, start: int = 0):
         super().__init__(executor)
         self.inner = inner
-        self.index = 0
+        self.index = start
 
     def provide_boost(self) -> NotReady | Exhausted | asyncio.Task[Any]:
         if isinstance(self.inner, Boostable):
