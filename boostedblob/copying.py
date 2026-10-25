@@ -21,7 +21,6 @@ from .path import (
     exists,
     getsize,
     pathdispatch,
-    stat,
     url_format,
 )
 from .read import ByteRange, byte_range_to_str, read_single, read_stream, read_stream_unordered
@@ -367,12 +366,17 @@ async def _s3_cloud_copyfile(
         if await exists(dst):
             raise FileExistsError(dst)
 
-    source_etag = None
+    source_headers = None
     if size is None or size > _s3.MAX_PART_SIZE:
-        source_stat = await stat(src)
-        size = source_stat.size
-        source_etag = source_stat.version
+        if not src.blob:
+            raise FileNotFoundError(src)
+        request = await _s3.request("HEAD", src)
+        async with request.execute() as response:
+            source_headers = response.headers
+            size = int(source_headers["Content-Length"])
     source = quote(f"/{src.bucket}/{src.blob}")
+    # CopyObject supports up to 5 GiB; larger objects require multipart copy.
+    # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html
     if size <= _s3.MAX_PART_SIZE:
         headers = {"x-amz-copy-source": source}
         failures: dict[int, Exception] = {404: FileNotFoundError(src)}
@@ -383,12 +387,26 @@ async def _s3_cloud_copyfile(
         await _s3.xml_result(request)
         return
 
+    assert source_headers is not None
+    source_etag = source_headers["ETag"]
+    # UploadPartCopy only copies bytes. Set the object's metadata when starting the upload.
+    metadata = {k: v for k, v in source_headers.items() if k.lower().startswith("x-amz-meta-")}
+    for key in (
+        "Cache-Control",
+        "Content-Disposition",
+        "Content-Encoding",
+        "Content-Language",
+        "Content-Type",
+        "Expires",
+    ):
+        if key in source_headers:
+            metadata[key] = source_headers[key]
+
     # Round up so even large objects fit in the 10,000 available part numbers.
-    assert source_etag is not None
     part_size = min(
         _s3.MAX_PART_SIZE, max(config.chunk_size, _s3.MIN_PART_SIZE, -(-size // _s3.MAX_PARTS))
     )
-    async with multipart_upload(dst, overwrite) as (upload_id, parts):
+    async with multipart_upload(dst, overwrite, metadata=metadata) as (upload_id, parts):
 
         async def copy_part(index: int) -> dict[str, Any]:
             start = index * part_size

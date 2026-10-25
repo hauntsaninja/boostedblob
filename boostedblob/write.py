@@ -167,6 +167,7 @@ async def write_stream(
     :param executor: An executor.
     :param stream: The stream of bytes to write. Note the chunking of stream also determines how
         we chunk the writes. Writes to Google Cloud must be chunked in multiples of 256 KB.
+        For S3, memoryviews must be one-dimensional with one-byte elements.
     :param overwrite: If False, raises if the path already exists.
 
     """
@@ -485,10 +486,13 @@ async def _s3_put_object(path: S3Path, data: bytes, *, overwrite: bool) -> None:
 
 @asynccontextmanager
 async def multipart_upload(
-    path: S3Path, overwrite: bool
+    path: S3Path, overwrite: bool, *, metadata: Mapping[str, str] | None = None
 ) -> AsyncIterator[tuple[str, list[dict[str, Any]]]]:
     create = await _s3.request(
-        "POST", path, params={"uploads": ""}, headers={"x-amz-checksum-algorithm": "CRC32"}
+        "POST",
+        path,
+        params={"uploads": ""},
+        headers={**(metadata or {}), "x-amz-checksum-algorithm": "CRC32"},
     )
     upload_id = (await _s3.xml_result(create)).findtext("{*}UploadId")
     assert upload_id
@@ -536,6 +540,7 @@ def _s3_parts(
         yield chunk
         return
     view = memoryview(chunk)
+    assert view.ndim == 1 and view.itemsize == 1, "S3 chunks must be one-dimensional byte views"
     while view:
         take = min(part_size - len(buffer), len(view))
         buffer.extend(view[:take])

@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import gzip
 import os
 from contextlib import asynccontextmanager
@@ -42,6 +43,35 @@ async def test_s3_multipart(monkeypatch):
 
 @pytest.mark.asyncio
 @bbb.ensure_session
+async def test_s3_multipart_copy_preserves_metadata(monkeypatch):
+    with helpers.tmp_s3_dir() as directory:
+        src = directory / "report.csv.gz"
+        dst = directory / "archive.csv.gz"
+        part_size = _s3.MIN_PART_SIZE
+        # Uncompressed DEFLATE blocks keep the stored file large enough for two real S3 parts.
+        contents = gzip.compress(b"a,b\n" * (part_size // 4), compresslevel=0)
+        metadata = {
+            "ContentType": "text/csv",
+            "ContentEncoding": "gzip",
+            "ContentLanguage": "en",
+            "ContentDisposition": 'attachment; filename="monthly report.csv.gz"',
+            "CacheControl": "max-age=120",
+            "Expires": datetime.datetime(2030, 1, 1, tzinfo=datetime.timezone.utc),
+            "Metadata": {"schema": "v3", "export-id": "monthly report"},
+        }
+        client = helpers.s3_test_client()
+        client.put_object(Bucket=src.bucket, Key=src.blob, Body=contents, **metadata)
+        monkeypatch.setattr(_s3, "MAX_PART_SIZE", part_size)
+        async with bbb.BoostExecutor(2) as executor:
+            await bbb.copyfile(src, dst, executor)
+
+        copied = client.head_object(Bucket=dst.bucket, Key=dst.blob)
+        assert {key: copied.get(key) for key in metadata} == metadata
+        assert helpers.read_file(dst) == contents
+
+
+@pytest.mark.asyncio
+@bbb.ensure_session
 async def test_s3_failed_stream_aborts_upload():
     with helpers.tmp_s3_dir() as directory:
         path = directory / "existing"
@@ -61,6 +91,16 @@ async def test_s3_failed_stream_aborts_upload():
             Bucket=path.bucket, Prefix=path.blob
         )
         assert not result.get("Uploads")
+
+
+@pytest.mark.parametrize(
+    "chunk",
+    [memoryview(b"abcdefgh").cast("I"), memoryview(b"abcdefgh").cast("B", shape=[2, 4])],
+    ids=["multibyte-items", "multidimensional"],
+)
+def test_s3_parts_reject_non_byte_counts(chunk):
+    with pytest.raises(AssertionError, match="one-dimensional byte views"):
+        list(bbb.write._s3_parts(chunk, bytearray(), part_size=4))
 
 
 @pytest.mark.asyncio
