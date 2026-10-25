@@ -4,8 +4,9 @@ import os
 import shutil
 import sys
 from typing import Any, AsyncIterator, TypeVar
+from urllib.parse import quote
 
-from . import azure_auth
+from . import _s3, azure_auth
 from .boost import BoostExecutor, consume
 from .globals import config
 from .listing import DirEntry, glob_scandir, scantree
@@ -16,6 +17,7 @@ from .path import (
     CloudPath,
     GooglePath,
     LocalPath,
+    S3Path,
     exists,
     getsize,
     pathdispatch,
@@ -28,6 +30,7 @@ from .write import (
     azure_put_block_list,
     get_block_id,
     get_upload_id,
+    multipart_upload,
     prepare_block_blob_write,
     write_single,
     write_stream,
@@ -346,6 +349,90 @@ async def _google_cloud_copyfile(
             return
         params["rewriteToken"] = result["rewriteToken"]
         await asyncio.sleep(next(sleep))
+
+
+@cloud_copyfile.register  # type: ignore
+async def _s3_cloud_copyfile(
+    src: S3Path,
+    dst: S3Path,
+    executor: BoostExecutor,
+    overwrite: bool = False,
+    size: int | None = None,
+) -> None:
+    assert isinstance(dst, S3Path)
+    if not dst.blob:
+        raise IsADirectoryError(dst)
+    if not overwrite:
+        if await exists(dst):
+            raise FileExistsError(dst)
+
+    source_headers = None
+    if size is None or size > _s3.MAX_PART_SIZE:
+        if not src.blob:
+            raise FileNotFoundError(src)
+        request = await _s3.request("HEAD", src)
+        async with request.execute() as response:
+            source_headers = response.headers
+            size = int(source_headers["Content-Length"])
+    source = quote(f"/{src.bucket}/{src.blob}")
+    # CopyObject supports up to 5 GiB; larger objects require multipart copy.
+    # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html
+    if size <= _s3.MAX_PART_SIZE:
+        headers = {"x-amz-copy-source": source}
+        failures: dict[int, Exception] = {404: FileNotFoundError(src)}
+        if not overwrite:
+            headers["If-None-Match"] = "*"
+            failures[412] = FileExistsError(dst)
+        request = await _s3.request("PUT", dst, headers=headers, failure_exceptions=failures)
+        await _s3.xml_result(request)
+        return
+
+    assert source_headers is not None
+    source_etag = source_headers["ETag"]
+    # UploadPartCopy only copies bytes. Set the object's metadata when starting the upload.
+    metadata = {k: v for k, v in source_headers.items() if k.lower().startswith("x-amz-meta-")}
+    for key in (
+        "Cache-Control",
+        "Content-Disposition",
+        "Content-Encoding",
+        "Content-Language",
+        "Content-Type",
+        "Expires",
+    ):
+        if key in source_headers:
+            metadata[key] = source_headers[key]
+
+    # Round up so even large objects fit in the 10,000 available part numbers.
+    part_size = min(
+        _s3.MAX_PART_SIZE, max(config.chunk_size, _s3.MIN_PART_SIZE, -(-size // _s3.MAX_PARTS))
+    )
+    async with multipart_upload(dst, overwrite, metadata=metadata) as (upload_id, parts):
+
+        async def copy_part(index: int) -> dict[str, Any]:
+            start = index * part_size
+            end = min(start + part_size, size)
+            range_str = byte_range_to_str((start, end))
+            assert range_str is not None
+            request = await _s3.request(
+                "PUT",
+                dst,
+                params={"uploadId": upload_id, "partNumber": str(index + 1)},
+                headers={
+                    "x-amz-copy-source": source,
+                    "x-amz-copy-source-range": range_str,
+                    "x-amz-copy-source-if-match": source_etag,
+                },
+                failure_exceptions={404: FileNotFoundError(src)},
+            )
+            part = await _s3.xml_result(request)
+            return {
+                "PartNumber": index + 1,
+                "ETag": part.findtext("{*}ETag"),
+                "ChecksumCRC32": part.findtext("{*}ChecksumCRC32"),
+            }
+
+        async for part in executor.map_ordered(copy_part, iter(range(-(-size // part_size)))):
+            parts.append(part)
 
 
 # ==============================

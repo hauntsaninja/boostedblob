@@ -1,8 +1,8 @@
-import asyncio
 import os
 import shutil
 from typing import AsyncIterator
 
+from . import _s3
 from .boost import BoostExecutor, consume
 from .listing import glob_scandir, listtree
 from .path import (
@@ -12,8 +12,8 @@ from .path import (
     CloudPath,
     GooglePath,
     LocalPath,
+    S3Path,
     isdir,
-    isfile,
     pathdispatch,
 )
 from .request import Request, azure_auth_req, google_auth_req
@@ -65,6 +65,26 @@ async def _google_remove(path: GooglePath) -> GooglePath:
         await request.execute_reponseless()
     except FileNotFoundError:
         # Note that this continues to allow the deletion of directory marker files
+        if await isdir(path):
+            raise IsADirectoryError(path) from None
+        raise
+    return path
+
+
+@remove.register  # type: ignore
+async def _s3_remove(path: S3Path) -> S3Path:
+    try:
+        if not path.blob:
+            raise FileNotFoundError(path)
+        request = await _s3.request(
+            "DELETE",
+            path,
+            headers={"If-Match": "*"},
+            success_codes=(204,),
+            failure_exceptions={412: FileNotFoundError(path)},
+        )
+        await request.execute_reponseless()
+    except FileNotFoundError:
         if await isdir(path):
             raise IsADirectoryError(path) from None
         raise
@@ -124,17 +144,11 @@ async def rmtree_iterator(path: CloudPath, executor: BoostExecutor) -> AsyncIter
         except (FileNotFoundError, IsADirectoryError, PermissionError):
             return None
 
-    marker_task = asyncio.create_task(remove_directory_marker())
+    async for subpath in executor.map_unordered(remove, executor.eagerise(listtree(path))):
+        yield subpath
 
-    try:
-        async for subpath in executor.map_unordered(remove, executor.eagerise(listtree(dirpath))):
-            yield subpath
-    except FileNotFoundError:
-        if await isfile(path):
-            raise NotADirectoryError(path) from None
-        raise
-
-    marker = await marker_task
+    # Keep the marker until listing finishes so an empty directory remains observable.
+    marker = await remove_directory_marker()
     if marker:
         yield marker
 

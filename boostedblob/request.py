@@ -9,10 +9,11 @@ import socket
 import sys
 import time
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 
 import aiohttp
+from yarl import URL
 
 from .globals import config
 from .xml import dict_to_xml, etree
@@ -21,12 +22,15 @@ from .xml import dict_to_xml, etree
 @dataclass(frozen=True)
 class RawRequest:
     method: str
-    url: str
+    url: str | URL
     params: Mapping[str, str] = field(default_factory=dict)
     # data can be large, so don't put it in the repr
     data: bytes | bytearray | memoryview | None = field(repr=False, default=None)
     # headers can contain authorisation details, so don't put them in the repr
     headers: Mapping[str, str] = field(repr=False, default_factory=dict)
+
+    allow_redirects: bool = field(default_factory=lambda: config.allow_redirects, repr=False)
+    auto_decompress: bool | None = field(default=None, repr=False)
 
     @contextlib.asynccontextmanager
     async def raw_execute(self) -> AsyncIterator[aiohttp.ClientResponse]:
@@ -37,7 +41,8 @@ class RawRequest:
             params=self.params,
             data=self.data,
             headers=self.headers,
-            allow_redirects=config.allow_redirects,
+            allow_redirects=self.allow_redirects,
+            auto_decompress=self.auto_decompress,
             timeout=aiohttp.ClientTimeout(
                 connect=config.connect_timeout, sock_read=config.read_timeout
             ),
@@ -276,29 +281,16 @@ async def google_auth_req(request: Request, *, access_token: str | None = None) 
     )
 
 
-async def xml_page_iterator(request: Request) -> AsyncIterator[etree.Element]:
-    params = dict(request.params)
+async def xml_page_iterator(
+    request: Request, *, next_marker: str = "NextMarker", marker_param: str = "marker"
+) -> AsyncIterator[etree.Element]:
     while True:
-        request = Request(
-            method=request.method,
-            url=request.url,
-            params=params,
-            data=request.data,
-            headers=request.headers,
-            success_codes=request.success_codes,
-            retry_codes=request.retry_codes,
-            failure_exceptions=request.failure_exceptions,
-            auth=request.auth,
-        )
-        body = await execute_retrying_read(request)
-
-        result = etree.fromstring(body)
+        result = etree.fromstring(await execute_retrying_read(request))
         yield result
-
-        next_marker = result.findtext("NextMarker")
-        if not next_marker:
+        marker = result.findtext(next_marker)
+        if not marker:
             break
-        params["marker"] = next_marker
+        request = replace(request, params={**request.params, marker_param: marker})
 
 
 async def json_token_page_iterator(request: Request) -> AsyncIterator[dict[str, Any]]:

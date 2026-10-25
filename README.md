@@ -1,7 +1,7 @@
 # boostedblob
 
 boostedblob is a command line tool and async library to perform basic file operations on local
-paths, Google Cloud Storage paths and Azure Blob Storage paths.
+paths, Azure Blob Storage, Google Cloud Storage and Amazon S3.
 
 boostedblob is derived from the excellent [blobfile](https://github.com/christopher-hesse/blobfile).
 

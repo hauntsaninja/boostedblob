@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytest
 
@@ -28,20 +29,31 @@ async def test_sync(any_dir, other_any_dir):
     async def _listtree(d, base):
         return sorted([p.relative_to(base) async for p in bbb.listtree(d)])
 
+    src_is_local = isinstance(any_dir, bbb.LocalPath)
+    local, other = (any_dir, other_any_dir) if src_is_local else (other_any_dir, any_dir)
     async with bbb.BoostExecutor(100) as e:
-        # sleep since if we run sync too soon, we run into limits of mtime accuracy and end up
-        # syncing more than what we need...
-        await asyncio.sleep(1)
+        if not isinstance(local, bbb.LocalPath):
+            # Cloud timestamps can have only one second of precision.
+            await asyncio.sleep(1.5)
         await bbb.boost.consume(bbb.sync(any_dir, other_any_dir, e))
         assert await _listtree(any_dir, any_dir) == await _listtree(other_any_dir, other_any_dir)
 
-        await asyncio.wait(
-            (
-                asyncio.create_task(bbb.remove(any_dir / "f2")),
-                helpers.unsafe_create_file(any_dir / "f1", b"sizesame"),
-                helpers.unsafe_create_file(any_dir / "delta" / "f9", b"differentsize"),
-            )
+        if isinstance(local, bbb.LocalPath):
+            # Give the copies newer mtimes than their sources without assuming the clocks agree.
+            async for entry in bbb.scantree(other):
+                if entry.stat is not None:
+                    mtime = entry.stat.mtime + (-1 if src_is_local else 1)
+                    os.utime(local / entry.path.relative_to(other), (mtime, mtime))
+
+        await asyncio.gather(
+            bbb.remove(any_dir / "f2"),
+            helpers.unsafe_create_file(any_dir / "f1", b"sizesame"),
+            helpers.unsafe_create_file(any_dir / "delta" / "f9", b"differentsize"),
         )
+        if isinstance(local, bbb.LocalPath):
+            # The same-size rewrite is now newer than the copy.
+            mtime = (await bbb.stat(other / "f1")).mtime + (1 if src_is_local else -1)
+            os.utime(local / "f1", (mtime, mtime))
 
         actions = sorted(
             await bbb.syncing.sync_action_iterator(any_dir, other_any_dir), key=lambda x: x.relpath

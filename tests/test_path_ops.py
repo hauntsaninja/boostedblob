@@ -67,10 +67,11 @@ async def test_stat(any_dir):
     assert stat.size == await bbb.getsize(any_dir / "alpha")
     assert stat.mtime >= now
     assert stat.ctime >= now
-    if isinstance(any_dir, CloudPath):
+    if isinstance(any_dir, (AzurePath, GooglePath)):
         assert stat.md5 == hashlib.md5(b"this is twenty bytes").hexdigest()
     else:
         assert stat.md5 is None
+    assert [entry.stat async for entry in bbb.scandir(any_dir)] == [stat]
 
     helpers.create_file(any_dir / "charlie" / "delta" / "echo")
     if isinstance(any_dir, CloudPath):

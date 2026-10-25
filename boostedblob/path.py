@@ -6,11 +6,14 @@ import datetime
 import email.utils
 import functools
 import os
+import posixpath
 import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Protocol, TypeVar, runtime_checkable
 
+from . import _s3
 from .request import Request, azure_auth_req, google_auth_req, xml_page_iterator
+from .xml import etree
 
 T = TypeVar("T")
 
@@ -257,6 +260,62 @@ class GooglePath(CloudPath):
         return url_format(template, bucket=self.bucket, blob=self.blob)
 
 
+@dataclass(frozen=True)
+class S3Path(CloudPath):
+    bucket: str
+    blob: str
+
+    @staticmethod
+    def is_cloud_path(url: urllib.parse.ParseResult) -> bool:
+        return url.scheme == "s3"
+
+    @staticmethod
+    def from_str(url: str) -> S3Path:
+        parsed_url = urllib.parse.urlparse(url)
+        if parsed_url.scheme != "s3" or not url.lower().startswith("s3://"):
+            raise ValueError(f"Invalid URL '{url}'; expected 's3' scheme")
+
+        # Split the original URL to preserve literal '?', '#' and '%' in object keys.
+        parts = url.split("/", maxsplit=3)
+        blob = parts[3] if len(parts) >= 4 else ""
+        if blob and not parsed_url.netloc:
+            raise ValueError(f"Invalid URL '{url}'; expected bucket name")
+        return S3Path(bucket=parsed_url.netloc, blob=blob)
+
+    @property
+    def name(self) -> str:
+        return posixpath.basename(_strip_slash(self.blob)) if self.blob else self.bucket
+
+    @property
+    def parent(self) -> S3Path:
+        return S3Path(self.bucket, posixpath.dirname(_strip_slash(self.blob)))
+
+    def relative_to(self, other: S3Path) -> str:
+        if not isinstance(other, S3Path):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
+        if not other.bucket and not other.blob:
+            return f"{self.bucket}/{self.blob}" if self.bucket else ""
+        other = other.ensure_directory_like()
+        if self.bucket != other.bucket or not self.blob.startswith(other.blob):
+            raise ValueError(f"'{other}' is not a subpath of '{self}'")
+        return self.blob[len(other.blob) :]
+
+    def is_directory_like(self) -> bool:
+        return not self.blob or self.blob.endswith("/")
+
+    def ensure_directory_like(self) -> S3Path:
+        return self if self.is_directory_like() else S3Path(self.bucket, self.blob + "/")
+
+    def __truediv__(self, relative_path: str) -> S3Path:
+        if not self.bucket:
+            bucket, _, blob = relative_path.partition("/")
+            return S3Path(bucket, blob)
+        return S3Path(self.bucket, posixpath.join(self.blob, relative_path))
+
+    def __str__(self) -> str:
+        return f"s3://{self.bucket}/{self.blob}" if self.bucket else "s3://"
+
+
 # ==============================
 # pathdispatch
 # ==============================
@@ -304,6 +363,17 @@ class Stat:
     md5: str | None
     version: str | None
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Stat):
+            return False
+        return (
+            self.size == other.size
+            and self.mtime == other.mtime
+            and self.ctime == other.ctime
+            and self.md5 == other.md5
+            and self.version == other.version
+        )
+
 
 class AzureStat(Stat):
     __slots__ = (
@@ -347,17 +417,6 @@ class AzureStat(Stat):
             self._md5 = _azure_get_md5(self._raw_md5)
         return self._md5
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Stat):
-            return False
-        return (
-            self.size == other.size
-            and self.mtime == other.mtime
-            and self.ctime == other.ctime
-            and self.md5 == other.md5
-            and self.version == other.version
-        )
-
 
 class GoogleStat(Stat):
     def __init__(self, item: Mapping[str, Any]) -> None:
@@ -367,16 +426,28 @@ class GoogleStat(Stat):
         self.md5 = _google_get_md5(item)
         self.version = item["generation"]
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Stat):
-            return False
-        return (
-            self.size == other.size
-            and self.mtime == other.mtime
-            and self.ctime == other.ctime
-            and self.md5 == other.md5
-            and self.version == other.version
-        )
+
+class S3Stat(Stat):
+    def __init__(self, size: int, mtime: float, etag: str) -> None:
+        self.size = size
+        # S3 exposes only LastModified. ETags are opaque (e.g. multipart uploads or SSE-KMS).
+        self.mtime = self.ctime = mtime
+        self.version = etag
+        self.md5 = None
+
+    @classmethod
+    def from_headers(cls, headers: Mapping[str, str]) -> S3Stat:
+        mtime = email.utils.parsedate_to_datetime(headers["Last-Modified"])
+        return cls(int(headers["Content-Length"]), mtime.timestamp(), headers["ETag"])
+
+    @classmethod
+    def from_list_entry(cls, item: etree.Element) -> S3Stat:
+        modified = item.findtext("{*}LastModified")
+        size = item.findtext("{*}Size")
+        etag = item.findtext("{*}ETag")
+        assert modified is not None and size is not None and etag is not None
+        mtime = datetime.datetime.fromisoformat(modified.replace("Z", "+00:00"))
+        return cls(int(size), mtime.timestamp(), etag)
 
 
 class LocalStat(Stat):
@@ -386,17 +457,6 @@ class LocalStat(Stat):
         self.ctime = item.st_ctime
         self.md5 = None
         self.version = None
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Stat):
-            return False
-        return (
-            self.size == other.size
-            and self.mtime == other.mtime
-            and self.ctime == other.ctime
-            and self.md5 == other.md5
-            and self.version == other.version
-        )
 
 
 @pathdispatch
@@ -431,6 +491,15 @@ async def _google_stat(path: GooglePath) -> GoogleStat:
     async with request.execute() as resp:
         result = await resp.json()
         return GoogleStat(result)
+
+
+@stat.register  # type: ignore
+async def _s3_stat(path: S3Path) -> S3Stat:
+    if not path.blob:
+        raise FileNotFoundError(path)
+    request = await _s3.request("HEAD", path)
+    async with request.execute() as response:
+        return S3Stat.from_headers(response.headers)
 
 
 @stat.register  # type: ignore
@@ -539,6 +608,37 @@ async def _google_isdir(path: GooglePath) -> bool:
 
 
 @isdir.register  # type: ignore
+async def _s3_isdir(path: S3Path) -> bool:
+    if not path.bucket:
+        return True
+    try:
+        bucket = S3Path(path.bucket, "")
+        if not path.blob:
+            head = await _s3.request("HEAD", bucket)
+            await head.execute_reponseless()
+            return True
+        request = await _s3.request(
+            "GET",
+            bucket,
+            params={
+                "list-type": "2",
+                "encoding-type": "url",
+                "prefix": path.ensure_directory_like().blob,
+                "delimiter": "/",
+                "max-keys": "1",
+            },
+        )
+        async for page in xml_page_iterator(
+            request, next_marker="{*}NextContinuationToken", marker_param="continuation-token"
+        ):
+            if int(page.findtext("{*}KeyCount", "")) > 0:
+                return True
+        return False
+    except FileNotFoundError:
+        return False
+
+
+@isdir.register  # type: ignore
 async def _local_isdir(path: LocalPath) -> bool:
     return os.path.isdir(path)
 
@@ -584,6 +684,12 @@ async def _cloud_exists(path: CloudPath) -> bool:
         if await fut:
             return True
     return False
+
+
+@exists.register  # type: ignore
+async def _s3_exists(path: S3Path) -> bool:
+    # GetObject can succeed even when the caller lacks ListBucket permission.
+    return await isfile(path) or await isdir(path)
 
 
 @exists.register  # type: ignore
